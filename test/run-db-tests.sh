@@ -14,4 +14,4 @@ if [ "$(id -u)" = 0 ]; then
   su postgres -c "psql -q -d dbtest -c \"alter user postgres password 'pw'\""
 fi
 export TEST_DATABASE_URL="${TEST_DATABASE_URL:-postgres://postgres:pw@localhost:5432/dbtest}"
-node --test "test/db.test.ts"
+node --test test/db.test.ts test/orders.db.test.ts

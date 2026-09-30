@@ -22,14 +22,14 @@ export class Repo {
   }
   close() { return this.pool.end(); }
 
-  private async tx<T>(fn: (c: pg.PoolClient) => Promise<T>): Promise<T> {
+  async tx<T>(fn: (c: pg.PoolClient) => Promise<T>): Promise<T> {
     const c = await this.pool.connect();
     try { await c.query('begin'); const r = await fn(c); await c.query('commit'); return r; }
     catch (e) { await c.query('rollback'); throw e; }
     finally { c.release(); }
   }
 
-  private async event(q: Q, leadId: string | null, type: string, payload: object) {
+  async event(q: Q, leadId: string | null, type: string, payload: object) {
     await q.query('insert into events(owner_id, lead_id, type, payload) values ($1,$2,$3,$4)', [this.ownerId, leadId, type, JSON.stringify(payload)]);
   }
 

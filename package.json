@@ -10,9 +10,16 @@
     "test": "node --test \"test/*.test.ts\"",
     "analyze": "node src/cli.ts analyze",
     "serve": "node src/serve.ts",
+    "typecheck": "tsc -p .",
     "test:db": "bash test/run-db-tests.sh"
   },
   "dependencies": {
-    "pg": "^8.23.1"
+    "pg": "^8.23.1",
+    "playwright-core": "^1.63.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.3",
+    "@types/pg": "^8.23.1",
+    "typescript": "^7.0.2"
   }
 }

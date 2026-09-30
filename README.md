@@ -24,7 +24,7 @@ node --env-file=.env src/serve.ts                              # Dashboard auf h
 ```
 Dashboard: Lead-Liste mit Filtern, Detailseite (Begründung, Befunde mit Beleg, Verkaufsgrundlage, Verlauf), Pausieren, Retry, Ablehnen, Einstiegstext freigeben/bearbeiten, STOP-alles-Knopf, Budget-Limits, Score-Gewichte, Sperrliste.
 Sicherheit: Passwortschutz (Pflicht, mind. 12 Zeichen), CSRF-Token, nur `127.0.0.1` standardmäßig. Die DB-Verbindung umgeht RLS – `DATABASE_URL` nur serverseitig und nie in Git.
-Tests mit Datenbank: `npm run test:db` (legt lokale Test-DB `dbtest` an, 12 Tests).
+Tests mit Datenbank: `npm run test:db` (legt lokale Test-DB `dbtest` an, 17 Tests).
 
 ## Phase 2/3: Demo und Angebot
 - `node src/cli.ts demo examples/leads.csv --n 2` erzeugt eine Demo-Datei zur Ansicht (`out/demo.html`).
@@ -47,5 +47,19 @@ Tests mit Datenbank: `npm run test:db` (legt lokale Test-DB `dbtest` an, 12 Test
 - Places-Suche nutzt den Radius noch nicht (Textsuche nach Branche + Region).
 - Design/Mobile werden aus HTML-Indikatoren abgeleitet, noch ohne Rendering/Screenshots.
 
-## Bewusst noch nicht gebaut (braucht Konten, Verträge oder rechtliche Klärung)
-Stripe-Checkout und Webhooks, automatischer Versand (E-Mail/Messenger), Produktions- und QA-Agent für Kundenseiten, Kundenfreigabe-Seite, Deployment, Wartung/Monitoring, Social-Media-Engine. Reihenfolge und Begründung: `docs/ARCHITEKTUR.md`.
+## Phase 3–5: Bestellung, Zahlung, Produktion, Freigabe, Veröffentlichung, Wartung
+Ablauf im Dashboard (Lead-Detailseite, Karte „Bestellung"):
+1. Angebot versendet → **Bestellung anlegen** → **Anzahlungs-Link erstellen** (Stripe Checkout). Den Link schickst du dem Kunden.
+2. Stripe meldet die Zahlung per Webhook (`POST /webhooks/stripe`, Signatur Pflicht, Betrag und Währung werden gegengeprüft, Wiederholungen sind wirkungslos) → Status `IN_PRODUCTION`, Projekt wird aus den Lead-Daten angelegt.
+3. **Projektdaten** ausfüllen (Kontakt, Öffnungszeiten, Texte, Impressum-Angaben) und bestätigen, dass die Rechtstexte rechtlich geprüft sind. **Produzieren + QA** baut die Seite und prüft sie (Pflichtangaben, Platzhalter, Links, tel/mailto, Impressum, Barrierefreiheits-Grundlagen, externe Ressourcen; dazu ein echter Browsertest bei 375/390/430/1280 px auf seitliches Scrollen, Tap-Ziele ≥ 40 px, JS-/Ladefehler). Behebbare Fehler werden automatisch korrigiert und neu geprüft (2 Runden). Nur bei bestandener QA geht es in die Kundenfreigabe.
+4. Der Kunde bekommt einen privaten Link `/r/<Token>` mit Vorschau und den Knöpfen FREIGEBEN / ÄNDERUNG ANFORDERN. Änderungswünsche erscheinen im Dashboard; du pflegst sie in den Projektdaten ein und baust neu. **Die Änderungen führt kein KI-Agent aus, das machst du.** Nach der Freigabe geht der Kunde direkt zum Restzahlungs-Checkout.
+5. Nach bestätigter Restzahlung (`FULLY_PAID`) → **Veröffentlichen** (oder automatisch mit `AUTO_DEPLOY=1`). Ohne `VERCEL_TOKEN` schreibt der Deployer in `out/sites/<name>/`.
+6. Danach **Wartungs-Link (Abo)** und **Wartungscheck** (erreichbar, HTTPS, Impressum/Datenschutz vorhanden, Kontaktlinks).
+
+Die Zahlungslogik ist im Code nicht zu umgehen: keine Produktion ohne Anzahlung, keine Veröffentlichung ohne Restzahlung, Wartung erst nach Veröffentlichung (siehe `src/orders/status.ts`).
+
+**Nicht gegen die echten Dienste getestet:** `StripeProvider` und `VercelDeployer` sind mit gemockten HTTP-Antworten und selbst signierten Webhooks geprüft, aber noch nie gegen Stripe oder Vercel gelaufen. Erst mit Stripe-**Testschlüsseln** (`sk_test_…`) und der Stripe CLI (`stripe listen --forward-to …/webhooks/stripe`) durchspielen, dann erst live.
+Wiederkehrende Abo-Rechnungen (Verlängerung, Zahlungsausfall, Kündigung) werden noch nicht verarbeitet, nur der Start des Abos.
+
+## Bewusst noch nicht gebaut
+Automatischer Versand (E-Mail/Messenger) und Antwort-Klassifizierung (rechtlich riskant, UWG § 7), KI-Sales-Agent, KI-gestützte Umsetzung von Änderungswünschen, automatische Wartungsberichte per E-Mail, Social-Media-Engine. Begründung: `docs/ARCHITEKTUR.md`.

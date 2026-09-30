@@ -7,6 +7,9 @@ import { nextStatuses, type Status } from '../core/status.ts';
 import { pickTemplate, templateByKey, TEMPLATES, GENERIC } from '../templates/index.ts';
 import { renderDemo } from '../demo/render.ts';
 import { buildOffer, type Offer } from '../offers/generate.ts';
+import { createOrdersCtx, renderOrderSection, handleOrderPost, handlePublic, servePreview, type OrdersCtx } from './orders-ui.ts';
+import type { PaymentProvider } from '../payments/provider.ts';
+import type { Deployer } from '../deploy/adapters.ts';
 import { fetchSite } from '../auditor/fetch.ts';
 import { runPipeline } from '../pipeline.ts';
 import { Budget } from '../guardrails/budget.ts';
@@ -16,7 +19,7 @@ const esc = (s: unknown) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '
 const fmt = (d: unknown) => (d ? new Date(d as string).toLocaleString('de-DE') : '–');
 const cfgJson = (n: string) => JSON.parse(readFileSync(new URL(`../../config/${n}`, import.meta.url), 'utf8'));
 
-export type AppOptions = { password: string; fetchSite?: typeof fetchSite };
+export type AppOptions = { password: string; fetchSite?: typeof fetchSite; baseUrl?: string; payments?: () => PaymentProvider; deployer?: () => Deployer; autoDeploy?: boolean };
 
 const STYLE = `body{font:15px system-ui;margin:0;background:#f5f6f8;color:#1b1f24}main{max-width:960px;margin:0 auto;padding:16px}
 nav{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:12px}nav a{color:#0b5cad}
@@ -31,6 +34,7 @@ table{border-collapse:collapse}td,th{padding:4px 10px;border-bottom:1px solid #e
 export function createApp(repo: Repo, opts: AppOptions): http.Server {
   const csrf = createHmac('sha256', opts.password).update('csrf-v1').digest('hex');
   const fetcher = opts.fetchSite ?? fetchSite;
+  const octx: OrdersCtx = createOrdersCtx(repo, { baseUrl: opts.baseUrl ?? 'http://127.0.0.1:3000', payments: opts.payments, deployer: opts.deployer, fetcher, autoDeploy: opts.autoDeploy }, csrf);
 
   const authOk = (req: http.IncomingMessage) => {
     const h = req.headers.authorization ?? '';
@@ -96,6 +100,7 @@ ${killOn ? '<span class="kill"><b>KILL SWITCH AKTIV</b></span>' : ''}
         if (!d) return send(404, page('Nicht gefunden', '<p>Lead nicht gefunden.</p>', killSwitch));
         const { lead: l, opportunity: o, findings, sales: s, events } = d;
         const [demos, offer] = await Promise.all([repo.listDemos(l.id), repo.latestOffer(l.id)]);
+        const orderHtml = await renderOrderSection(octx, l.id, offer);
         return send(200, page(l.company_name, `<div class="card"><div class="row"><h2 style="margin:0">${esc(l.company_name)}</h2><span class="badge ${esc(String(o?.category ?? '').replace(' ', '-'))}">${esc(o?.category ?? '–')}</span><b>${o?.score ?? '–'}</b><span class="grow"></span><small>${esc(l.status)}${l.paused ? ' · ⏸ pausiert' : ''}</small></div>
           <p><small>${esc(l.address ?? '')} ${esc(l.city ?? '')} · Tel ${esc(l.phone ?? '–')} · Web ${esc(l.website_url ?? '–')} · Quelle ${esc(l.source)} · zuletzt analysiert ${fmt(l.last_analyzed_at)}</small></p>
           <div class="row">${l.paused ? post(`/lead/${l.id}/resume`, 'Fortsetzen', '', 'ok') : post(`/lead/${l.id}/pause`, 'Pausieren')}
@@ -125,8 +130,11 @@ ${killOn ? '<span class="kill"><b>KILL SWITCH AKTIV</b></span>' : ''}
             ${offer?.status === 'DRAFT' ? post(`/offer/${offer.id}/approve`, 'Freigeben', '', 'ok') : ''}
             ${offer?.status === 'APPROVED' ? post(`/offer/${offer.id}/sent`, 'Als von mir versendet markieren') : ''}</div>
             <p><small>Es wird nichts automatisch versendet. Versand und Vertragstexte liegen bei dir.</small></p></div>
+          ${orderHtml}
           <div class="card"><b>Verlauf</b><table>${events.map((e: any) => `<tr><td><small>${fmt(e.created_at)}</small></td><td>${esc(e.type)}</td><td><small>${esc(e.payload?.reason ?? e.payload?.actor ?? '')}</small></td></tr>`).join('')}</table></div>`, killSwitch));
       }
+      const pm = path.match(/^\/order\/([0-9a-f-]{36})\/preview\/([\w.\-]+)$/);
+      if (pm) { if (await servePreview(octx, res, pm[1], pm[2])) return; return send(404, page('Nicht gefunden', '<p>Keine Vorschau vorhanden.</p>', killSwitch)); }
       if (path === '/settings') {
         const [{ limits }, scoring, sup, evs] = await Promise.all([repo.getLimits(), repo.getScoringConfig(cfgJson('scoring.json')), repo.listSuppression(), repo.recentEvents()]);
         const num = (n: string, v: number) => `<label>${n}<br><input type="number" min="0" name="${n}" value="${v}"></label>`;
@@ -161,6 +169,8 @@ ${killOn ? '<span class="kill"><b>KILL SWITCH AKTIV</b></span>' : ''}
         if (!['email', 'phone', 'domain', 'company'].includes(kind) || !value.trim()) throw new Error('Ungültiger Eintrag');
         await repo.addSuppression(kind, value); return back('/settings');
       }
+      const orderRedirect = await handleOrderPost(octx, path, form);
+      if (orderRedirect) return back(orderRedirect);
       let m2 = path.match(/^\/demo\/([0-9a-f-]{36})\/revoke$/);
       if (m2) return back(`/lead/${await repo.revokeDemo(m2[1])}`);
       m2 = path.match(/^\/offer\/([0-9a-f-]{36})\/(approve|sent)$/);
@@ -209,6 +219,7 @@ ${killOn ? '<span class="kill"><b>KILL SWITCH AKTIV</b></span>' : ''}
   }
 
   return http.createServer(async (req, res) => {
+    if (await handlePublic(octx, req, res).catch(() => { if (!res.headersSent) { res.writeHead(500); res.end('Fehler'); } return true; })) return;
     const pub = (req.url ?? '').match(/^\/d\/([0-9a-f]{64})(?:\?.*)?$/);
     if (pub && req.method === 'GET') {
       try {

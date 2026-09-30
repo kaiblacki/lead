@@ -1,10 +1,27 @@
 import type { Lead } from '../core/types.ts';
 import type { Template } from '../templates/index.ts';
 
-const esc = (s: unknown) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
-const telHref = (p: string) => 'tel:' + p.replace(/[^\d+]/g, '');
+export const esc = (s: unknown) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+export const telHref = (p: string) => 'tel:' + p.replace(/[^\d+]/g, '');
 
 export type AgencyInfo = { name: string; contactEmail: string };
+
+export const baseCss = (p: Template['palette']) => `:root{--p:${p.primary};--pt:${p.primaryText};--bg:${p.bg};--ink:${p.ink};--soft:${p.soft}}
+*{box-sizing:border-box}body{margin:0;font:17px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+.demo{position:sticky;top:0;z-index:5;background:#111;color:#fff;padding:10px 16px;font-size:14px;text-align:center}
+.wrap{max-width:960px;margin:0 auto;padding:0 16px}
+header.hero{background:var(--p);color:var(--pt);padding:56px 0 48px}
+h1{font-size:clamp(28px,7vw,44px);line-height:1.15;margin:0 0 12px}
+.sub{font-size:19px;margin:0 0 24px;opacity:.95}
+.btn{display:inline-flex;align-items:center;justify-content:center;min-height:52px;padding:0 24px;border-radius:12px;background:#fff;color:var(--p);font-weight:700;text-decoration:none;border:2px solid #fff}
+section{padding:40px 0}h2{font-size:26px;margin:0 0 16px}
+.grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.card{background:var(--soft);border-radius:14px;padding:18px}.card h3{margin:0 0 6px;font-size:19px}.card p{margin:0}
+.ph{height:160px;border-radius:14px;background:repeating-linear-gradient(45deg,var(--soft),var(--soft) 14px,#ffffff 14px,#ffffff 28px);display:flex;align-items:center;justify-content:center;color:var(--ink);font-size:14px;text-align:center;padding:8px}
+.contact{background:var(--soft)}.contact a{color:var(--p);font-weight:700;display:inline-block;padding:11px 0}
+.btn2{display:inline-flex;align-items:center;min-height:52px;padding:0 24px;border-radius:12px;background:var(--p);color:var(--pt);font-weight:700;text-decoration:none}
+footer{padding:28px 0 48px;font-size:14px}
+a:focus-visible{outline:3px solid #000;outline-offset:2px}`;
 
 /**
  * Erzeugt eine eigenständige Demo-Seite (ein HTML-Dokument, kein JavaScript, keine externen Ressourcen).
@@ -19,22 +36,7 @@ export function renderDemo(lead: Lead, t: Template, agency: AgencyInfo): string 
 <meta name="robots" content="noindex,nofollow,noarchive"><meta name="referrer" content="no-referrer">
 <title>Demo: ${name}</title>
 <style>
-:root{--p:${p.primary};--pt:${p.primaryText};--bg:${p.bg};--ink:${p.ink};--soft:${p.soft}}
-*{box-sizing:border-box}body{margin:0;font:17px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink)}
-.demo{position:sticky;top:0;z-index:5;background:#111;color:#fff;padding:10px 16px;font-size:14px;text-align:center}
-.wrap{max-width:960px;margin:0 auto;padding:0 16px}
-header.hero{background:var(--p);color:var(--pt);padding:56px 0 48px}
-h1{font-size:clamp(28px,7vw,44px);line-height:1.15;margin:0 0 12px}
-.sub{font-size:19px;margin:0 0 24px;opacity:.95}
-.btn{display:inline-flex;align-items:center;justify-content:center;min-height:52px;padding:0 24px;border-radius:12px;background:#fff;color:var(--p);font-weight:700;text-decoration:none;border:2px solid #fff}
-section{padding:40px 0}h2{font-size:26px;margin:0 0 16px}
-.grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
-.card{background:var(--soft);border-radius:14px;padding:18px}.card h3{margin:0 0 6px;font-size:19px}.card p{margin:0}
-.ph{height:160px;border-radius:14px;background:repeating-linear-gradient(45deg,var(--soft),var(--soft) 14px,#ffffff 14px,#ffffff 28px);display:flex;align-items:center;justify-content:center;color:var(--ink);font-size:14px;text-align:center;padding:8px}
-.contact{background:var(--soft)}.contact a{color:var(--p);font-weight:700}
-.btn2{display:inline-flex;align-items:center;min-height:52px;padding:0 24px;border-radius:12px;background:var(--p);color:var(--pt);font-weight:700;text-decoration:none}
-footer{padding:28px 0 48px;font-size:14px}
-a:focus-visible{outline:3px solid #000;outline-offset:2px}
+${baseCss(p)}
 </style></head><body>
 <div class="demo" role="note"><b>Unverbindliche Demo / Beispiel</b> – Entwurf von ${esc(agency.name)} für ${name}. Dies ist nicht die offizielle Website des Unternehmens.</div>
 <header class="hero"><div class="wrap"><h1>${esc(t.tagline(lead.companyName, lead.city))}</h1><p class="sub">${esc(t.heroSub)}</p>
