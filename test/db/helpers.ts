@@ -71,3 +71,18 @@ export async function appSetup(ownerId: string, o: { env?: Record<string, string
   return { pool, repo, ctx, server, base, get, post, follow, text, csrf, close: async () => { await ctx.runner.idle(); server.close(); await pool.end(); } };
 }
 export type App = Awaited<ReturnType<typeof appSetup>>;
+
+/** Telefonakquise freigeben und per Schnellsuche Leads holen (Mock-Welt). */
+export async function enablePhone(app: App) {
+  const r = await app.post('/settings/phone', { enable: '1', ack: '1', dailyCallTarget: '30', callerName: 'Kai Test' });
+  if (r.status !== 303) throw new Error('phone enable failed ' + r.status);
+}
+export async function quickSearch(app: App, q = 'Völklingen + 30 km + Nagelstudios') {
+  const r = await app.post('/search/quick', { q });
+  if (r.status !== 303) throw new Error('search failed ' + r.status);
+  await app.ctx.runner.idle();
+}
+/** Leads des Besitzers nach Status/Bereitschaft. */
+export async function leadsWhere(app: App, where = 'true', owner?: string) {
+  return (await app.pool.query(`select id, company_name, status, contact_readiness, contact_blocked, phone, website_state, call_count, callback_at, paused from leads where owner_id=$1 and ${where} order by company_name`, [owner ?? app.repo.ownerId])).rows as any[];
+}

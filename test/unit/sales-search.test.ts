@@ -204,3 +204,14 @@ test('Nachfilter: mobile Probleme, keine Terminbuchung, Social, Score, Telefon/E
   assert.match(postfilter(crit({ requireEmail: '1' }), none.view({ hasEmail: false })).join(), /E-Mail/);
   assert.match(postfilter(crit({ readiness: ['READY_FOR_MANUAL_CALL'] }), none.view({ readiness: 'DO_NOT_CONTACT' })).join(), /nicht gewünscht/);
 });
+
+test('Schnellsuche: Filter und Branche im selben Teil („Nagelstudios ohne Website“, „Friseure in Saarbrücken“)', () => {
+  const a = parseQuickSearch('Völklingen + 30 km + Nagelstudios ohne Website', tax);
+  assert.deepEqual(a.unmatched, []); assert.deepEqual(a.criteria.subIndustries, ['nagelstudio']); assert.deepEqual(a.criteria.website, ['none']); assert.equal(a.criteria.location, 'Völklingen');
+  const b = parseQuickSearch('Friseure in Saarbrücken + 20 km', tax);
+  assert.deepEqual(b.unmatched, []); assert.deepEqual(b.criteria.subIndustries, ['friseur']); assert.equal(b.criteria.location, 'Saarbrücken'); assert.equal(b.criteria.radiusKm, 20);
+  const c = parseQuickSearch('Kosmetikstudios mit veralteter Website + Saarlouis + 25 km', tax);
+  assert.deepEqual(c.unmatched, []); assert.deepEqual(c.criteria.website, ['needs_improvement']); assert.equal(c.criteria.location, 'Saarlouis');
+  const d = parseQuickSearch('Völklingen + Blablubb 123 ohne Website', tax);
+  assert.deepEqual(d.criteria.website, ['none']); assert.deepEqual(d.unmatched, ['Blablubb 123']); assert.equal(d.criteria.location, 'Völklingen');
+});

@@ -53,7 +53,11 @@ export function createApp(ctx: Context, opts: AppOptions): http.Server {
     void killSwitch; void flashKind;
     if (r.redirect) {
       let loc = r.redirect;
-      if (r.flash) loc += (loc.includes('?') ? '&' : '?') + 'f=' + flashes.put(r.flash);
+      if (r.flash) {
+        // Der Hinweis gehört vor den Anker (#…), sonst sendet der Browser ihn nie an den Server.
+        const h = loc.indexOf('#'); const hash = h >= 0 ? loc.slice(h) : ''; const base = h >= 0 ? loc.slice(0, h) : loc;
+        loc = base + (base.includes('?') ? '&' : '?') + 'f=' + flashes.put(r.flash) + hash;
+      }
       res.writeHead(303, { location: loc, ...SECURE_HEADERS }); return void res.end();
     }
     const body = r.body instanceof Safe ? r.body.s : r.body ?? '';

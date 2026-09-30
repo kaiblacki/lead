@@ -176,31 +176,51 @@ export function sortKey(c: SearchCriteria, r: { salesOpportunity: number | null;
 // ---------- Schnellsuche ----------
 export type QuickSearch = { criteria: Record<string, unknown>; unmatched: string[]; understood: string[] };
 
-/** „Völklingen + 30 km + Nagelstudios + Website fehlt oder verbesserungswürdig“ → Kriterien. Unverstandenes wird gemeldet, nichts geraten. */
+/**
+ * „Völklingen + 30 km + Nagelstudios + Website fehlt oder verbesserungswürdig“ → Kriterien. Unverstandenes wird gemeldet, nichts geraten.
+ * Filterbegriffe werden aus dem jeweiligen Teil herausgelöst; was übrig bleibt, wird als Branche oder Ort gelesen
+ * (so geht auch „Nagelstudios ohne Website“ oder „Friseure in Saarbrücken“).
+ */
 export function parseQuickSearch(text: string, tax: Taxonomy): QuickSearch {
   const c: Record<string, any> = { subIndustries: [] as string[], website: [] as string[], employeeBuckets: [] as string[] };
   const understood: string[] = [], unmatched: string[] = [];
   const tokens = text.split(/\s*\+\s*|\s*;\s*|\s*,\s+/).map((t) => t.trim()).filter(Boolean);
+  type Rule = { re: RegExp; apply: (m: RegExpExecArray) => string | void };
+  const rules: Rule[] = [
+    { re: /(\d{1,3})\s*km/i, apply: (m) => { c.radiusKm = Number(m[1]); return `Radius ${m[1]} km`; } },
+    { re: /website\s+(?:fehlt|fehlend)|keine\s+website|ohne\s+website|keine\s+webseite|ohne\s+webseite/i, apply: () => { c.website.push('none'); return 'Website fehlt'; } },
+    { re: /verbesserungsw[\wäöüß]*|veraltet[\wäöüß]*|modernisier[\wäöüß]*|schlechte?\s+website|website\s+schlecht/i, apply: () => { c.website.push('needs_improvement'); return 'Website verbesserungswürdig'; } },
+    { re: /mobile?\s+probleme|mobil\s+schlecht|nicht\s+mobil/i, apply: () => { c.mobileProblems = true; return 'mobile Probleme'; } },
+    { re: /keine\s+termin(?:buchung)?|ohne\s+termin(?:buchung)?/i, apply: () => { c.noBooking = true; return 'keine Terminbuchung'; } },
+    { re: /social\s*media\s+aktiv|instagram\s+aktiv|aktiv\s+auf\s+social/i, apply: () => { c.socialActive = 'yes'; return 'Social Media aktiv'; } },
+    { re: /social\s*media\s+vorhanden|hat\s+instagram|instagram\s+vorhanden/i, apply: () => { c.socialPresent = 'yes'; return 'Social Media vorhanden'; } },
+    { re: /kein(?:e)?\s+social(?:\s*media)?/i, apply: () => { c.socialPresent = 'no'; return 'ohne Social Media'; } },
+    { re: /(?:score|opportunity)\s*(?:ab|>=|mind\.?|mindestens)?\s*(\d{1,3})|ab\s+(\d{1,3})\s*punkte/i, apply: (m) => { c.minOpportunity = Number(m[1] ?? m[2]); return `Opportunity ≥ ${c.minOpportunity}`; } },
+    { re: /(\d{1,3})\s*(?:leads|treffer|ergebnisse)/i, apply: (m) => { c.maxLeads = Number(m[1]); return `max. ${m[1]} Leads`; } },
+    { re: /(\d+)\s*[-–]\s*(\d+)\s*mitarbeiter/i, apply: (m) => { const lo = Number(m[1]), hi = Number(m[2]); const b = ([['1-4', 1, 4], ['5-9', 5, 9], ['10-49', 10, 49], ['50+', 50, 9999]] as const).filter(([, x, z]) => x <= hi && z >= lo).map(([k]) => k); c.employeeBuckets.push(...b); return `Größe ${b.join('/')}`; } },
+  ];
+  const place = (t: string) => /^[A-Za-zÄÖÜäöüß .\-\/]{2,40}$/.test(t) && !/\b(website|webseite|social|mobile|termin)\b/i.test(t);
   for (const t of tokens) {
-    const low = t.toLowerCase();
-    let m: RegExpExecArray | null, hit = false;
-    if ((m = /(\d{1,3})\s*km/.exec(low))) { c.radiusKm = Number(m[1]); understood.push(`Radius ${m[1]} km`); hit = true; }
-    if (/website\s+(?:fehlt|fehlend)|keine\s+website|ohne\s+website|keine\s+webseite/.test(low)) { c.website.push('none'); understood.push('Website fehlt'); hit = true; }
-    if (/verbesserungsw|veraltet|modernisier|schlechte?\s+website|website\s+schlecht/.test(low)) { c.website.push('needs_improvement'); understood.push('Website verbesserungswürdig'); hit = true; }
-    if (/mobile?\s+probleme|mobil\s+schlecht|nicht\s+mobil/.test(low)) { c.mobileProblems = true; understood.push('mobile Probleme'); hit = true; }
-    if (/keine\s+termin(?:buchung)?|ohne\s+termin/.test(low)) { c.noBooking = true; understood.push('keine Terminbuchung'); hit = true; }
-    if (/social\s*media\s+aktiv|instagram\s+aktiv|aktiv\s+auf\s+social/.test(low)) { c.socialActive = 'yes'; understood.push('Social Media aktiv'); hit = true; }
-    else if (/social\s*media\s+vorhanden|hat\s+instagram|instagram\s+vorhanden/.test(low)) { c.socialPresent = 'yes'; understood.push('Social Media vorhanden'); hit = true; }
-    else if (/kein(?:e)?\s+social/.test(low)) { c.socialPresent = 'no'; understood.push('ohne Social Media'); hit = true; }
-    if ((m = /(?:score|opportunity)\s*(?:ab|>=|mind\.?|mindestens)?\s*(\d{1,3})|ab\s+(\d{1,3})\s*punkte/.exec(low))) { c.minOpportunity = Number(m[1] ?? m[2]); understood.push(`Opportunity ≥ ${c.minOpportunity}`); hit = true; }
-    if ((m = /(\d{1,3})\s*(?:leads|treffer|ergebnisse)/.exec(low))) { c.maxLeads = Number(m[1]); understood.push(`max. ${m[1]} Leads`); hit = true; }
-    if ((m = /(\d+)\s*[-–]\s*(\d+)\s*mitarbeiter/.exec(low))) { const lo = Number(m[1]), hi = Number(m[2]); const b = ([['1-4', 1, 4], ['5-9', 5, 9], ['10-49', 10, 49], ['50+', 50, 9999]] as const).filter(([, a, z]) => a <= hi && z >= lo).map(([k]) => k); c.employeeBuckets.push(...b); understood.push(`Größe ${b.join('/')}`); hit = true; }
-    if (!hit) {
-      const sub = tax.match(t);
-      if (sub) { c.subIndustries.push(sub.key); c.industry = c.industry ?? sub.industryKey; understood.push(`Branche ${sub.label}`); }
-      else if (!c.location && /^[A-Za-zÄÖÜäöüß .\-\/]{2,40}$/.test(t) && !/\b(website|social|mobile|termin)\b/i.test(t)) { c.location = t; understood.push(`Ort ${t}`); }
-      else unmatched.push(t);
+    let rest = t, hit = false;
+    for (const r of rules) {
+      const m = r.re.exec(rest);
+      if (!m) continue;
+      const label = r.apply(m); if (label) understood.push(label);
+      rest = rest.replace(r.re, ' '); hit = true;
     }
+    rest = rest.replace(/\b(?:oder|und|mit|aber|bitte|suche|finde)\b/gi, ' ').replace(/\s+/g, ' ').trim();
+    if (!rest) continue;
+    const assign = (part: string): boolean => {
+      const sub = tax.match(part);
+      if (sub) { c.subIndustries.push(sub.key); c.industry = c.industry ?? sub.industryKey; understood.push(`Branche ${sub.label}`); return true; }
+      if (!c.location && place(part)) { c.location = part; understood.push(`Ort ${part}`); return true; }
+      return false;
+    };
+    // „Friseure in Saarbrücken“ / „Nagelstudios ohne …“ (Rest nach Filterentfernung)
+    const inSplit = /^(.+?)\s+in\s+(.+)$/i.exec(rest);
+    if (inSplit && !c.location && tax.match(inSplit[1]) && place(inSplit[2])) { assign(inSplit[1]); assign(inSplit[2]); continue; }
+    const stripped = rest.replace(/^(?:in|für|fuer|nach)\s+/i, '');
+    if (!assign(stripped)) unmatched.push(hit ? stripped : t);
   }
   c.website = [...new Set(c.website)]; c.employeeBuckets = [...new Set(c.employeeBuckets)]; c.subIndustries = [...new Set(c.subIndustries)];
   return { criteria: c, unmatched, understood };
