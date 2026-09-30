@@ -38,3 +38,22 @@ export function transition(leadId: string, from: Status, to: Status, reason: str
   if (!reason.trim()) throw new Error('Ein Grund ist Pflicht');
   return { leadId, type: 'status_change', from, to, reason, at: now.toISOString() };
 }
+
+const ANALYSIS_STATES: Status[] = ['NEW', 'ANALYZING', 'QUALIFIED', 'IGNORED', 'RECHECK'];
+
+/** Kürzester erlaubter Weg von `from` nach `to` innerhalb der Analyse-Zustände. Leer = kein Wechsel nötig/möglich. */
+export function analysisPath(from: Status, to: Status): Status[] {
+  if (from === to || !ANALYSIS_STATES.includes(from) || !ANALYSIS_STATES.includes(to)) return [];
+  const queue: Status[][] = [[from]];
+  const seen = new Set<Status>([from]);
+  while (queue.length) {
+    const path = queue.shift()!;
+    for (const n of NEXT[path[path.length - 1]]) {
+      if (!ANALYSIS_STATES.includes(n) || seen.has(n)) continue;
+      const next = [...path, n];
+      if (n === to) return next.slice(1);
+      seen.add(n); queue.push(next);
+    }
+  }
+  return [];
+}

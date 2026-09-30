@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { Lead } from '../core/types.ts';
 
 export function parseCsv(input: string): string[][] {
@@ -59,7 +60,7 @@ export function leadsFromCsv(input: string, source = 'csv-import'): { leads: Lea
     seen.add(key);
     const socials = (['instagram', 'facebook'] as const).flatMap((p) => { const u = get(r, p); return u ? [{ platform: p, url: u }] : []; });
     leads.push({
-      id: `csv-${leads.length + 1}`, companyName: name, industry: get(r, 'industry'), address: get(r, 'address'), city,
+      id: `csv-${createHash('sha1').update(key).digest('hex').slice(0, 16)}`, companyName: name, industry: get(r, 'industry'), address: get(r, 'address'), city,
       region: get(r, 'region'), phone: get(r, 'phone'), websiteUrl: get(r, 'websiteUrl'), socials, description: get(r, 'description'), source,
     });
   });

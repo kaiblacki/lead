@@ -7,6 +7,7 @@ import { runPipeline } from './pipeline.ts';
 import { renderReport } from './report/html.ts';
 import { Budget, DEFAULT_LIMITS } from './guardrails/budget.ts';
 import type { Lead } from './core/types.ts';
+import { Repo } from './db/repo.ts';
 
 const args = process.argv.slice(2);
 const flag = (n: string) => { const i = args.indexOf(`--${n}`); return i >= 0 ? args[i + 1] : undefined; };
@@ -28,12 +29,29 @@ async function main() {
     r.skipped.forEach((s) => console.warn('Übersprungen:', s));
     leads = r.leads;
   }
-  const budget = new Budget({ ...DEFAULT_LIMITS, maxLeadsPerRun: limit, maxAuditsPerRun: limit });
   const offline = args.includes('--offline');
+  const repo = args.includes('--save') ? Repo.fromEnv() : null;
+  let limits = { ...DEFAULT_LIMITS, maxLeadsPerRun: limit, maxAuditsPerRun: limit };
+  let scoring = json('scoring.json');
+  let runId: string | null = null;
+  if (repo) {
+    const db = await repo.getLimits();
+    limits = { ...db.limits, maxLeadsPerRun: Math.min(db.limits.maxLeadsPerRun, limit), maxAuditsPerRun: Math.min(db.limits.maxAuditsPerRun, limit) };
+    scoring = await repo.getScoringConfig(scoring);
+    if (db.killSwitch) { console.error('Kill Switch ist aktiv – Lauf abgebrochen.'); await repo.close(); process.exit(2); }
+    runId = await repo.createRun(flag('search') ?? file ?? 'csv', flag('region') ?? '', null, limit);
+  }
+  const run = new Budget(limits);
   const { reports, stoppedReason } = await runPipeline(leads, {
     fetchSite: offline ? async () => ({ ok: false, error: 'offline-Modus' }) : fetchSite,
-    scoring: json('scoring.json'), pricing: json('pricing.json'), budget,
+    scoring, pricing: json('pricing.json'), budget: run,
+    beforeLead: repo ? async (l) => {
+      if ((await repo.getLimits()).killSwitch) return 'stop';
+      if (await repo.isPaused(l.source, l.id)) return 'skip';
+    } : undefined,
+    onReport: repo ? async (r) => { await repo.saveReport(r, runId); } : undefined,
   });
+  if (repo && runId) { await repo.finishRun(runId, stoppedReason ? 'STOPPED' : 'DONE', { leads: reports.length, stoppedReason: stoppedReason ?? null }); await repo.close(); }
   const out = flag('out') ?? 'out/report.html';
   mkdirSync(dirname(out), { recursive: true });
   writeFileSync(out, renderReport(reports, { title: 'Lead-Analyse', stoppedReason }));

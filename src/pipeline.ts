@@ -8,17 +8,25 @@ export type LeadReport = { lead: Lead; audit: AuditResult; opportunity: Opportun
 
 export async function runPipeline(
   leads: Lead[],
-  deps: { fetchSite: (url: string) => Promise<FetchResult>; scoring: ScoringConfig; pricing: Pricing; budget: Budget; now?: Date },
+  deps: { fetchSite: (url: string) => Promise<FetchResult>; scoring: ScoringConfig; pricing: Pricing; budget: Budget; now?: Date;
+    /** 'skip' überspringt den Lead (z. B. pausiert), 'stop' beendet den Lauf (z. B. Kill Switch). */
+    beforeLead?: (lead: Lead) => Promise<'skip' | 'stop' | void>;
+    onReport?: (r: LeadReport) => Promise<void> },
 ): Promise<{ reports: LeadReport[]; stoppedReason?: string }> {
   const reports: LeadReport[] = [];
   for (const lead of leads) {
     try {
+      const gate = await deps.beforeLead?.(lead);
+      if (gate === 'skip') continue;
+      if (gate === 'stop') return { reports, stoppedReason: 'Kill Switch aktiv' };
       deps.budget.takeLead();
       let fetched: FetchResult | null = null;
       if (lead.websiteUrl) { deps.budget.takeAudit(); fetched = await deps.fetchSite(lead.websiteUrl); }
       const audit = buildAudit(lead, fetched, deps.now);
       const opportunity = scoreOpportunity(lead, audit, deps.scoring, deps.now);
-      reports.push({ lead, audit, opportunity, sales: buildSalesPackage(lead, audit, opportunity, deps.pricing) });
+      const report = { lead, audit, opportunity, sales: buildSalesPackage(lead, audit, opportunity, deps.pricing) };
+      await deps.onReport?.(report);
+      reports.push(report);
     } catch (e) {
       return { reports, stoppedReason: e instanceof Error ? e.message : String(e) };
     }
