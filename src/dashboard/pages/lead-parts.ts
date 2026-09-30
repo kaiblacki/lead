@@ -77,7 +77,7 @@ export function contact(d: any, csrf: string, id: string, settings: { phoneEnabl
     <div class="row"><span class="badge b-info">Empfehlung: ${CHANNEL_TEXT[l.contact_channel] ?? '–'}</span>${readinessBadge(l.contact_readiness)}</div>
     <p><b>Grund:</b> ${l.contact_reason ?? '–'}</p>
     ${a?.warnings?.length ? a.warnings.map((w: string) => html`<div class="warnbox">${w}</div>`) : ''}
-    ${a?.channels?.length ? html`<table><tr><th>Kanal</th><th>Status</th><th>Grund</th></tr>${a.channels.map((c: any) => html`<tr><td>${CHANNEL_TEXT[c.channel]}</td><td>${readinessBadge(c.readiness)}</td><td>${c.reason}</td></tr>`)}</table>` : ''}
+    ${a?.channels?.length ? html`<ul class="items">${a.channels.map((c: any) => html`<li><div class="row"><b>${CHANNEL_TEXT[c.channel]}</b>${readinessBadge(c.readiness)}</div><small class="mute">${c.reason}</small></li>`)}</ul>` : ''}
     ${a?.legal?.length ? html`<details><summary>Rechtliche Hinweise</summary><ul>${a.legal.map((t: string) => html`<li>${t}</li>`)}</ul><small>Keine Rechtsberatung. Es wird nichts automatisch gesendet.</small></details>` : ''}
     ${!settings.phoneEnabled ? html`<div class="warnbox">Telefonakquise ist noch nicht freigegeben – <a href="/settings#telefon">Einstellungen</a>.</div>` : ''}
     ${l.contact_readiness === 'DO_NOT_CONTACT' ? html`<p class="errbox">Gesperrt. Anruf-Ergebnisse und Nachrichten sind deaktiviert.</p>` : html`

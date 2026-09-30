@@ -253,6 +253,7 @@ test('13 Verlauf: alle Stufen der Reihe nach im Audit-Log, Analytics-Funnel und 
   const ov = await app.ctx.analytics.overview('all', app.ctx.now());
   const n = (k: string) => ov.funnel.find((f: any) => f.key === k)!.count;
   for (const k of ['found', 'analyzed', 'qualified', 'called', 'interested', 'demo', 'offer', 'deposit', 'customer']) assert.ok(n(k) >= 1, `Funnel-Stufe ${k}`);
+  for (let i = 1; i < ov.funnel.length; i++) assert.ok(ov.funnel[i].count <= ov.funnel[i - 1].count, `Trichter steigt bei ${ov.funnel[i].label}: ${ov.funnel.map((f: any) => f.count)}`);
   assert.ok(n('found') >= n('qualified') && n('qualified') >= n('interested') && n('interested') >= n('customer'), 'Trichter nimmt nach unten nicht zu');
   assert.ok(ov.steps.every((s: any) => s.rate === null || (s.rate >= 0 && s.rate <= 100)), 'Konversionsraten plausibel');
   assert.ok(ov.revenueCents > 0 && ov.activePlans >= 1 && ov.mrrCents > 0);

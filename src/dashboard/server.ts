@@ -19,7 +19,7 @@ import { routes as publicRoutes } from './pages/public.ts';
 
 export type AppOptions = { password: string; baseUrl?: string; trustProxy?: boolean; autoDeploy?: boolean };
 
-const SECURE_HEADERS = { 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'x-frame-options': 'DENY', 'cache-control': 'no-store' };
+const SECURE_HEADERS = { 'x-content-type-options': 'nosniff', 'referrer-policy': 'same-origin', 'x-frame-options': 'DENY', 'cache-control': 'no-store' };
 const PAGE_CSP = "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'";
 
 /** Kurzlebige Hinweise (z. B. „Gespeichert“) über eine Einmal-ID in der URL – der Text selbst steht nie in der URL. */
@@ -45,9 +45,19 @@ export function createApp(ctx: Context, opts: AppOptions): http.Server {
     const want = Buffer.from(opts.password);
     return given.length === want.length && timingSafeEqual(given, want);
   };
-  const readBody = async (req: http.IncomingMessage, max: number) => { let b = ''; for await (const ch of req) { b += ch; if (b.length > max) throw new UserError('Anfrage zu groß'); } return b; };
+  const readBody = async (req: http.IncomingMessage, max: number) => { let b = ''; for await (const ch of req) { b += ch; if (b.length > max) throw Object.assign(new UserError('Anfrage zu groß'), { status: 413 }); } return b; };
   const csrfOk = (form: URLSearchParams) => { const g = Buffer.from(form.get('csrf') ?? ''), w = Buffer.from(csrf); return g.length === w.length && timingSafeEqual(g, w); };
-  const sameOrigin = (req: http.IncomingMessage) => { const o = req.headers.origin ?? req.headers.referer; if (!o) return true; try { return new URL(o).host === req.headers.host; } catch { return false; } };
+  /**
+   * Herkunftsprüfung für Formulare. Browser senden bei „Referrer-Policy: no-referrer“ für Formulare `Origin: null` – das ist kein Angriff, sondern
+   * „unbekannt“; dann entscheidet der Referer, und fehlt auch der, schützt das geheime CSRF-Token (Basic-Auth wird vom Browser sonst automatisch mitgeschickt).
+   */
+  const sameOrigin = (req: http.IncomingMessage) => {
+    const hostOf = (v: string) => { try { return new URL(v).host; } catch { return null; } };
+    const origin = req.headers.origin, referer = req.headers.referer;
+    if (origin && origin !== 'null') return hostOf(origin) === req.headers.host;
+    if (referer) return hostOf(referer) === req.headers.host;
+    return true;
+  };
 
   const send = (res: http.ServerResponse, r: Res, isPublic: boolean, killSwitch: boolean, flashKind?: Flash) => {
     void killSwitch; void flashKind;
@@ -72,9 +82,9 @@ export function createApp(ctx: Context, opts: AppOptions): http.Server {
     const method = (req.method ?? 'GET') as 'GET' | 'POST';
     try {
       if (url.pathname === '/healthz' && method === 'GET') {
-        try { await ctx.repo.pool.query('select 1'); res.writeHead(200, { 'content-type': 'text/plain' }); return void res.end('ok'); } catch { res.writeHead(503, { 'content-type': 'text/plain' }); return void res.end('db'); }
+        try { await ctx.repo.pool.query('select 1'); res.writeHead(200, { 'content-type': 'text/plain', ...SECURE_HEADERS }); return void res.end('ok'); } catch { res.writeHead(503, { 'content-type': 'text/plain', ...SECURE_HEADERS }); return void res.end('db'); }
       }
-      if (method !== 'GET' && method !== 'POST') { res.writeHead(405); return void res.end(); }
+      if (method !== 'GET' && method !== 'POST') { res.writeHead(405, { allow: 'GET, POST', ...SECURE_HEADERS }); return void res.end(); }
       const route = all.map((r) => ({ r, m: r.method === method ? r.path.exec(url.pathname) : null })).find((x) => x.m);
       if (!route) {
         if (!authOk(req)) { res.writeHead(401, { 'www-authenticate': 'Basic realm="Agency OS"' }); return void res.end('Anmeldung erforderlich'); }
@@ -116,7 +126,7 @@ export function createApp(ctx: Context, opts: AppOptions): http.Server {
         return send(res, { status: 400, body: isPublic ? html`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><p style="font:16px system-ui;margin:16px">${text}</p>` : layout({ title: 'Hinweis', nav: '', csrf, killSwitch, mock: app.mock, body: html`<div class="errbox">${text}</div><p><a class="btn" href="/">Zur Startseite</a></p>` }) }, isPublic, killSwitch);
       }
     } catch (e) {
-      if (!res.headersSent) { res.writeHead(e instanceof UserError ? 400 : 500, { 'content-type': 'text/plain; charset=utf-8' }); res.end(e instanceof UserError ? e.message : 'Interner Fehler'); }
+      if (!res.headersSent) { const st = (e as { status?: number }).status ?? (e instanceof UserError ? 400 : 500); res.writeHead(st, { 'content-type': 'text/plain; charset=utf-8', ...(st === 413 ? { connection: 'close' } : {}) }); res.end(e instanceof UserError ? e.message : 'Interner Fehler'); }
       if (!(e instanceof UserError)) console.error(e);
     }
     void esc;

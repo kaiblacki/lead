@@ -1,6 +1,10 @@
 import { html, raw, Safe, esc } from './html.ts';
 import { STAGE_LABEL, type Status } from '../core/status.ts';
 
+/** Anzeigetexte für technische Statuswerte (nie rohe Enum-Namen im Dashboard zeigen). */
+export const ORDER_LABEL: Record<string, string> = { PAYMENT_PENDING: 'Anzahlung offen', DEPOSIT_PAID: 'Anzahlung bezahlt', IN_PRODUCTION: 'In Produktion', QA: 'Qualitätsprüfung', CUSTOMER_REVIEW: 'Kundenfreigabe', APPROVED: 'Freigegeben', FINAL_PAYMENT_PENDING: 'Restzahlung offen', FULLY_PAID: 'Vollständig bezahlt', DEPLOYED: 'Veröffentlicht', MAINTENANCE_ACTIVE: 'Wartung aktiv' };
+export const PLAN_LABEL: Record<string, string> = { ACTIVE: 'Aktiv', PAUSED: 'Pausiert', CANCELED: 'Gekündigt' };
+export const PAY_STATE_LABEL: Record<string, string> = { pending: 'offen', paid: 'bezahlt', failed: 'fehlgeschlagen', expired: 'abgelaufen', refunded: 'erstattet' };
 export const eur = (cents: number | null | undefined) => (cents === null || cents === undefined ? '–' : new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(cents / 100));
 export const fmt = (d: unknown) => (d ? new Date(d as string).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Berlin' }) : '–');
 export const fmtDate = (d: unknown) => (d ? new Date(d as string).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' }) : '–');
@@ -15,7 +19,7 @@ header.top{position:sticky;top:0;z-index:20;background:#101826;color:#fff}.top .
 .top nav{display:flex;gap:2px;overflow-x:auto;flex:1;min-width:0;scrollbar-width:none}.top nav::-webkit-scrollbar{display:none}
 .top nav a{color:#dbe3f0;text-decoration:none;padding:0 12px;min-height:48px;display:inline-flex;align-items:center;white-space:nowrap;border-bottom:3px solid transparent}
 .top nav a.on{color:#fff;border-bottom-color:#5aa9ff;font-weight:600}.brand{font-weight:700;padding:0 6px;white-space:nowrap}
-.top form{margin:0}.top button{min-height:40px;padding:0 12px}
+.top form{margin:0}.top button{min-height:44px;padding:0 12px}
 .banner{padding:8px 12px;font-size:14px;text-align:center}.banner.mock{background:#fff3cd;color:#664d03}.banner.kill{background:#c92a2a;color:#fff;font-weight:700}
 .card{background:var(--card);border-radius:12px;padding:12px 14px;margin:10px 0;box-shadow:0 1px 2px #0002}.card.flat{box-shadow:none;border:1px solid var(--line)}
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.grow{flex:1 1 auto}.stack>*+*{margin-top:8px}
@@ -24,7 +28,7 @@ button,select,input,textarea,.btn{font:inherit;color:inherit;min-height:44px;pad
 textarea{width:100%;min-height:88px}input[type=checkbox],input[type=radio]{min-height:auto;width:22px;height:22px;padding:0;accent-color:var(--brand);vertical-align:middle}
 button,.btn{cursor:pointer;display:inline-flex;align-items:center;justify-content:center;text-decoration:none;font-weight:600;min-width:44px;background:#fff}
 button.primary,.btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}button.ok{background:var(--ok);border-color:var(--ok);color:#fff}button.danger,.btn.danger{background:var(--bad);border-color:var(--bad);color:#fff}button.warn{background:#fff3cd;border-color:#e0b84c}
-button:disabled{opacity:.5;cursor:not-allowed}label{display:block;font-size:14px;color:var(--mute)}label input,label select,label textarea{display:block;width:100%;margin-top:2px;color:var(--ink)}label.inline{display:inline-flex;gap:8px;align-items:center;color:var(--ink);font-size:16px;min-height:44px}label.inline input{display:inline-block;width:22px;margin:0}
+button:disabled{opacity:.5;cursor:not-allowed}label{display:block;font-size:14px;color:var(--mute)}label input,label select,label textarea{display:block;width:100%;margin-top:2px;color:var(--ink)}label.inline{display:inline-flex;gap:8px;align-items:center;color:var(--ink);font-size:16px;min-height:44px;margin-right:14px}table.nowrap th,table.nowrap td{white-space:nowrap}label.inline input{display:inline-block;width:22px;margin:0}
 fieldset{border:1px solid var(--line);border-radius:10px;margin:8px 0;padding:8px 12px}legend{font-size:14px;color:var(--mute);padding:0 6px}
 .badge{display:inline-block;font-size:12px;font-weight:700;padding:3px 9px;border-radius:99px;background:#e6e9ee;color:#2b323d;max-width:100%;overflow-wrap:anywhere}
 .b-HOT{background:var(--hot);color:#fff}.b-HIGH-POTENTIAL{background:#e8590c;color:#fff}.b-MEDIUM{background:#ffd43b}.b-LOW{background:#dee2e6}.b-IGNORE,.b-UNRATED{background:#ced4da}

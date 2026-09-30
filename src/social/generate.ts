@@ -85,12 +85,16 @@ export function generatePlan(b: Business, p: Profile, opts: { weeks?: number; st
   return items.sort((a, c) => a.date.localeCompare(c.date) || a.platform.localeCompare(c.platform));
 }
 
+/** Aussagen, die ohne Nachweis nicht in Werbetexte gehören (UWG, bei Gesundheitsthemen auch HWG). */
+const CLAIMS = /garantier|heilung|heilt\b|heilversprechen|100\s*%\s*(?:erfolg|sicher|wirksam)|nebenwirkungsfrei|risikofrei|platz\s*1\b|nummer\s*1\b/i;
+
 export function validateItem(i: Pick<Item, 'platform' | 'body' | 'hashtags'>): string[] {
   const e: string[] = [];
   if (i.body.length > LIMITS[i.platform]) e.push(`Text zu lang für ${i.platform} (${i.body.length}/${LIMITS[i.platform]})`);
   if (i.platform === 'instagram' && i.hashtags.length > 30) e.push('Zu viele Hashtags');
   if (/\{[a-z_]+\}|\[[^\]]{3,}\]|undefined|null/.test(i.body)) e.push('Unaufgelöster Platzhalter im Text');
   if (!i.body.trim()) e.push('Text ist leer');
+  if (CLAIMS.test(i.body)) e.push('Unzulässiges Werbeversprechen (z. B. „garantiert“, Heilversprechen, „100 % Erfolg“) – bitte umformulieren');
   return e;
 }
 

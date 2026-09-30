@@ -70,6 +70,15 @@ test('Bestellstatus: Zahlungslogik nicht umgehbar', () => {
   assert.throws(() => assertOrderTransition('IN_PRODUCTION', 'APPROVED'));
 });
 
+test('Build + QA: Firmennamen mit Sonderzeichen (& \' \" <) bestehen die QA, Injektionen bleiben escaped', () => {
+  for (const name of ["Linh's Nagelwelt", 'Müller & Söhne', 'Salon "Chic"', 'A <b>B</b> Friseur']) {
+    const c = { ...content, companyName: name };
+    const files = buildSite(c, t, { hosting: 'Vercel Inc.' });
+    assert.deepEqual(staticQa(files, { content: c, legalConfirmed: true }).filter((i) => i.severity === 'error'), [], name);
+    assert.ok(!/<b>B<\/b>/.test(files['index.html']), 'HTML im Namen wird escaped');
+  }
+});
+
 test('Build + QA: vollständige Daten bestehen', () => {
   const files = buildSite(content, t, { hosting: 'Vercel Inc.' });
   assert.deepEqual(staticQa(files, ctx).filter((i) => i.severity === 'error'), []);

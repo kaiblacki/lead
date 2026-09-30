@@ -1,6 +1,6 @@
 import type { Route } from '../types.ts';
 import { UserError } from '../types.ts';
-import { html, raw, eur, fmt, fmtDate, postBtn, postForm } from '../ui.ts';
+import { html, raw, eur, fmt, fmtDate, postBtn, postForm, PLAN_LABEL } from '../ui.ts';
 import { render, redirect, okFlash, uuid } from './_page.ts';
 
 const id = uuid.source;
@@ -13,7 +13,7 @@ export const routes: Route[] = [
       <div class="card"><div class="row"><span class="grow">${plans.length} Wartungsverträge · ${due} Prüfung(en) fällig</span>${postBtn(r.app.csrf, '/maintenance/run', 'Fällige Prüfungen ausführen', { cls: 'primary' })}</div>
         <small class="mute">Geprüft werden: erreichbar, HTTPS, Ladezeit, Impressum/Datenschutz, Kontaktlinks, interne Seiten. Bei Problemen entstehen automatisch Aufgaben.</small></div>
       ${plans.length ? plans.map((p) => { const lc = p.last_check; const errs: string[] = lc && !lc.ok ? [lc.details?.error, ...(lc.details?.legalMissing ?? []), ...(lc.details?.brokenPages ?? [])].filter(Boolean) : [];
-        return html`<a class="card" href="/maintenance/${p.order_id}" style="display:block;text-decoration:none;color:inherit"><div class="row"><b class="grow">${p.company_name}</b><span class="badge ${p.status === 'ACTIVE' ? 'b-ok' : 'b-warn'}">${p.status}</span></div>
+        return html`<a class="card" href="/maintenance/${p.order_id}" style="display:block;text-decoration:none;color:inherit"><div class="row"><b class="grow">${p.company_name}</b><span class="badge ${p.status === 'ACTIVE' ? 'b-ok' : 'b-warn'}">${PLAN_LABEL[p.status] ?? p.status}</span></div>
           <p class="mute">${p.site_url ?? '–'}</p>
           <div class="grid"><div class="kpi"><b>${eur(p.monthly_cents)}</b><span>pro Monat</span></div><div class="kpi"><b>${fmtDate(p.next_check_at)}</b><span>nächste Prüfung</span></div><div class="kpi"><b>${lc ? (lc.ok ? '✅' : '⚠️') : '–'}</b><span>letzte Prüfung ${lc ? fmtDate(lc.created_at) : ''}</span></div><div class="kpi"><b>${p.open_tasks}</b><span>offene Aufgaben</span></div></div>
           ${errs.length ? html`<div class="errbox">Fehler: ${errs.join(', ')}</div>` : ''}</a>`; })
@@ -27,7 +27,7 @@ export const routes: Route[] = [
     const p = d.plan; const mock = r.ctx.registry.mockHosting;
     const slug = p.site_url?.match(/\/hosted\/([^/]+)\//)?.[1];
     return render(r, { title: `Wartung: ${p.company_name}`, nav: 'maintenance', body: html`
-      <div class="card"><div class="row"><b class="grow">${p.company_name}</b><span class="badge ${p.status === 'ACTIVE' ? 'b-ok' : 'b-warn'}">${p.status}</span></div>
+      <div class="card"><div class="row"><b class="grow">${p.company_name}</b><span class="badge ${p.status === 'ACTIVE' ? 'b-ok' : 'b-warn'}">${PLAN_LABEL[p.status] ?? p.status}</span></div>
         <p>${p.site_url ? html`<a href="${p.site_url}" target="_blank" rel="noopener noreferrer">${p.site_url}</a>` : '–'} · ${eur(p.monthly_cents)}/Monat · Prüfintervall ${p.interval_days} Tage</p>
         <p class="mute">Nächste Prüfung: ${fmt(p.next_check_at)} · letzte: ${fmt(p.last_check_at)}</p>
         <div class="row">${postBtn(r.app.csrf, `/maintenance/${orderId}/check`, 'Jetzt prüfen', { cls: 'primary' })}${p.status === 'ACTIVE' ? postBtn(r.app.csrf, `/maintenance/${orderId}/plan`, 'Pausieren', { hidden: { status: 'PAUSED' } }) : postBtn(r.app.csrf, `/maintenance/${orderId}/plan`, 'Aktivieren', { hidden: { status: 'ACTIVE' }, cls: 'ok' })}${postBtn(r.app.csrf, `/maintenance/${orderId}/plan`, 'Kündigen', { hidden: { status: 'CANCELED' }, cls: 'danger' })}

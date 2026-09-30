@@ -1,6 +1,6 @@
 import type { Route } from '../types.ts';
 import { UserError } from '../types.ts';
-import { html, raw, eur, fmt, fmtDate, postBtn, postForm, statusBadge } from '../ui.ts';
+import { html, raw, eur, fmt, fmtDate, postBtn, postForm, statusBadge, ORDER_LABEL, PLAN_LABEL, PAY_STATE_LABEL } from '../ui.ts';
 import { render, redirect, okFlash, uuid } from './_page.ts';
 import { allTemplates } from '../../site/templates.ts';
 import { STAGE_LABEL, type Status } from '../../core/status.ts';
@@ -20,7 +20,7 @@ export const routes: Route[] = [
         (select coalesce(sum(amount_cents),0)::int from payments p where p.order_id=o.id and p.status='paid' and p.kind in ('deposit','final')) as paid
       from orders o join leads l on l.id=o.lead_id where o.owner_id=$1 order by o.created_at desc limit 200`, [r.ctx.repo.ownerId])).rows;
     return render(r, { title: 'Aufträge', nav: 'orders', body: html`
-      <div class="card">${rows.length ? html`<ul class="items">${rows.map((o) => html`<li><div class="row"><a class="grow" href="/orders/${o.id}"><b>${o.company_name}</b><br><small>${fmtDate(o.created_at)} · ${eur(o.deposit_cents + o.final_cents)} einmalig · bezahlt ${eur(o.paid)}</small></a>${statusBadge(o.lead_status)}</div><small class="mute">Auftragsstatus: ${o.status}</small></li>`)}</ul>` : html`<p class="mute">Noch keine Aufträge. Sie entstehen, wenn ein Angebot angenommen wird (Anruf-Ergebnis „Gekauft“ oder Schaltfläche am Lead).</p>`}</div>` });
+      <div class="card">${rows.length ? html`<ul class="items">${rows.map((o) => html`<li><div class="row"><a class="grow" href="/orders/${o.id}"><b>${o.company_name}</b><br><small>${fmtDate(o.created_at)} · ${eur(o.deposit_cents + o.final_cents)} einmalig · bezahlt ${eur(o.paid)}</small></a>${statusBadge(o.lead_status)}</div><small class="mute">Auftragsstatus: ${ORDER_LABEL[o.status] ?? o.status}</small></li>`)}</ul>` : html`<p class="mute">Noch keine Aufträge. Sie entstehen, wenn ein Angebot angenommen wird (Anruf-Ergebnis „Gekauft“ oder Schaltfläche am Lead).</p>`}</div>` });
   } },
 
   { method: 'GET', path: new RegExp(`^/orders/${id}$`), h: async (r) => {
@@ -39,12 +39,12 @@ export const routes: Route[] = [
     const issues: any[] = build?.qa_issues ?? [];
     const payBtn = (kind: Kind, label: string, when: string) => (st === when ? postBtn(r.app.csrf, `/orders/${orderId}/checkout/${kind}`, label) : '');
     return render(r, { title: `Auftrag: ${lead.company_name}`, nav: 'orders', body: html`
-      <div class="card"><div class="row"><a href="/leads/${lead.id}" class="grow"><b>${lead.company_name}</b></a>${statusBadge(leadSt)}<span class="badge">Auftrag: ${st}</span></div>
+      <div class="card"><div class="row"><a href="/leads/${lead.id}" class="grow"><b>${lead.company_name}</b></a>${statusBadge(leadSt)}<span class="badge">Auftrag: ${ORDER_LABEL[st] ?? st}</span></div>
         <div class="stepper">${FLOW.map((s, i) => html`<span class="step ${s === leadSt ? 'now' : i < idx ? 'done' : ''}">${STAGE_LABEL[s]}</span>`)}</div>
         <p>${eur(order.deposit_cents)} Anzahlung + ${eur(order.final_cents)} Restzahlung · Wartung ${eur(order.maintenance_cents)}/Monat</p></div>
 
       <div class="card"><h2>Zahlungen</h2>
-        ${pays.length ? html`<table>${pays.map((p: any) => html`<tr><td>${PAY_LABEL[p.kind]}</td><td>${eur(p.amount_cents)}</td><td><span class="badge ${p.status === 'paid' ? 'b-ok' : p.status === 'pending' ? 'b-warn' : 'b-bad'}">${p.status}</span></td>
+        ${pays.length ? html`<table>${pays.map((p: any) => html`<tr><td>${PAY_LABEL[p.kind]}</td><td>${eur(p.amount_cents)}</td><td><span class="badge ${p.status === 'paid' ? 'b-ok' : p.status === 'pending' ? 'b-warn' : 'b-bad'}">${PAY_STATE_LABEL[p.status] ?? p.status}</span></td>
           <td>${p.status === 'pending' && p.checkout_url ? html`<a href="${p.checkout_url}" target="_blank" rel="noopener noreferrer">Zahlungslink</a>` : ''}${p.status === 'pending' && isMockPay ? postBtn(r.app.csrf, `/payments/${p.id}/simulate`, `${PAY_LABEL[p.kind]} bezahlt (Simulation)`, { cls: 'warn' }) : ''}</td></tr>`)}</table>` : html`<p class="mute">Noch keine Zahlungslinks.</p>`}
         <div class="row">${payBtn('deposit', 'Anzahlungs-Link erstellen', 'PAYMENT_PENDING')}${payBtn('final', 'Restzahlungs-Link erstellen', 'FINAL_PAYMENT_PENDING')}${payBtn('maintenance', 'Wartungs-Abo-Link erstellen', 'DEPLOYED')}</div>
         <small class="mute">${isMockPay ? 'Mock-Zahlung: Der Link führt auf eine lokale Testseite. „Bezahlt (Simulation)“ löst denselben Ablauf aus wie ein echter Stripe-Webhook.' : 'Zahlungen laufen über Stripe; Bestätigung per Webhook.'} Reihenfolge ist erzwungen: keine Produktion ohne Anzahlung, keine Veröffentlichung ohne Restzahlung.</small></div>
@@ -75,7 +75,7 @@ export const routes: Route[] = [
       <div class="card"><h2>Veröffentlichung und Wartung</h2>
         ${st === 'FULLY_PAID' ? postBtn(r.app.csrf, `/orders/${orderId}/deploy`, 'Veröffentlichen', { cls: 'ok' }) : html`<p class="mute">Veröffentlichung erst nach bestätigter Restzahlung.${r.app.autoDeploy ? ' (Auto-Deploy aktiv)' : ''}</p>`}
         ${deps.map((d: any) => html`<p>Veröffentlicht (${d.adapter}): ${/^https?:/.test(d.url) ? html`<a href="${d.url}" target="_blank" rel="noopener noreferrer">${d.url}</a>` : d.url} <small>${fmt(d.created_at)}</small></p>`)}
-        ${plan ? html`<p><a class="btn" href="/maintenance/${orderId}">Wartung öffnen</a> <span class="badge ${plan.status === 'ACTIVE' ? 'b-ok' : 'b-warn'}">${plan.status}</span></p>` : ''}</div>` });
+        ${plan ? html`<p><a class="btn" href="/maintenance/${orderId}">Wartung öffnen</a> <span class="badge ${plan.status === 'ACTIVE' ? 'b-ok' : 'b-warn'}">${PLAN_LABEL[plan.status] ?? plan.status}</span></p>` : ''}</div>` });
   } },
 
   { method: 'POST', path: new RegExp(`^/orders/${id}/checkout/(deposit|final|maintenance)$`), h: async (r) => {

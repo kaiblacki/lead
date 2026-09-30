@@ -43,7 +43,7 @@ export const routes: Route[] = [
     return pub(shell('Ihre Website ist bereit', html`<h1>Ihre Website ist bereit.</h1><p>Bitte prüfen Sie die Vorschau für <b>${rv.company_name}</b>.</p>
       ${f === 'changed' ? html`<div class="card" style="background:#d3f9d8">Ihre Änderung wurde umgesetzt. Bitte prüfen Sie die neue Vorschau.</div>` : f === 'received' ? html`<div class="card" style="background:#d3f9d8">Wir haben Ihren Änderungswunsch erhalten und melden uns mit einer neuen Vorschau.</div>` : ''}
       <iframe src="/r/${t}/site/index.html" title="Vorschau Ihrer Website"></iframe>
-      ${pending ? html`<div class="card"><form method="post" action="/r/${t}/approve"><button class="ok">FREIGEBEN</button> <small>Danach folgt die Restzahlung. Erst nach Zahlung wird veröffentlicht.</small></form></div>
+      ${pending ? html`<div class="card"><form method="post" action="/r/${t}/approve"><button class="ok" style="width:100%">FREIGEBEN</button></form><p><small>Danach folgt die Restzahlung. Erst nach Zahlung wird veröffentlicht.</small></p></div>
         <div class="card"><form method="post" action="/r/${t}/changes"><label>Änderung anfordern<br><textarea name="note" required minlength="5" maxlength="2000" placeholder="Was soll geändert werden?"></textarea></label><p><button>ÄNDERUNG ANFORDERN</button></p></form></div>`
         : html`<div class="card"><p>Status: ${rv.status === 'CUSTOMER_REVIEW' ? 'Entscheidung ausstehend' : 'Die Vorschau wurde bereits bearbeitet. Vielen Dank!'}</p></div>`}`));
   } },

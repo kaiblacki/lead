@@ -5,7 +5,10 @@ export type QaContext = { content: ProjectContent; legalConfirmed: boolean };
 
 const PLACEHOLDER = /\[[^\]]{3,}\]|beispieltext|platzhalter|lorem ipsum|\btodo\b|folgt\b|beispielentwurf|unverbindliche demo/i;
 const htmlFiles = (f: SiteFiles) => Object.keys(f).filter((k) => k.endsWith('.html'));
-const textOf = (h: string) => h.replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+const ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
+/** Sichtbarer Text einer Seite (Tags entfernt, HTML-Entities zurückübersetzt – sonst fände „Linh's“ / „Müller & Söhne“ nie eine Übereinstimmung). */
+const textOf = (h: string) => h.replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ').replace(/<[^>]+>/g, ' ')
+  .replace(/&(?:#(\d+)|#x([0-9a-f]+)|([a-z]+));/gi, (m, dec, hex, name) => (dec ? String.fromCodePoint(Number(dec)) : hex ? String.fromCodePoint(parseInt(hex, 16)) : ENTITIES[String(name).toLowerCase()] ?? m)).replace(/\s+/g, ' ');
 
 export function staticQa(files: SiteFiles, ctx: QaContext): Issue[] {
   const out: Issue[] = [];

@@ -86,3 +86,29 @@ export async function quickSearch(app: App, q = 'Völklingen + 30 km + Nagelstud
 export async function leadsWhere(app: App, where = 'true', owner?: string) {
   return (await app.pool.query(`select id, company_name, status, contact_readiness, contact_blocked, phone, website_state, call_count, callback_at, paused from leads where owner_id=$1 and ${where} order by company_name`, [owner ?? app.repo.ownerId])).rows as any[];
 }
+
+/** Bringt einen Lead ohne Browser-QA bis MAINTENANCE_ACTIVE (für Tests zu Wartung/Abos/Sicherheit). */
+export async function makeCustomer(app: App, leadId: string, o: { maintenance?: boolean; deploy?: boolean; stopAt?: 'review' } = {}) {
+  const { ctx } = app; const pay = ctx.registry.providers.payments;
+  const call = await ctx.calls.applyResult(leadId, 'BOUGHT', { note: 'Testkunde' });
+  const orderId = call.orderId!;
+  const dep = await ctx.orders.startCheckout(orderId, 'deposit', pay, app.base);
+  const depPay = (await ctx.orders.payments(orderId)).find((p: any) => p.kind === 'deposit')!;
+  await ctx.orders.simulatePayment(depPay.id, pay); void dep;
+  const project = await ctx.delivery.getProject(orderId);
+  const c = project.content;
+  await ctx.delivery.saveProject(orderId, { ...c, phone: '0681 998877', email: 'kontakt@beispiel.example', address: 'Hauptstraße 12', postalCode: '66333', city: 'Völklingen', openingHours: 'Mo–Fr 9–18 Uhr',
+    about: 'Persönliche Beratung und saubere Arbeit seit vielen Jahren.', services: [{ title: 'Maniküre', text: 'Pflege und Lack für gepflegte Hände' }, { title: 'Gelnägel', text: 'Neumodellage und Auffüllen' }], legal: { owner: 'Erika Mustermann', hosting: 'Mock-Hosting' } }, true);
+  const b = await ctx.delivery.build(orderId, { browser: false });
+  if (!b.passed) throw new Error('QA nicht bestanden: ' + JSON.stringify(b.issues.filter((i: any) => i.severity === 'error')));
+  const token = (await ctx.orders.getOrder(orderId)).review_token as string;
+  if (o.stopAt === 'review') return { orderId, token, url: undefined as string | undefined };
+  await ctx.delivery.decide(token, 'approve');
+  await ctx.orders.startCheckout(orderId, 'final', pay, app.base);
+  const fin = (await ctx.orders.payments(orderId)).find((p: any) => p.kind === 'final')!;
+  await ctx.orders.simulatePayment(fin.id, pay);
+  let url: string | undefined;
+  if (o.deploy !== false) { url = (await ctx.delivery.deploy(orderId, ctx.registry.providers.hosting)).url;
+    if (o.maintenance !== false) { await ctx.orders.startCheckout(orderId, 'maintenance', pay, app.base); const m = (await ctx.orders.payments(orderId)).find((p: any) => p.kind === 'maintenance')!; await ctx.orders.simulatePayment(m.id, pay); } }
+  return { orderId, token, url };
+}
