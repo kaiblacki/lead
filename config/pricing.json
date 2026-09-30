@@ -1,0 +1,9 @@
+{
+  "currency": "EUR",
+  "offers": {
+    "website_starter": { "name": "Website Starter", "priceCents": 129000, "depositCents": 39000, "maintenanceCentsPerMonth": 4900 },
+    "website_modernisierung": { "name": "Website Modernisierung", "priceCents": 129000, "depositCents": 39000, "maintenanceCentsPerMonth": 4900 }
+  },
+  "noWebsiteOffer": "website_starter",
+  "existingWebsiteOffer": "website_modernisierung"
+}

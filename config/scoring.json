@@ -1,0 +1,16 @@
+{
+  "weights": {
+    "website_missing": 30,
+    "website_outdated": 20,
+    "mobile_problems": 15,
+    "no_clear_conversion": 10,
+    "no_online_booking": 10,
+    "social_active": 5,
+    "local_business": 5,
+    "high_obvious_benefit": 5
+  },
+  "impliedByMissingWebsite": ["website_outdated", "mobile_problems", "no_clear_conversion", "no_online_booking"],
+  "thresholds": { "HOT": 90, "HIGH_POTENTIAL": 75, "MEDIUM": 60, "LOW": 40 },
+  "socialActiveDays": 90,
+  "highBenefitMinProblems": 3
+}
