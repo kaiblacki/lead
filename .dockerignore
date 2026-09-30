@@ -1,6 +1,12 @@
 node_modules
 out
+scratch
 .env
+.env.*
+!.env.example
 .git
 test
 docs
+supabase
+scripts
+*.md

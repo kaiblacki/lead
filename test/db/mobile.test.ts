@@ -112,10 +112,14 @@ test('Browser-Klickstrecke (Handy): Schnellsuche und Formulare im Dashboard funk
   const statuses: string[] = []; page.on('response', (r) => { if (r.request().method() === 'POST') statuses.push(`${r.status()} ${new URL(r.url()).pathname}`); });
   await page.goto(app.base + '/search');
   await page.getByLabel(/Suchsatz/).fill('Saarlouis + 25 km + Kosmetikstudios ohne Website + 5 Leads');
-  await Promise.all([page.waitForURL(/\/search\/run\//), page.locator('form[action="/search/quick"] button').tap()]);
+  await Promise.all([page.waitForURL(/\/search\/run\//), page.locator('form[action="/search/quick"] button.primary').tap()]);
   assert.match(await page.locator('.flash').first().innerText(), /Verstanden:.*Saarlouis.*25 km.*Kosmetik/s);
   await app.ctx.runner.idle(); await page.reload();
   assert.match(await page.locator('main').innerText(), /Lauf|Ergebnis|Leads/);
+  // Beispielsuche per Antippen
+  await page.goto(app.base + '/search');
+  await Promise.all([page.waitForURL(/\/search\/run\//), page.locator('form[action="/search/quick"] button:not(.primary)').first().tap()]);
+  assert.match(await page.locator('.flash').first().innerText(), /Verstanden:.*Völklingen/s);
   // Einstellungen speichern (Formular ohne Referer/Origin-Besonderheiten)
   await page.goto(app.base + '/settings');
   await page.locator('input[name="dailyCallTarget"]').fill('12');

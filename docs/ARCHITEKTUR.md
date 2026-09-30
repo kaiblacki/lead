@@ -1,6 +1,7 @@
 # AI Agency OS – Architektur und Entwicklungsplan (Entwurf zur Freigabe)
 
-Status: Nur Analyse, noch kein Code. Wartet auf Bestätigung für Phase 1.
+> **Stand der Umsetzung:** Dies ist der ursprüngliche Entwurf (Analysephase). Der tatsächlich gebaute Stand, die Abweichungen und die Testabdeckung stehen in [`STATUS.md`](STATUS.md); Bedienung und Einrichtung in [`../README.md`](../README.md) und [`../SETUP.md`](../SETUP.md).
+> Wichtigste Abweichungen vom Entwurf: schlanker Node-Server ohne Framework statt Next.js (kein Build, keine Abhängigkeiten außer `pg` und `playwright-core`); Suchläufe laufen im Serverprozess statt in einer separaten Job-Queue; **jeder externe Dienst hinter einem Provider-Interface mit Mock-Adapter** (`src/providers/`), damit das ganze System ohne Konten und Schlüssel läuft und getestet ist.
 
 ## 1. Kernidee in einem Satz
 

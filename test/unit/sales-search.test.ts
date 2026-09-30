@@ -215,3 +215,17 @@ test('Schnellsuche: Filter und Branche im selben Teil („Nagelstudios ohne Webs
   const d = parseQuickSearch('Völklingen + Blablubb 123 ohne Website', tax);
   assert.deepEqual(d.criteria.website, ['none']); assert.deepEqual(d.unmatched, ['Blablubb 123']); assert.equal(d.criteria.location, 'Völklingen');
 });
+
+test('Schnellsuche: alle Beispielsuchen werden vollständig verstanden und ergeben gültige Kriterien', async () => {
+  const { EXAMPLE_SEARCHES } = await import('../../src/search/examples.ts');
+  for (const q of EXAMPLE_SEARCHES) {
+    const p = parseQuickSearch(q, tax);
+    assert.deepEqual(p.unmatched, [], q);
+    const c = normalizeCriteria(p.criteria, tax);
+    assert.ok(c.location && c.radiusKm > 0 && c.subIndustries.length, q);
+  }
+  // typische freie Formulierungen
+  for (const [q, web] of [['Neunkirchen + 20 km + Restaurants + Website verbesserungswürdig', ['needs_improvement']], ['Homburg + Friseure + veraltete Website', ['needs_improvement']], ['Merzig + 10 km + Zahnärzte + keine Webseite', ['none']]] as const) {
+    const p = parseQuickSearch(q, tax); assert.deepEqual(p.unmatched, [], q); assert.deepEqual(p.criteria.website, web, q);
+  }
+});

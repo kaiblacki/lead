@@ -189,7 +189,7 @@ export function parseQuickSearch(text: string, tax: Taxonomy): QuickSearch {
   const rules: Rule[] = [
     { re: /(\d{1,3})\s*km/i, apply: (m) => { c.radiusKm = Number(m[1]); return `Radius ${m[1]} km`; } },
     { re: /website\s+(?:fehlt|fehlend)|keine\s+website|ohne\s+website|keine\s+webseite|ohne\s+webseite/i, apply: () => { c.website.push('none'); return 'Website fehlt'; } },
-    { re: /verbesserungsw[\wäöüß]*|veraltet[\wäöüß]*|modernisier[\wäöüß]*|schlechte?\s+website|website\s+schlecht/i, apply: () => { c.website.push('needs_improvement'); return 'Website verbesserungswürdig'; } },
+    { re: /(?:website\s+|webseite\s+)?(?:verbesserungsw[\wäöüß]*|veraltet[\wäöüß]*|modernisier[\wäöüß]*)|schlechte?\s+(?:website|webseite)|(?:website|webseite)\s+schlecht/i, apply: () => { c.website.push('needs_improvement'); return 'Website verbesserungswürdig'; } },
     { re: /mobile?\s+probleme|mobil\s+schlecht|nicht\s+mobil/i, apply: () => { c.mobileProblems = true; return 'mobile Probleme'; } },
     { re: /keine\s+termin(?:buchung)?|ohne\s+termin(?:buchung)?/i, apply: () => { c.noBooking = true; return 'keine Terminbuchung'; } },
     { re: /social\s*media\s+aktiv|instagram\s+aktiv|aktiv\s+auf\s+social/i, apply: () => { c.socialActive = 'yes'; return 'Social Media aktiv'; } },
@@ -208,7 +208,7 @@ export function parseQuickSearch(text: string, tax: Taxonomy): QuickSearch {
       const label = r.apply(m); if (label) understood.push(label);
       rest = rest.replace(r.re, ' '); hit = true;
     }
-    rest = rest.replace(/\b(?:oder|und|mit|aber|bitte|suche|finde)\b/gi, ' ').replace(/\s+/g, ' ').trim();
+    rest = rest.replace(hit ? /\b(?:oder|und|mit|aber|bitte|suche|finde|eine|einer|website|webseite)\b/gi : /\b(?:bitte|suche|finde)\b/gi, ' ').replace(/\s+/g, ' ').trim();
     if (!rest) continue;
     const assign = (part: string): boolean => {
       const sub = tax.match(part);

@@ -2,6 +2,7 @@ import type { Route } from '../types.ts';
 import { UserError } from '../types.ts';
 import { html, raw, categoryBadge, fmt, prioBadge, readinessBadge, mockBadge, postBtn, postForm } from '../ui.ts';
 import { render, redirect, okFlash, uuid } from './_page.ts';
+import { EXAMPLE_SEARCHES } from '../../search/examples.ts';
 import { CriteriaError, EMPLOYEE_BUCKETS, READINESS, SORTS, WEBSITE_FILTERS, WEBSITE_LABEL, criteriaFromForm, normalizeCriteria, parseQuickSearch } from '../../search/criteria.ts';
 import { leadsFromCsv } from '../../connectors/csv.ts';
 
@@ -24,6 +25,7 @@ export const routes: Route[] = [
       <div class="card"><h2>Schnellsuche</h2>
         ${postForm(r.app.csrf, '/search/quick', html`<label>Suchsatz, Teile mit „+“ trennen<input name="q" value="${v('qs')}" placeholder="Völklingen + 30 km + Nagelstudios + Website fehlt oder verbesserungswürdig" maxlength="300" required></label>
         <p class="row"><button class="primary">Suche starten</button></p>`, { style: 'display:block' })}
+        <p class="row">${EXAMPLE_SEARCHES.map((q) => postForm(r.app.csrf, '/search/quick', html`<input type="hidden" name="q" value="${q}"><button title="${q}">${q.split(' + ').slice(0, 3).join(' · ')}</button>`, { style: 'display:inline' }))}</p>
         <small>Erkannt werden: Ort, „30 km“, Branche, „Website fehlt / verbesserungswürdig“, „mobile Probleme“, „keine Terminbuchung“, „Instagram aktiv“, „Score ab 60“, „20 Leads“, „1-4 Mitarbeiter“.</small></div>
       <div class="card"><h2>Detailsuche</h2>
         <form method="post" action="/search"><input type="hidden" name="csrf" value="${r.app.csrf}"><input type="hidden" name="_form" value="1">

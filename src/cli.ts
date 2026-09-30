@@ -5,6 +5,7 @@ import { buildContext, type Context } from './context.ts';
 import { loadConfig } from './core/config.ts';
 import { leadsFromCsv } from './connectors/csv.ts';
 import { CriteriaError, normalizeCriteria, parseQuickSearch } from './search/criteria.ts';
+import { EXAMPLE_SEARCHES } from './search/examples.ts';
 import { buildFacts } from './core/profile.ts';
 import { contentFromFacts } from './site/content.ts';
 import { pickTemplate, templateByKey } from './site/templates.ts';
@@ -54,7 +55,7 @@ async function main() {
     }
     case 'seed': await withCtx(async (c) => {
       if (c.registry.providers.places.isMock === false) throw new Error('seed ist nur im Mock-Modus erlaubt (APP_MODE=mock).');
-      for (const q of ['Völklingen + 30 km + Nagelstudios + Website fehlt oder verbesserungswürdig', 'Saarbrücken + 15 km + Friseure + mobile Probleme', 'Saarlouis + 25 km + Kosmetikstudios + keine Terminbuchung', 'Neunkirchen + 20 km + Restaurants + Website verbesserungswürdig']) await runQuick(c, q);
+      for (const q of EXAMPLE_SEARCHES) await runQuick(c, q);
     }); break;
     case 'maintenance': await withCtx(async (c) => console.log(await c.maintenance.runDue())); break;
     case 'retention': await withCtx(async (c) => { const out = args.includes('--execute') ? await c.retention.execute() : await c.retention.plan(); for (const r of out) console.log(`${String(r.count).padStart(5)}  ${r.label} (${r.days} Tage)`); if (!args.includes('--execute')) console.log('Probelauf. Mit --execute wirklich löschen.'); }); break;
