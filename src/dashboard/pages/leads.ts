@@ -46,8 +46,8 @@ export const routes: Route[] = [
     const [settings, demos, offer, order] = await Promise.all([ctx.repo.getSettings(), ctx.sales.listDemos(leadId), ctx.sales.latestOffer(leadId), ctx.orders.orderForLead(leadId)]);
     const rec = pickTemplate({ subIndustry: d.lead.sub_industry, industryText: d.lead.industry, name: d.lead.company_name }, ctx.cfg.taxonomy).key;
     return render(r, { title: d.lead.company_name, nav: 'leads', body: html`
-      ${P.header(d, r.app.csrf)}${P.statusCard(d, r.app.csrf, leadId)}${P.why(d)}${P.sales(d, r.app.csrf, leadId)}
-      ${P.contact(d, r.app.csrf, leadId, settings, r.app.mock)}${P.docs(d, r.app.csrf, leadId, { demos, offer, order, templates: allTemplates().map((t) => ({ key: t.key, label: t.label })), recommended: rec, baseUrl: r.app.baseUrl })}
+      ${P.header(d, r.app.csrf)}${P.why(d)}${P.sales(d, r.app.csrf, leadId)}
+      ${P.contact(d, r.app.csrf, leadId, settings, r.app.mock)}${P.statusCard(d, r.app.csrf, leadId)}${P.docs(d, r.app.csrf, leadId, { demos, offer, order, templates: allTemplates().map((t) => ({ key: t.key, label: t.label })), recommended: rec, baseUrl: r.app.baseUrl })}
       ${P.dimensions(d)}${P.profile(d)}${P.audit(d)}
       <div class="card row"><b class="grow">Social Media</b><a class="btn" href="/social/${leadId}">Content-Kalender öffnen</a></div>${P.history(d)}` });
   } },

@@ -10,13 +10,16 @@ const QUALITY_TEXT: Record<string, string> = { high: 'hoch', medium: 'mittel', l
 const WEB_STATE: Record<string, string> = { none: 'Website fehlt', exists: 'Website vorhanden', needs_improvement: 'Website verbesserungswürdig', fine: 'Website in Ordnung', unknown: 'Website nicht prüfbar' };
 const CHANNEL_TEXT: Record<string, string> = { PHONE: 'Telefon', EMAIL: 'E-Mail', WHATSAPP: 'WhatsApp', MANUAL: 'Manuell', DO_NOT_CONTACT: 'Nicht kontaktieren' };
 
+/** Einklappbarer Abschnitt – hält die Detailseite auf dem Smartphone übersichtlich. */
+const fold = (title: string, body: Safe, open = false, id?: string) => html`<details class="card" ${id ? raw(`id="${id}"`) : ''} ${open ? raw('open') : ''}><summary><h2 style="margin:0">${title}</h2></summary>${body}</details>`;
+
 export const webStateText = (s: string | null | undefined) => WEB_STATE[s ?? ''] ?? '–';
 
 export function header(d: any, csrf: string): Safe {
   const l = d.lead, o = d.opportunity;
   return html`<div class="card">
     <div class="row"><h2 class="grow" style="margin:0">${l.company_name}</h2>${l.is_mock ? mockBadge : ''}</div>
-    <p>${l.address ?? ''} ${l.postal_code ?? ''} ${l.city ?? ''} ${l.distance_km ? html`<small>· ${Number(l.distance_km).toFixed(1).replace('.', ',')} km</small>` : ''}</p>
+    <p>${l.address && l.postal_code && String(l.address).includes(l.postal_code) ? l.address : [l.address, [l.postal_code, l.city].filter(Boolean).join(' ')].filter(Boolean).join(', ')} ${l.distance_km ? html`<small>· ${Number(l.distance_km).toFixed(1).replace('.', ',')} km</small>` : ''}</p>
     <div class="row">${categoryBadge(o?.category)}${statusBadge(l.status)}${readinessBadge(l.contact_readiness)}<span class="badge">${webStateText(l.website_state)}</span>${l.paused ? html`<span class="badge b-warn">pausiert</span>` : ''}</div>
     <div class="grid" style="margin-top:10px"><div class="kpi"><b>${o?.score ?? '–'}</b><span>Sales Opportunity</span></div><div class="kpi"><b>${o?.digital_need ?? '–'}</b><span>Digital Need</span></div>
       <div class="kpi"><b>${d.sales?.brief?.priority ?? '–'}</b><span>Priorität</span></div><div class="kpi"><b>${l.call_count}</b><span>Anrufe</span></div></div>
@@ -45,7 +48,7 @@ export function why(d: any): Safe {
 export function dimensions(d: any): Safe {
   const dims = d.opportunity?.dimensions;
   if (!dims) return html``;
-  return html`<div class="card"><h2>Bewertungsdimensionen</h2><ul class="items">${DIM_ORDER.map((k) => { const x = dims[k]; if (!x) return html``; return html`<li><details><summary><span class="grow">${DIM_LABELS[k]}</span> <b>${x.value ?? '–'}</b> <small class="mute" style="margin-left:8px">${STATE_TEXT[x.state]}</small></summary>${scoreBar(x.value)}<ul>${(x.reasons ?? []).map((r: any) => html`<li>${r.text} ${r.points ? html`<small>(${r.points > 0 ? '+' : ''}${r.points})</small>` : ''}</li>`)}</ul></details></li>`; })}</ul></div>`;
+  return fold('Bewertungsdimensionen (11)', html`<ul class="items">${DIM_ORDER.map((k) => { const x = dims[k]; if (!x) return html``; return html`<li><details><summary><span class="grow">${DIM_LABELS[k]}</span> <b>${x.value ?? '–'}</b> <small class="mute" style="margin-left:8px">${STATE_TEXT[x.state]}</small></summary>${scoreBar(x.value)}<ul>${(x.reasons ?? []).map((r: any) => html`<li>${r.text} ${r.points ? html`<small>(${r.points > 0 ? '+' : ''}${r.points})</small>` : ''}</li>`)}</ul></details></li>`; })}</ul>`);
 }
 
 export function sales(d: any, csrf: string, id: string): Safe {
@@ -106,32 +109,32 @@ export function profile(d: any): Safe {
     return String(v);
   };
   const missing = (['phone', 'email', 'website', 'employeeBucket', 'locationsCount', 'rating', 'openingHours', 'services'] as FactKey[]).filter((k) => !byKey.has(k) && !(k === 'website' && byKey.has('social')));
-  return html`<div class="card"><h2>Unternehmensprofil</h2>
+  return fold('Unternehmensprofil mit Quellen', html`
     ${conflicts.length ? html`<div class="warnbox"><b>Quellen widersprechen sich</b><ul>${conflicts.map((c) => html`<li>${FACT_LABELS[c.key]}: ${c.values.map((x) => `${Array.isArray(x.value) ? (x.value as string[]).join(' · ') : x.value} (${x.source})`).join(' ≠ ')}</li>`)}</ul></div>` : ''}
     <div class="scroll"><table><tr><th>Angabe</th><th>Wert</th><th>Quelle</th><th>Erfasst</th><th>Qualität</th></tr>
       ${FACT_ORDER.filter((k) => byKey.has(k)).flatMap((k) => byKey.get(k)!.map((f, i) => html`<tr><td>${i === 0 ? FACT_LABELS[k] : ''}</td><td>${val(f)}${f.note ? html`<br><small class="mute">${f.note}</small>` : ''}</td><td>${f.source}</td><td>${fmtDate(f.capturedAt)}</td><td>${QUALITY_TEXT[f.quality]}</td></tr>`))}
       ${missing.map((k) => html`<tr><td>${FACT_LABELS[k]}</td><td colspan="4" class="mute">nicht verfügbar</td></tr>`)}</table></div>
-    <p class="mute">Externe Angaben stammen aus den genannten Quellen und wurden nicht geprüft. Es werden keine Werte geschätzt oder erfunden.</p></div>`;
+    <p class="mute">Externe Angaben stammen aus den genannten Quellen und wurden nicht geprüft. Es werden keine Werte geschätzt oder erfunden.</p>`);
 }
 
 export function audit(d: any): Safe {
   const a = d.audit, checks = (d.checks ?? []) as any[];
-  if (!a) return html`<div class="card"><h2>Website-Audit</h2><p class="mute">Noch nicht geprüft.</p></div>`;
+  if (!a) return fold('Website-Audit', html`<p class="mute">Noch nicht geprüft.</p>`);
   const q = (a.quality ?? {}) as Record<string, number | null>;
   const cats = ['technical', 'mobile', 'design', 'content', 'conversion', 'seo', 'trust', 'social'] as CheckCategory[];
-  return html`<div class="card"><h2>Website-Audit</h2>
+  return fold('Website-Audit', html`
     <p>${a.status === 'NO_WEBSITE' ? 'Keine Website hinterlegt – es gibt nichts zu prüfen.' : a.status === 'UNREACHABLE' ? 'Die Website war bei der Prüfung nicht erreichbar.' : html`Geprüft: ${a.pages_analyzed} Seite(n) · ${a.final_url ?? ''} · Abdeckung ${Math.round(Number(a.coverage ?? 0) * 100)} % · Gesamtqualität ${a.overall_quality ?? '–'}/100`}
       <br><small class="mute">Stand ${fmt(a.captured_at)} · Quelle ${a.source ?? '–'}${a.render_source ? ` · Browser: ${a.render_source.name}${a.render_source.estimated ? ' (geschätzt)' : ''}` : ''}</small></p>
     ${(a.notes ?? []).map((n: string) => html`<div class="note">${n}</div>`)}
     ${cats.map((c) => { const items = checks.filter((x) => x.category === c); if (!items.length) return html``; return html`<details ${items.some((x) => x.status === 'fail') ? raw('open') : ''}><summary><span class="grow">${CAT_LABEL[c]}</span><small class="mute">${q[c] === null || q[c] === undefined ? 'nicht prüfbar' : `${q[c]}/100`}</small></summary>
-      <ul class="items">${items.map((x) => html`<li>${STATUS_ICON[x.status as keyof typeof STATUS_ICON]} <b>${x.summary}</b><br><small class="mute">Beleg: ${x.evidence}</small></li>`)}</ul></details>`; })}</div>`;
+      <ul class="items">${items.map((x) => html`<li>${STATUS_ICON[x.status as keyof typeof STATUS_ICON]} <b>${x.summary}</b><br><small class="mute">Beleg: ${x.evidence}</small></li>`)}</ul></details>`; })}`);
 }
 
 export function docs(d: any, csrf: string, id: string, o: { demos: any[]; offer: any; order: any; templates: { key: string; label: string }[]; recommended: string; baseUrl: string }): Safe {
   const { demos, offer, order } = o;
   const off = offer?.content;
   const live = demos.filter((x) => !x.revoked && new Date(x.expires_at) > new Date());
-  return html`<div class="card" id="dokumente"><h2>Demo, Angebot, Auftrag</h2>
+  return fold('Demo, Angebot, Auftrag', html`
     <h3>Demo-Website</h3>
     ${postForm(csrf, `/leads/${id}/demo`, html`<div class="row"><select name="template"><option value="auto">Automatisch (${o.templates.find((t) => t.key === o.recommended)?.label ?? o.recommended})</option>${o.templates.map((t) => html`<option value="${t.key}">${t.label}</option>`)}</select><button class="primary">DEMO ERSTELLEN</button></div>`, { style: 'display:block' })}
     ${demos.length ? html`<ul class="items">${demos.map((x) => { const dead = x.revoked || new Date(x.expires_at) < new Date(); return html`<li>${dead ? html`<s>${x.template}</s> <small>(${x.revoked ? 'widerrufen' : 'abgelaufen'})</small>` : html`<a href="/d/${x.token}" target="_blank" rel="noopener noreferrer">${x.template} ansehen</a> <small>bis ${fmtDate(x.expires_at)} · ${x.view_count}× gesehen</small><br><small class="mute">Link: <code>${o.baseUrl}/d/${x.token}</code></small> ${postBtn(csrf, `/demos/${x.id}/revoke`, 'Widerrufen')}`}</li>`; })}</ul>` : ''}
@@ -148,7 +151,7 @@ export function docs(d: any, csrf: string, id: string, o: { demos: any[]; offer:
       <div class="row">${offer.status === 'DRAFT' ? postBtn(csrf, `/offers/${offer.id}/approve`, 'Freigeben', { cls: 'ok' }) : ''}${offer.status === 'APPROVED' ? postBtn(csrf, `/offers/${offer.id}/sent`, 'Als von mir versendet markieren') : ''}
         ${offer.status === 'SENT' ? postBtn(csrf, `/leads/${id}/accept`, 'Angebot angenommen → Bestellung', { cls: 'primary' }) : ''}</div>
       <small class="mute">Es wird nichts automatisch versendet. Versand und Vertragstexte liegen bei dir.</small></div>` : ''}
-    ${order ? html`<h3>Auftrag</h3><p><a class="btn primary" href="/orders/${order.id}">Auftrag öffnen</a> <span class="badge b-info">${order.status}</span></p>` : ''}</div>`;
+    ${order ? html`<h3>Auftrag</h3><p><a class="btn primary" href="/orders/${order.id}">Auftrag öffnen</a> <span class="badge b-info">${order.status}</span></p>` : ''}`, true, 'dokumente');
 }
 
 export function statusCard(d: any, csrf: string, id: string): Safe {
@@ -156,12 +159,12 @@ export function statusCard(d: any, csrf: string, id: string): Safe {
   const done = new Set<string>(((d.events as any[]) ?? []).filter((e) => e.type === 'status_change').map((e) => e.payload?.to));
   const order: Status[] = ['QUALIFIED', 'DEMO_CREATED', 'CONTACTED', 'INTERESTED', 'OFFER_SENT', 'OFFER_ACCEPTED', 'DEPOSIT_PENDING', 'DEPOSIT_PAID', 'PRODUCTION', 'QA', 'CUSTOMER_REVIEW', 'APPROVED', 'FINAL_PAYMENT', 'DEPLOYED', 'MAINTENANCE'];
   const steps = nextStatuses(from);
-  return html`<div class="card"><h2>Pipeline-Status</h2><div class="stepper">${order.map((s) => html`<span class="step ${s === from ? 'now' : done.has(s) ? 'done' : ''}">${s.replace(/_/g, ' ')}</span>`)}</div>
-    ${postForm(csrf, `/leads/${id}/status`, html`<div class="row"><select name="to">${steps.map((s) => html`<option>${s}</option>`)}${steps.length ? '' : html`<option disabled>keine weiteren Schritte</option>`}</select><input name="reason" placeholder="Grund / Notiz" required class="grow" maxlength="300"><button ${steps.length ? '' : raw('disabled')}>Status setzen</button></div>`, { style: 'display:block' })}<small class="mute">Nur erlaubte Übergänge. ${STATUSES.length} Stufen.</small></div>`;
+  return fold('Pipeline-Status', html`<div class="stepper">${order.map((s) => html`<span class="step ${s === from ? 'now' : done.has(s) ? 'done' : ''}">${s.replace(/_/g, ' ')}</span>`)}</div>
+    ${postForm(csrf, `/leads/${id}/status`, html`<div class="row"><select name="to">${steps.map((s) => html`<option>${s}</option>`)}${steps.length ? '' : html`<option disabled>keine weiteren Schritte</option>`}</select><input name="reason" placeholder="Grund / Notiz" required class="grow" maxlength="300"><button ${steps.length ? '' : raw('disabled')}>Status setzen</button></div>`, { style: 'display:block' })}<small class="mute">Nur erlaubte Übergänge. ${STATUSES.length} Stufen.</small>`, false);
 }
 
 export function history(d: any): Safe {
   const ev = d.events as any[];
-  return html`<div class="card"><h2>Verlauf (Audit-Log)</h2><div class="scroll"><table>${ev.map((e) => html`<tr><td><small>${fmt(e.created_at)}</small></td><td>${e.type}</td><td><small>${e.payload?.reason ?? e.payload?.actor ?? ''}${e.payload?.from ? ` (${e.payload.from} → ${e.payload.to})` : ''}</small></td></tr>`)}</table></div></div>`;
+  return fold('Verlauf (Audit-Log)', html`<div class="scroll"><table>${ev.map((e) => html`<tr><td><small>${fmt(e.created_at)}</small></td><td>${e.type}</td><td><small>${e.payload?.reason ?? e.payload?.actor ?? ''}${e.payload?.from ? ` (${e.payload.from} → ${e.payload.to})` : ''}</small></td></tr>`)}</table></div>`);
 }
 export { CAT_LABEL };

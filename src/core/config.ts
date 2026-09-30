@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Taxonomy, type IndustryConfig } from './industries.ts';
 
@@ -15,7 +15,8 @@ export function loadConfig(dir = process.env.CONFIG_DIR || 'config'): AppConfig 
   const abs = resolve(ROOT, dir);
   const hit = cache.get(abs);
   if (hit) return hit;
-  const read = (n: string) => JSON.parse(readFileSync(resolve(abs, n), 'utf8'));
+  // Fehlende Dateien kommen aus config/ (Überlagerung, z. B. config.mock mit nur agency.json und pricing.json)
+  const read = (n: string) => { const f = resolve(abs, n); return JSON.parse(readFileSync(existsSync(f) ? f : resolve(ROOT, 'config', n), 'utf8')); };
   const industries = read('industries.json') as IndustryConfig;
   const cfg: AppConfig = { dir: abs, scoring: read('scoring.json'), pricing: read('pricing.json'), agency: read('agency.json'), industries, taxonomy: new Taxonomy(industries), sales: read('sales.json'), retention: read('retention.json') };
   cache.set(abs, cfg);

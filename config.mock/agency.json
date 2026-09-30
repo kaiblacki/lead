@@ -1,0 +1,6 @@
+{
+  "name": "Demo Agentur (Mock)",
+  "contactEmail": "demo@agentur.example",
+  "demoValidDays": 30,
+  "callerName": "Alex Demo"
+}

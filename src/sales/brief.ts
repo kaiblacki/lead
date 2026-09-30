@@ -4,6 +4,7 @@ import type { ContactAssessment, Readiness } from '../contact/strategy.ts';
 import type { Fact } from '../core/profile.ts';
 import { factValue } from '../core/profile.ts';
 import type { AIProvider } from '../providers/types.ts';
+import { findPlaceholders } from '../core/text.ts';
 
 export type BriefReason = { code: string; text: string; evidence: string };
 export type SalesBrief = {
@@ -59,10 +60,10 @@ export function buildBrief(i: BriefInput): SalesBrief {
   const objections = (sales.objections as any[]).filter((o) => o.when === 'always' || (o.when === 'has_website' && !noSite) || (o.when === 'no_website' && noSite) || (o.when === 'social_present' && hasSocial))
     .slice(0, 4).map((o) => ({ objection: o.objection, response: fill(o.response) }));
 
-  const sender = i.callerName || sales.defaultSender;
+  const sender = i.callerName && !findPlaceholders(i.callerName).length ? i.callerName : sales.defaultSender;
   const reasonText = reasons.filter((r) => r.code !== 'LOW_NEED').slice(0, 2).map((r) => r.text.replace(/\.$/, '')).join('; ');
   const opener = noSite
-    ? `Guten Tag, hier ist ${sender}. Ich habe gesehen, dass ${i.company} online keine eigene Website hinterlegt hat${reasons[1] ? `, und ${reasons[1].text.replace(/\.$/, '').replace(/^./, (c) => c.toLowerCase())}` : ''}. Ich habe einen unverbindlichen Entwurf vorbereitet – darf ich Ihnen in zwei Minuten zeigen, wie das aussehen könnte?`
+    ? `Guten Tag, hier ist ${sender}. Ich habe gesehen, dass ${i.company} online keine eigene Website hinterlegt hat. Ich habe einen unverbindlichen Entwurf vorbereitet – darf ich Ihnen in zwei Minuten zeigen, wie das aussehen könnte?`
     : `Guten Tag, hier ist ${sender}. Beim Blick auf die Website von ${i.company} ist mir aufgefallen: ${reasonText || 'kleinere Verbesserungsmöglichkeiten'}. Ich habe einen unverbindlichen Entwurf vorbereitet – darf ich Ihnen in zwei Minuten zeigen, wie das einfacher gehen könnte?`;
 
   return {

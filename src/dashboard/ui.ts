@@ -9,10 +9,10 @@ export const pct = (n: number | null | undefined) => (n === null || n === undefi
 export const CSS = `
 :root{--bg:#f4f5f7;--card:#fff;--ink:#14181f;--mute:#5b6472;--line:#e3e6eb;--brand:#0b5cad;--ok:#1e7f3a;--warn:#b25e09;--bad:#c92a2a;--hot:#d6336c}
 *{box-sizing:border-box}html{-webkit-text-size-adjust:100%}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
-main{max-width:1000px;margin:0 auto;padding:12px 12px 90px}h1{font-size:24px;margin:8px 0 12px}h2{font-size:19px;margin:0 0 8px}h3{font-size:16px;margin:12px 0 4px}p{margin:6px 0}
+main{max-width:1000px;margin:0 auto;padding:12px 12px 90px;overflow-wrap:anywhere}h1{font-size:24px;margin:8px 0 12px}h2{font-size:19px;margin:0 0 8px}h3{font-size:16px;margin:12px 0 4px}p{margin:6px 0}
 a{color:var(--brand)}small,.mute{color:var(--mute)}code{background:#eef0f3;padding:1px 5px;border-radius:5px;overflow-wrap:anywhere}
 header.top{position:sticky;top:0;z-index:20;background:#101826;color:#fff}.top .bar{max-width:1000px;margin:0 auto;display:flex;align-items:center;gap:6px;padding:0 8px}
-.top nav{display:flex;gap:2px;overflow-x:auto;flex:1;scrollbar-width:none}.top nav::-webkit-scrollbar{display:none}
+.top nav{display:flex;gap:2px;overflow-x:auto;flex:1;min-width:0;scrollbar-width:none}.top nav::-webkit-scrollbar{display:none}
 .top nav a{color:#dbe3f0;text-decoration:none;padding:0 12px;min-height:48px;display:inline-flex;align-items:center;white-space:nowrap;border-bottom:3px solid transparent}
 .top nav a.on{color:#fff;border-bottom-color:#5aa9ff;font-weight:600}.brand{font-weight:700;padding:0 6px;white-space:nowrap}
 .top form{margin:0}.top button{min-height:40px;padding:0 12px}
@@ -26,7 +26,7 @@ button,.btn{cursor:pointer;display:inline-flex;align-items:center;justify-conten
 button.primary,.btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}button.ok{background:var(--ok);border-color:var(--ok);color:#fff}button.danger,.btn.danger{background:var(--bad);border-color:var(--bad);color:#fff}button.warn{background:#fff3cd;border-color:#e0b84c}
 button:disabled{opacity:.5;cursor:not-allowed}label{display:block;font-size:14px;color:var(--mute)}label input,label select,label textarea{display:block;width:100%;margin-top:2px;color:var(--ink)}label.inline{display:inline-flex;gap:8px;align-items:center;color:var(--ink);font-size:16px;min-height:44px}label.inline input{display:inline-block;width:22px;margin:0}
 fieldset{border:1px solid var(--line);border-radius:10px;margin:8px 0;padding:8px 12px}legend{font-size:14px;color:var(--mute);padding:0 6px}
-.badge{display:inline-block;font-size:12px;font-weight:700;padding:3px 9px;border-radius:99px;background:#e6e9ee;color:#2b323d;white-space:nowrap}
+.badge{display:inline-block;font-size:12px;font-weight:700;padding:3px 9px;border-radius:99px;background:#e6e9ee;color:#2b323d;max-width:100%;overflow-wrap:anywhere}
 .b-HOT{background:var(--hot);color:#fff}.b-HIGH-POTENTIAL{background:#e8590c;color:#fff}.b-MEDIUM{background:#ffd43b}.b-LOW{background:#dee2e6}.b-IGNORE,.b-UNRATED{background:#ced4da}
 .b-ok{background:#d3f9d8;color:#0b5d1e}.b-warn{background:#fff3bf;color:#7a4d00}.b-bad{background:#ffe3e3;color:#a61e1e}.b-mock{background:#fff3cd;color:#664d03}.b-info{background:#dbe4ff;color:#2b3a8c}
 .prio{font-weight:800;font-size:18px;width:32px;height:32px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;background:#e6e9ee}.prio.A{background:var(--hot);color:#fff}.prio.B{background:#e8590c;color:#fff}.prio.C{background:#ffd43b}
