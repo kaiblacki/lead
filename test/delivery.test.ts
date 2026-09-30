@@ -136,3 +136,11 @@ test('Deployer: Ordner (Pfad-Schutz, Slug) und Vercel-Anfrage (gemockt)', async 
     assert.equal(body.target, 'production'); assert.equal(body.files[0].file, 'index.html');
   } finally { globalThis.fetch = orig; }
 });
+
+test('Abo-Ereignisse: Kündigung und fehlgeschlagene Zahlung werden erkannt', () => {
+  const p = new StripeProvider('sk_test_abc', SECRET);
+  const parse = (type: string, o: object) => { const b = JSON.stringify({ id: 'evt_s', type, data: { object: o } }); return p.parseWebhook(b, sign(b)); };
+  assert.deepEqual(parse('customer.subscription.deleted', { metadata: { order_id: 'o1' } }), { id: 'evt_s', kind: 'subscription_problem', reason: 'canceled', orderId: 'o1' });
+  assert.deepEqual(parse('invoice.payment_failed', { subscription_details: { metadata: { order_id: 'o2' } } }), { id: 'evt_s', kind: 'subscription_problem', reason: 'payment_failed', orderId: 'o2' });
+  assert.equal(parse('invoice.payment_failed', {}).kind, 'ignored');
+});

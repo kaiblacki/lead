@@ -208,3 +208,12 @@ test('Angebot ohne Verkaufsgrundlage wird abgelehnt', { skip }, async () => {
   const id = (await repo.listLeads({ q: 'Down Salon' }))[0].id;
   assert.equal((await post(`/lead/${id}/offer`, {})).status, 400);
 });
+
+test('Health-Check ohne Login; Anmeldung sperrt nach 10 Fehlversuchen', { skip }, async () => {
+  assert.equal(await (await fetch(base + '/healthz')).text(), 'ok');
+  const bad = { authorization: 'Basic ' + Buffer.from('u:falsch-falsch-1').toString('base64') };
+  let blockedAt = 0;
+  for (let i = 1; i <= 12 && !blockedAt; i++) { const st = (await fetch(base + '/', { headers: bad })).status; if (st === 429) blockedAt = i; else assert.equal(st, 401); }
+  assert.ok(blockedAt > 0 && blockedAt <= 11, `gesperrt bei Versuch ${blockedAt}`);
+  assert.equal((await fetch(base + '/', { headers: auth })).status, 429);   // auch richtiges Passwort ist gesperrt, solange die Sperre gilt
+});

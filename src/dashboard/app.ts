@@ -8,6 +8,7 @@ import { pickTemplate, templateByKey, TEMPLATES, GENERIC } from '../templates/in
 import { renderDemo } from '../demo/render.ts';
 import { buildOffer, type Offer } from '../offers/generate.ts';
 import { createOrdersCtx, renderOrderSection, handleOrderPost, handlePublic, servePreview, type OrdersCtx } from './orders-ui.ts';
+import { RateLimiter } from './ratelimit.ts';
 import { PROFILES, GENERAL, profileByKey } from '../social/profiles.ts';
 import { generatePlan, validateItem, toCsv, type Business, type Item } from '../social/generate.ts';
 import type { PaymentProvider } from '../payments/provider.ts';
@@ -21,7 +22,7 @@ const esc = (s: unknown) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '
 const fmt = (d: unknown) => (d ? new Date(d as string).toLocaleString('de-DE') : '–');
 const cfgJson = (n: string) => JSON.parse(readFileSync(new URL(`../../config/${n}`, import.meta.url), 'utf8'));
 
-export type AppOptions = { password: string; fetchSite?: typeof fetchSite; baseUrl?: string; payments?: () => PaymentProvider; deployer?: () => Deployer; autoDeploy?: boolean };
+export type AppOptions = { password: string; fetchSite?: typeof fetchSite; baseUrl?: string; payments?: () => PaymentProvider; deployer?: () => Deployer; autoDeploy?: boolean; trustProxy?: boolean };
 
 const STYLE = `body{font:15px system-ui;margin:0;background:#f5f6f8;color:#1b1f24}main{max-width:960px;margin:0 auto;padding:16px}
 nav{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:12px}nav a{color:#0b5cad}
@@ -36,6 +37,10 @@ table{border-collapse:collapse}td,th{padding:4px 10px;border-bottom:1px solid #e
 export function createApp(repo: Repo, opts: AppOptions): http.Server {
   const csrf = createHmac('sha256', opts.password).update('csrf-v1').digest('hex');
   const fetcher = opts.fetchSite ?? fetchSite;
+  const publicLimit = new RateLimiter(120, 60_000);        // öffentliche Seiten: 120 Anfragen/Minute/IP
+  const authFails = new RateLimiter(10, 15 * 60_000);      // Anmeldung: 10 Fehlversuche/15 Minuten/IP
+  const clientIp = (req: http.IncomingMessage) => (opts.trustProxy ? String(req.headers['x-forwarded-for'] ?? '').split(',').pop()?.trim() : '') || req.socket.remoteAddress || 'unknown';
+  const hsts: Record<string, string> = (opts.baseUrl ?? '').startsWith('https://') ? { 'strict-transport-security': 'max-age=31536000' } : {};
   const octx: OrdersCtx = createOrdersCtx(repo, { baseUrl: opts.baseUrl ?? 'http://127.0.0.1:3000', payments: opts.payments, deployer: opts.deployer, fetcher, autoDeploy: opts.autoDeploy }, csrf);
 
   const authOk = (req: http.IncomingMessage) => {
@@ -267,6 +272,14 @@ ${killOn ? '<span class="kill"><b>KILL SWITCH AKTIV</b></span>' : ''}
   }
 
   return http.createServer(async (req, res) => {
+    const ip = clientIp(req);
+    if (req.url === '/healthz' && req.method === 'GET') {
+      try { await repo.pool.query('select 1'); res.writeHead(200, { 'content-type': 'text/plain' }); return void res.end('ok'); }
+      catch { res.writeHead(503, { 'content-type': 'text/plain' }); return void res.end('db'); }
+    }
+    for (const [k, v] of Object.entries(hsts)) res.setHeader(k, v);
+    const isPublicPath = /^\/(r|d)\/|^\/(danke|abgebrochen)$/.test(req.url ?? '');
+    if (isPublicPath && !publicLimit.hit(ip)) { res.writeHead(429, { 'retry-after': '60' }); return void res.end('Zu viele Anfragen'); }
     if (await handlePublic(octx, req, res).catch(() => { if (!res.headersSent) { res.writeHead(500); res.end('Fehler'); } return true; })) return;
     const pub = (req.url ?? '').match(/^\/d\/([0-9a-f]{64})(?:\?.*)?$/);
     if (pub && req.method === 'GET') {
@@ -278,7 +291,10 @@ ${killOn ? '<span class="kill"><b>KILL SWITCH AKTIV</b></span>' : ''}
         return void res.end(html);
       } catch { res.writeHead(500); return void res.end('Fehler'); }
     }
-    if (!authOk(req)) { res.writeHead(401, { 'www-authenticate': 'Basic realm="Agency OS"' }); return void res.end('Anmeldung erforderlich'); }
+    if (authFails.blocked(ip)) { res.writeHead(429, { 'retry-after': '900' }); return void res.end('Zu viele Fehlversuche. Bitte später erneut versuchen.'); }
+    if (!authOk(req)) {
+      if (req.headers.authorization) authFails.hit(ip);
+      res.writeHead(401, { 'www-authenticate': 'Basic realm="Agency OS"' }); return void res.end('Anmeldung erforderlich'); }
     try {
       const url = new URL(req.url ?? '/', 'http://localhost');
       let body = '';

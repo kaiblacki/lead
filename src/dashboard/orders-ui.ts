@@ -34,10 +34,11 @@ export async function renderOrderSection(ctx: OrdersCtx, leadId: string, offer: 
       ? `<p>Angebot wurde versendet. Wenn der Kunde zusagt, Bestellung anlegen und Anzahlungs-Link erzeugen.</p>${btn(ctx, `/lead/${leadId}/order`, 'Bestellung anlegen')}`
       : '<p><small>Erst nach versendetem Angebot möglich.</small></p>'}</div>`;
   }
-  const [pays, project, build, changes, deps, checks] = await Promise.all([
+  const [pays, project, build, changes, deps, checks, alerts] = await Promise.all([
     ctx.orders.payments(order.id), ctx.delivery.getProject(order.id), ctx.delivery.latestBuild(order.id), ctx.delivery.openChangeRequests(order.id),
     ctx.repo.pool.query('select * from deployments where order_id=$1 and owner_id=$2 order by created_at desc limit 3', [order.id, ctx.repo.ownerId]).then((r) => r.rows),
     ctx.repo.pool.query('select * from maintenance_checks where order_id=$1 and owner_id=$2 order by created_at desc limit 3', [order.id, ctx.repo.ownerId]).then((r) => r.rows),
+    ctx.repo.pool.query("select type, created_at from events where owner_id=$1 and lead_id=$2 and type in ('subscription_canceled','subscription_payment_failed') order by id desc limit 3", [ctx.repo.ownerId, leadId]).then((r) => r.rows),
   ]);
   const st = order.status as string;
   const payBtn = (kind: Kind, label: string, when: string) => (st === when ? btn(ctx, `/order/${order.id}/checkout/${kind}`, label) : '');
@@ -63,6 +64,7 @@ export async function renderOrderSection(ctx: OrdersCtx, leadId: string, offer: 
     ${st === 'FULLY_PAID' ? btn(ctx, `/order/${order.id}/deploy`, 'Veröffentlichen', 'ok') : ''}
     ${st === 'DEPLOYED' || st === 'MAINTENANCE_ACTIVE' ? btn(ctx, `/order/${order.id}/maintenance-check`, 'Wartungscheck') : ''}</div>
     ${st === 'CUSTOMER_REVIEW' && order.review_token ? `<p>Kunden-Link zur Freigabe: <code>${esc(ctx.baseUrl)}/r/${esc(order.review_token)}</code></p>` : ''}
+    ${alerts.map((a: any) => `<p class="err">${a.type === 'subscription_canceled' ? 'Wartungs-Abo wurde gekündigt' : 'Zahlung des Wartungs-Abos ist fehlgeschlagen'} (${fmt(a.created_at)}) – bitte mit dem Kunden klären.</p>`).join('')}
     ${changes.length ? `<div class="manual"><b>Änderungswünsche des Kunden</b><ul>${changes.map((x: any) => `<li>${esc(x.note)} <small>(${fmt(x.decided_at)})</small></li>`).join('')}</ul></div>` : ''}
     ${form}
     ${build ? `<p><b>Build v${build.version}</b> – QA ${build.qa_passed ? '<span style="color:#2f9e44">bestanden</span>' : '<span style="color:#c92a2a">nicht bestanden</span>'} · <a href="/order/${order.id}/preview/index.html" target="_blank" rel="noopener noreferrer">Vorschau</a></p>

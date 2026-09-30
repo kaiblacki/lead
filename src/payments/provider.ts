@@ -8,6 +8,7 @@ export type CheckoutSession = { id: string; url: string };
 export type PaymentEvent =
   | { id: string; kind: 'paid'; sessionId: string; amountCents: number; currency: string; mode: string }
   | { id: string; kind: 'expired'; sessionId: string }
+  | { id: string; kind: 'subscription_problem'; reason: 'canceled' | 'payment_failed'; orderId: string }
   | { id: string; kind: 'ignored' };
 
 export interface PaymentProvider {
@@ -49,7 +50,7 @@ export class StripeProvider implements PaymentProvider {
       'line_items[0][quantity]': '1', 'line_items[0][price_data][currency]': r.currency, 'line_items[0][price_data][unit_amount]': String(r.amountCents),
       'line_items[0][price_data][product_data][name]': r.description, 'metadata[order_id]': r.orderId, 'metadata[payment_id]': r.paymentId,
     });
-    if (r.mode === 'subscription') f.set('line_items[0][price_data][recurring][interval]', 'month');
+    if (r.mode === 'subscription') { f.set('line_items[0][price_data][recurring][interval]', 'month'); f.set('subscription_data[metadata][order_id]', r.orderId); }
     if (r.customerEmail) f.set('customer_email', r.customerEmail);
     const res = await fetch('https://api.stripe.com/v1/checkout/sessions', {
       method: 'POST', body: f,
@@ -68,6 +69,9 @@ export class StripeProvider implements PaymentProvider {
       return { id: e.id, kind: 'paid', sessionId: o.id, amountCents: o.amount_total, currency: o.currency, mode: o.mode };
     }
     if (e.type === 'checkout.session.expired') return { id: e.id, kind: 'expired', sessionId: o.id };
+    if (e.type === 'customer.subscription.deleted' && o.metadata?.order_id) return { id: e.id, kind: 'subscription_problem', reason: 'canceled', orderId: o.metadata.order_id };
+    const invOrder = o.subscription_details?.metadata?.order_id ?? o.parent?.subscription_details?.metadata?.order_id;
+    if (e.type === 'invoice.payment_failed' && invOrder) return { id: e.id, kind: 'subscription_problem', reason: 'payment_failed', orderId: invOrder };
     return { id: e.id, kind: 'ignored' };
   }
 }

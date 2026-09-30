@@ -86,6 +86,17 @@ export class OrderService {
   async handleWebhook(rawBody: string, signature: string | undefined, provider: PaymentProvider): Promise<{ handled: string; orderId?: string; kind?: string }> {
     const ev = provider.parseWebhook(rawBody, signature);
     if (ev.kind === 'ignored') return { handled: 'ignored' };
+    if (ev.kind === 'subscription_problem') {
+      return this.repo.tx(async (c) => {
+        const seen = await c.query('insert into webhook_events(id, owner_id, type) values ($1,$2,$3) on conflict do nothing', [ev.id, this.repo.ownerId, ev.kind]);
+        if (!seen.rowCount) return { handled: 'duplicate' };
+        if (!/^[0-9a-f-]{36}$/.test(ev.orderId)) return { handled: 'unknown_order' };
+        const o = (await c.query('select lead_id from orders where id=$1 and owner_id=$2', [ev.orderId, this.repo.ownerId])).rows[0];
+        if (!o) return { handled: 'unknown_order' };
+        await this.repo.event(c, o.lead_id, ev.reason === 'canceled' ? 'subscription_canceled' : 'subscription_payment_failed', { order_id: ev.orderId, actor: 'system' });
+        return { handled: 'subscription_problem', orderId: ev.orderId, kind: ev.reason };
+      });
+    }
     return this.repo.tx(async (c) => {
       const seen = await c.query('insert into webhook_events(id, owner_id, type) values ($1,$2,$3) on conflict do nothing', [ev.id, this.repo.ownerId, ev.kind]);
       if (!seen.rowCount) return { handled: 'duplicate' };
