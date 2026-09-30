@@ -1,0 +1,81 @@
+{
+  "key": "fitness",
+  "label": "Fitness / Sport",
+  "keywords": [
+    "fitness",
+    "gym",
+    "sport",
+    "yoga",
+    "training"
+  ],
+  "palette": {
+    "primary": "#0f6b3a",
+    "primaryText": "#ffffff",
+    "bg": "#f6fbf8",
+    "ink": "#10231a",
+    "soft": "#e0f2e8"
+  },
+  "layout": {
+    "hero": "centered",
+    "cards": "rounded",
+    "density": "airy"
+  },
+  "sections": [
+    "hero",
+    "services",
+    "gallery",
+    "booking",
+    "hours",
+    "contact"
+  ],
+  "copy": {
+    "tagline": "{name} in {city}",
+    "heroSub": "Kurse, Angebote und Probetraining anfragen.",
+    "cta": "Probetraining anfragen",
+    "servicesTitle": "Leistungen",
+    "aboutTitle": "Über uns",
+    "bookingTitle": "Online-Termin",
+    "bookingText": "So könnte die Terminanfrage aussehen."
+  },
+  "booking": true,
+  "services": [
+    {
+      "title": "Angebote",
+      "text": "Beispieltext: Hier stehen später Ihre Kurse und Angebote."
+    },
+    {
+      "title": "Trainer",
+      "text": "Beispieltext: Hier folgen später Informationen zum Team."
+    },
+    {
+      "title": "Preise",
+      "text": "Beispieltext: Hier stehen später Ihre Mitgliedschaften."
+    }
+  ],
+  "imageLogic": {
+    "mode": "placeholder",
+    "slots": [
+      "bild-1",
+      "bild-2",
+      "bild-3"
+    ],
+    "note": "Keine fremden Bilder oder Logos. Platzhalter, bis der Kunde eigene Fotos liefert; später lizenzierte oder generierte neutrale Assets."
+  },
+  "cta": {
+    "primary": "Probetraining anfragen",
+    "secondary": "Anrufen",
+    "sticky": true
+  },
+  "seo": {
+    "titleFormat": "{name} – Fitnessstudio in {city}",
+    "descriptionFormat": "{name} in {city}: Fitnessstudio. Kontakt, Leistungen und Öffnungszeiten."
+  },
+  "components": [
+    "hero",
+    "card-grid",
+    "gallery-placeholder",
+    "booking-cta",
+    "contact-block",
+    "hours-block"
+  ]
+}

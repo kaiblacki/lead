@@ -17,5 +17,13 @@
   "offerValidDays": 14,
   "vatNote": "[Umsatzsteuer-Hinweis festlegen]",
   "maintenanceScope": ["Verfügbarkeitsprüfung", "Technische Checks", "Kleinere Inhaltsänderungen nach Absprache"],
-  "termsDraft": ["[Vertragsbedingungen / AGB – vor Verwendung rechtlich prüfen lassen]", "Zahlung: Anzahlung vor Produktionsbeginn, Restzahlung nach Kundenfreigabe und vor Veröffentlichung."]
+  "termsDraft": ["[Vertragsbedingungen / AGB – vor Verwendung rechtlich prüfen lassen]", "Zahlung: Anzahlung vor Produktionsbeginn, Restzahlung nach Kundenfreigabe und vor Veröffentlichung."],
+  "upsells": [
+    { "key": "online_booking", "label": "Online-Terminbuchung einbinden", "oneTimeCents": 39000, "monthlyCents": 0, "weight": 25, "when": "no_booking" },
+    { "key": "social_package", "label": "Social-Media-Paket (Content-Kalender)", "oneTimeCents": 0, "monthlyCents": 14900, "weight": 20, "when": "social_inactive_or_none" },
+    { "key": "seo_basic", "label": "SEO-Grundoptimierung", "oneTimeCents": 29000, "monthlyCents": 0, "weight": 15, "when": "seo_weak" },
+    { "key": "content_refresh", "label": "Inhalte überarbeiten (Texte/Fotos)", "oneTimeCents": 19000, "monthlyCents": 0, "weight": 10, "when": "stale_content" },
+    { "key": "multi_location", "label": "Standortseiten für mehrere Filialen", "oneTimeCents": 24000, "monthlyCents": 0, "weight": 10, "when": "multi_location" }
+  ],
+  "estimate": { "maintenanceMonths": 12, "label": "Schätzung auf Basis der Preisliste – unverbindlich, kein Angebot" }
 }

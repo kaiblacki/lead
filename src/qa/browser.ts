@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import type { SiteFiles } from '../production/build.ts';
+import type { SiteFiles } from '../site/engine.ts';
 import type { Issue } from './check.ts';
 
 const CANDIDATES = [process.env.CHROMIUM_PATH, '/opt/pw-browsers/chromium/chrome-linux/chrome', '/opt/pw-browsers/chromium', '/usr/bin/chromium', '/usr/bin/google-chrome'];

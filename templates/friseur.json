@@ -1,0 +1,82 @@
+{
+  "key": "friseur",
+  "label": "Friseur",
+  "keywords": [
+    "friseur",
+    "hair",
+    "salon",
+    "barber",
+    "haarstudio"
+  ],
+  "palette": {
+    "primary": "#7a2e5c",
+    "primaryText": "#ffffff",
+    "bg": "#fffafc",
+    "ink": "#2a1a24",
+    "soft": "#f6e9f0"
+  },
+  "layout": {
+    "hero": "left",
+    "cards": "rounded",
+    "density": "airy"
+  },
+  "sections": [
+    "hero",
+    "services",
+    "gallery",
+    "booking",
+    "about",
+    "hours",
+    "contact"
+  ],
+  "copy": {
+    "tagline": "{name} in {city}",
+    "heroSub": "Ihr Termin in wenigen Klicks.",
+    "cta": "Termin anfragen",
+    "servicesTitle": "Leistungen",
+    "aboutTitle": "Über uns",
+    "bookingTitle": "Online-Termin",
+    "bookingText": "So könnte die Terminanfrage aussehen."
+  },
+  "booking": true,
+  "services": [
+    {
+      "title": "Schneiden & Styling",
+      "text": "Beispieltext: Hier beschreiben wir später Ihre Schnitt- und Stylingleistungen."
+    },
+    {
+      "title": "Farbe & Pflege",
+      "text": "Beispieltext: Hier stehen später Ihre Farb- und Pflegeangebote."
+    },
+    {
+      "title": "Beratung",
+      "text": "Beispieltext: Hier erklären wir später Ihre Beratung."
+    }
+  ],
+  "imageLogic": {
+    "mode": "placeholder",
+    "slots": [
+      "bild-1",
+      "bild-2",
+      "bild-3"
+    ],
+    "note": "Keine fremden Bilder oder Logos. Platzhalter, bis der Kunde eigene Fotos liefert; später lizenzierte oder generierte neutrale Assets."
+  },
+  "cta": {
+    "primary": "Termin anfragen",
+    "secondary": "Anrufen",
+    "sticky": true
+  },
+  "seo": {
+    "titleFormat": "{name} – Friseur in {city}",
+    "descriptionFormat": "{name} in {city}: Friseur. Kontakt, Leistungen und Öffnungszeiten."
+  },
+  "components": [
+    "hero",
+    "card-grid",
+    "gallery-placeholder",
+    "booking-cta",
+    "contact-block",
+    "hours-block"
+  ]
+}

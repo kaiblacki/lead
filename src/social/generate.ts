@@ -3,6 +3,7 @@ import type { Profile } from './profiles.ts';
 export type Business = {
   name: string; city?: string; phone?: string; openingHours?: string;
   services?: string[];       // vom Betreiber gelieferte Leistungen
+  audience?: string; tone?: string;   // überschreiben Zielgruppe/Ton des Branchenprofils
   offer?: string;            // aktuelles Angebot, nur wenn gesetzt
   website?: string;
 };
@@ -75,11 +76,11 @@ export function generatePlan(b: Business, p: Profile, opts: { weeks?: number; st
     const topic = pick(p.topics, m);
     const d = addDays(start, m * 28 + 10);
     items.push({ date: iso(d), platform: 'blog', format: 'artikel', title: `Blogartikel: ${topic}${b.city ? ` in ${b.city}` : ''}`,
-      body: `Gliederung\n1. Einleitung: Worum geht es bei "${topic}" für ${p.audience}?\n2. Was wir bei ${b.name} dazu anbieten${b.services?.length ? `: ${b.services.slice(0, 3).join(', ')}` : ' (Leistungen ergänzen)'}\n3. Häufige Fragen (aus echten Kundenfragen sammeln)\n4. Kontakt und nächster Schritt${b.phone ? `: ${b.phone}` : ''}`,
-      hashtags: [], notes: ['Gerüst: Inhalte vom Betrieb ergänzen, keine Fakten ungeprüft übernehmen.', ...regulatedNote] });
+      body: `Gliederung\n1. Einleitung: Worum geht es bei "${topic}" für ${b.audience ?? p.audience}?\n2. Was wir bei ${b.name} dazu anbieten${b.services?.length ? `: ${b.services.slice(0, 3).join(', ')}` : ' (Leistungen ergänzen)'}\n3. Häufige Fragen (aus echten Kundenfragen sammeln)\n4. Kontakt und nächster Schritt${b.phone ? `: ${b.phone}` : ''}`,
+      hashtags: [], notes: ['Gerüst: Inhalte vom Betrieb ergänzen, keine Fakten ungeprüft übernehmen.', `Ton: ${b.tone ?? p.tone}`, ...regulatedNote] });
     items.push({ date: iso(addDays(d, 4)), platform: 'newsletter', format: 'newsletter', title: `Newsletter: ${topic}`,
       body: `Betreff-Idee: Neues von ${b.name}\nAufbau: 1) Kurzer Gruß, 2) Thema "${topic}" in 2–3 Sätzen, 3) ${b.offer ? `Angebot: ${b.offer}` : 'Aktuelles aus dem Betrieb (ergänzen)'}, 4) Kontakt${b.phone ? ` (${b.phone})` : ''}, 5) Abmeldelink und Impressum.`,
-      hashtags: [], notes: ['Versand nur an Empfänger mit Einwilligung (Double-Opt-in).', ...regulatedNote] });
+      hashtags: [], notes: ['Versand nur an Empfänger mit Einwilligung (Double-Opt-in).', `Ton: ${b.tone ?? p.tone}`, ...regulatedNote] });
   }
   return items.sort((a, c) => a.date.localeCompare(c.date) || a.platform.localeCompare(c.platform));
 }

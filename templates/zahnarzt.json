@@ -1,0 +1,76 @@
+{
+  "key": "zahnarzt",
+  "label": "Zahnarzt / Praxis",
+  "keywords": [
+    "zahn",
+    "arzt",
+    "praxis",
+    "physio",
+    "therap"
+  ],
+  "palette": {
+    "primary": "#0b5c7a",
+    "primaryText": "#ffffff",
+    "bg": "#f7fbfd",
+    "ink": "#10232b",
+    "soft": "#e3f1f7"
+  },
+  "layout": {
+    "hero": "left",
+    "cards": "flat",
+    "density": "compact"
+  },
+  "sections": [
+    "hero",
+    "services",
+    "about",
+    "hours",
+    "booking",
+    "contact"
+  ],
+  "copy": {
+    "tagline": "{name}, {city}",
+    "heroSub": "Sprechzeiten, Leistungen und Terminanfrage.",
+    "cta": "Termin anfragen",
+    "servicesTitle": "Leistungen",
+    "aboutTitle": "Die Praxis",
+    "bookingTitle": "Online-Termin",
+    "bookingText": "So könnte die Terminanfrage aussehen."
+  },
+  "booking": true,
+  "services": [
+    {
+      "title": "Leistungen",
+      "text": "Beispieltext: Hier stellen wir später das Leistungsspektrum vor."
+    },
+    {
+      "title": "Das Team",
+      "text": "Beispieltext: Hier folgen später Informationen zum Team."
+    },
+    {
+      "title": "Anfahrt & Sprechzeiten",
+      "text": "Beispieltext: Hier stehen später Anfahrt und Sprechzeiten."
+    }
+  ],
+  "imageLogic": {
+    "mode": "placeholder",
+    "slots": [],
+    "note": "Keine fremden Bilder oder Logos. Platzhalter, bis der Kunde eigene Fotos liefert; später lizenzierte oder generierte neutrale Assets."
+  },
+  "cta": {
+    "primary": "Termin anfragen",
+    "secondary": "Anrufen",
+    "sticky": true
+  },
+  "seo": {
+    "titleFormat": "{name} – Praxis in {city}",
+    "descriptionFormat": "{name} in {city}: Praxis. Kontakt, Leistungen und Öffnungszeiten."
+  },
+  "components": [
+    "hero",
+    "card-grid",
+    "booking-cta",
+    "contact-block",
+    "hours-block"
+  ]
+}

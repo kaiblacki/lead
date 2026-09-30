@@ -1,16 +1,19 @@
 {
-  "weights": {
-    "website_missing": 30,
-    "website_outdated": 20,
-    "mobile_problems": 15,
-    "no_clear_conversion": 10,
-    "no_online_booking": 10,
-    "social_active": 5,
-    "local_business": 5,
-    "high_obvious_benefit": 5
+  "version": 2,
+  "digitalNeedWeights": { "websiteNeed": 0.30, "mobileNeed": 0.15, "designNeed": 0.10, "conversionNeed": 0.20, "technicalNeed": 0.10, "contentNeed": 0.15 },
+  "salesWeights": { "digitalNeed": 0.45, "businessPotential": 0.20, "contactability": 0.15, "upsellPotential": 0.10, "socialOpportunity": 0.10 },
+  "dataQuality": {
+    "minFactor": 0.8,
+    "weights": { "phone": 0.20, "address": 0.15, "website": 0.15, "email": 0.10, "employeeBucket": 0.10, "openingHours": 0.10, "social": 0.10, "rating": 0.10 },
+    "qualityValue": { "high": 1, "medium": 0.6, "low": 0.3 },
+    "conflictPenalty": 8
   },
-  "impliedByMissingWebsite": ["website_outdated", "mobile_problems", "no_clear_conversion", "no_online_booking"],
-  "thresholds": { "HOT": 90, "HIGH_POTENTIAL": 75, "MEDIUM": 60, "LOW": 40 },
+  "thresholds": { "HOT": 75, "HIGH_POTENTIAL": 60, "MEDIUM": 45, "LOW": 30 },
+  "websiteNeedsImprovementAt": 40,
+  "mobileProblemAt": 40,
   "socialActiveDays": 90,
-  "highBenefitMinProblems": 3
+  "socialRecentDays": 30,
+  "unreliableBelowWeight": 0.4,
+  "employeeBucketValue": { "1-4": 45, "5-9": 70, "10-49": 85, "50+": 55 },
+  "chainPenalty": 25
 }

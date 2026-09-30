@@ -1,0 +1,84 @@
+{
+  "key": "handwerker",
+  "label": "Handwerk",
+  "keywords": [
+    "handwerk",
+    "elektr",
+    "sanitär",
+    "sanitaer",
+    "maler",
+    "dach",
+    "schreiner",
+    "heizung",
+    "installat"
+  ],
+  "palette": {
+    "primary": "#b34700",
+    "primaryText": "#ffffff",
+    "bg": "#fffaf6",
+    "ink": "#241a12",
+    "soft": "#f8e8db"
+  },
+  "layout": {
+    "hero": "left",
+    "cards": "outlined",
+    "density": "compact"
+  },
+  "sections": [
+    "hero",
+    "services",
+    "about",
+    "gallery",
+    "contact"
+  ],
+  "copy": {
+    "tagline": "{name} in {city}",
+    "heroSub": "Leistungen und direkter Kontakt für Ihre Anfrage.",
+    "cta": "Anfrage senden",
+    "servicesTitle": "Leistungen",
+    "aboutTitle": "Über uns",
+    "bookingTitle": "Online-Termin",
+    "bookingText": "So könnte die Terminanfrage aussehen."
+  },
+  "booking": false,
+  "services": [
+    {
+      "title": "Leistungen",
+      "text": "Beispieltext: Hier beschreiben wir später Ihre Gewerke und Leistungen."
+    },
+    {
+      "title": "Ablauf",
+      "text": "Beispieltext: Hier erklären wir später den Ablauf einer Zusammenarbeit."
+    },
+    {
+      "title": "Einsatzgebiet",
+      "text": "Beispieltext: Hier nennen wir später Ihr Einsatzgebiet."
+    }
+  ],
+  "imageLogic": {
+    "mode": "placeholder",
+    "slots": [
+      "bild-1",
+      "bild-2",
+      "bild-3"
+    ],
+    "note": "Keine fremden Bilder oder Logos. Platzhalter, bis der Kunde eigene Fotos liefert; später lizenzierte oder generierte neutrale Assets."
+  },
+  "cta": {
+    "primary": "Anfrage senden",
+    "secondary": "Anrufen",
+    "sticky": true
+  },
+  "seo": {
+    "titleFormat": "{name} – Handwerksbetrieb in {city}",
+    "descriptionFormat": "{name} in {city}: Handwerksbetrieb. Kontakt, Leistungen und Öffnungszeiten."
+  },
+  "components": [
+    "hero",
+    "card-grid",
+    "gallery-placeholder",
+    "booking-cta",
+    "contact-block",
+    "hours-block"
+  ]
+}

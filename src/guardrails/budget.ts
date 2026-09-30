@@ -4,15 +4,21 @@ export type Limits = {
   maxAiRequestsPerLead: number;
   maxDailyCents: number;
   maxMonthlyCents: number;
+  maxPlacesRequestsPerRun: number;
+  maxCrawlPagesPerRun: number;
 };
-export const DEFAULT_LIMITS: Limits = { maxLeadsPerRun: 100, maxAuditsPerRun: 100, maxAiRequestsPerLead: 3, maxDailyCents: 500, maxMonthlyCents: 5000 };
+export const DEFAULT_LIMITS: Limits = { maxLeadsPerRun: 100, maxAuditsPerRun: 100, maxAiRequestsPerLead: 3, maxDailyCents: 500, maxMonthlyCents: 5000, maxPlacesRequestsPerRun: 20, maxCrawlPagesPerRun: 400 };
+export const LIMIT_LABELS: Record<keyof Limits, string> = {
+  maxLeadsPerRun: 'Max. Leads pro Lauf', maxAuditsPerRun: 'Max. Website-Analysen pro Lauf', maxAiRequestsPerLead: 'Max. KI-Anfragen pro Lead', maxDailyCents: 'Max. KI-Budget pro Tag (Cent)',
+  maxMonthlyCents: 'Max. KI-Budget pro Monat (Cent)', maxPlacesRequestsPerRun: 'Max. Places-/Verzeichnis-Anfragen pro Lauf', maxCrawlPagesPerRun: 'Max. Seitenabrufe (Crawler) pro Lauf',
+};
 
 export class BudgetExceeded extends Error {}
 export class KillSwitchActive extends Error {}
 
 /** Zählt pro Lauf. Jeder teure Schritt ruft vorher `take...` auf; bei Überschreitung wird abgebrochen. */
 export class Budget {
-  leads = 0; audits = 0; dailyCents: number; monthlyCents: number;
+  leads = 0; audits = 0; placesRequests = 0; crawlPages = 0; dailyCents: number; monthlyCents: number;
   private aiPerLead = new Map<string, number>();
   killSwitch = false;
   readonly limits: Limits;
@@ -23,6 +29,8 @@ export class Budget {
   private guard() { if (this.killSwitch) throw new KillSwitchActive('Kill Switch ist aktiv'); }
   takeLead() { this.guard(); if (this.leads >= this.limits.maxLeadsPerRun) throw new BudgetExceeded('MAX LEADS / RUN erreicht'); this.leads++; }
   takeAudit() { this.guard(); if (this.audits >= this.limits.maxAuditsPerRun) throw new BudgetExceeded('MAX WEBSITE ANALYSES / RUN erreicht'); this.audits++; }
+  takePlaces(n = 1) { this.guard(); if (this.placesRequests + n > this.limits.maxPlacesRequestsPerRun) throw new BudgetExceeded('MAX PLACES REQUESTS / RUN erreicht'); this.placesRequests += n; }
+  takeCrawl(n = 1) { this.guard(); if (this.crawlPages + n > this.limits.maxCrawlPagesPerRun) throw new BudgetExceeded('MAX CRAWL PAGES / RUN erreicht'); this.crawlPages += n; }
   takeAi(leadId: string, estCents: number) {
     this.guard();
     const n = this.aiPerLead.get(leadId) ?? 0;

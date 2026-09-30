@@ -1,5 +1,6 @@
 {
   "name": "[Name deiner Agentur]",
   "contactEmail": "[E-Mail für Rückfragen]",
-  "demoValidDays": 30
+  "demoValidDays": 30,
+  "callerName": "[Dein Name]"
 }

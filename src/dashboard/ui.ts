@@ -1,0 +1,77 @@
+import { html, raw, Safe, esc } from './html.ts';
+import { STAGE_LABEL, type Status } from '../core/status.ts';
+
+export const eur = (cents: number | null | undefined) => (cents === null || cents === undefined ? '–' : new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(cents / 100));
+export const fmt = (d: unknown) => (d ? new Date(d as string).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Berlin' }) : '–');
+export const fmtDate = (d: unknown) => (d ? new Date(d as string).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' }) : '–');
+export const pct = (n: number | null | undefined) => (n === null || n === undefined ? '–' : `${String(n).replace('.', ',')} %`);
+
+export const CSS = `
+:root{--bg:#f4f5f7;--card:#fff;--ink:#14181f;--mute:#5b6472;--line:#e3e6eb;--brand:#0b5cad;--ok:#1e7f3a;--warn:#b25e09;--bad:#c92a2a;--hot:#d6336c}
+*{box-sizing:border-box}html{-webkit-text-size-adjust:100%}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:1000px;margin:0 auto;padding:12px 12px 90px}h1{font-size:24px;margin:8px 0 12px}h2{font-size:19px;margin:0 0 8px}h3{font-size:16px;margin:12px 0 4px}p{margin:6px 0}
+a{color:var(--brand)}small,.mute{color:var(--mute)}code{background:#eef0f3;padding:1px 5px;border-radius:5px;overflow-wrap:anywhere}
+header.top{position:sticky;top:0;z-index:20;background:#101826;color:#fff}.top .bar{max-width:1000px;margin:0 auto;display:flex;align-items:center;gap:6px;padding:0 8px}
+.top nav{display:flex;gap:2px;overflow-x:auto;flex:1;scrollbar-width:none}.top nav::-webkit-scrollbar{display:none}
+.top nav a{color:#dbe3f0;text-decoration:none;padding:0 12px;min-height:48px;display:inline-flex;align-items:center;white-space:nowrap;border-bottom:3px solid transparent}
+.top nav a.on{color:#fff;border-bottom-color:#5aa9ff;font-weight:600}.brand{font-weight:700;padding:0 6px;white-space:nowrap}
+.top form{margin:0}.top button{min-height:40px;padding:0 12px}
+.banner{padding:8px 12px;font-size:14px;text-align:center}.banner.mock{background:#fff3cd;color:#664d03}.banner.kill{background:#c92a2a;color:#fff;font-weight:700}
+.card{background:var(--card);border-radius:12px;padding:12px 14px;margin:10px 0;box-shadow:0 1px 2px #0002}.card.flat{box-shadow:none;border:1px solid var(--line)}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.grow{flex:1 1 auto}.stack>*+*{margin-top:8px}
+.grid{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}.kpi{background:var(--card);border-radius:12px;padding:10px 12px;box-shadow:0 1px 2px #0002}.kpi b{font-size:26px;display:block;line-height:1.1}.kpi span{color:var(--mute);font-size:13px}
+button,select,input,textarea,.btn{font:inherit;color:inherit;min-height:44px;padding:8px 12px;border-radius:10px;border:1px solid #b9c0cb;background:#fff}
+textarea{width:100%;min-height:88px}input[type=checkbox],input[type=radio]{min-height:auto;width:22px;height:22px;padding:0;accent-color:var(--brand);vertical-align:middle}
+button,.btn{cursor:pointer;display:inline-flex;align-items:center;justify-content:center;text-decoration:none;font-weight:600;min-width:44px;background:#fff}
+button.primary,.btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}button.ok{background:var(--ok);border-color:var(--ok);color:#fff}button.danger,.btn.danger{background:var(--bad);border-color:var(--bad);color:#fff}button.warn{background:#fff3cd;border-color:#e0b84c}
+button:disabled{opacity:.5;cursor:not-allowed}label{display:block;font-size:14px;color:var(--mute)}label input,label select,label textarea{display:block;width:100%;margin-top:2px;color:var(--ink)}label.inline{display:inline-flex;gap:8px;align-items:center;color:var(--ink);font-size:16px;min-height:44px}label.inline input{display:inline-block;width:22px;margin:0}
+fieldset{border:1px solid var(--line);border-radius:10px;margin:8px 0;padding:8px 12px}legend{font-size:14px;color:var(--mute);padding:0 6px}
+.badge{display:inline-block;font-size:12px;font-weight:700;padding:3px 9px;border-radius:99px;background:#e6e9ee;color:#2b323d;white-space:nowrap}
+.b-HOT{background:var(--hot);color:#fff}.b-HIGH-POTENTIAL{background:#e8590c;color:#fff}.b-MEDIUM{background:#ffd43b}.b-LOW{background:#dee2e6}.b-IGNORE,.b-UNRATED{background:#ced4da}
+.b-ok{background:#d3f9d8;color:#0b5d1e}.b-warn{background:#fff3bf;color:#7a4d00}.b-bad{background:#ffe3e3;color:#a61e1e}.b-mock{background:#fff3cd;color:#664d03}.b-info{background:#dbe4ff;color:#2b3a8c}
+.prio{font-weight:800;font-size:18px;width:32px;height:32px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;background:#e6e9ee}.prio.A{background:var(--hot);color:#fff}.prio.B{background:#e8590c;color:#fff}.prio.C{background:#ffd43b}
+.bar{height:8px;border-radius:5px;background:#e6e9ee;overflow:hidden}.bar i{display:block;height:100%;background:var(--brand)}
+.flash{border-radius:10px;padding:10px 12px;margin:8px 0}.flash.ok{background:#d3f9d8}.flash.err{background:#ffe3e3}
+.warnbox{background:#fff3cd;border-radius:10px;padding:8px 12px;margin:8px 0}.errbox{background:#ffe3e3;border-radius:10px;padding:8px 12px;margin:8px 0}.note{background:#eef4ff;border-radius:10px;padding:8px 12px;margin:8px 0}
+.scroll{overflow-x:auto}table{border-collapse:collapse;width:100%}td,th{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top;overflow-wrap:anywhere}th{font-size:13px;color:var(--mute);font-weight:600}
+.items>li{list-style:none;margin:0;padding:10px 0;border-bottom:1px solid var(--line)}.items{padding:0;margin:0}.items>li:last-child{border-bottom:0}
+details>summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-weight:600}
+.stepper{display:flex;gap:4px;flex-wrap:wrap;margin:6px 0}.step{font-size:12px;padding:4px 8px;border-radius:8px;background:#e6e9ee;color:#4a5361}.step.done{background:#d3f9d8;color:#0b5d1e}.step.now{background:var(--brand);color:#fff;font-weight:700}
+.sticky-actions{position:sticky;bottom:0;background:var(--card);padding:8px 0;border-top:1px solid var(--line);margin-top:8px}
+.resgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}.resgrid button{min-height:52px}
+.tel{font-size:20px;font-weight:700;display:inline-flex;align-items:center;min-height:48px}
+@media(min-width:720px){.resgrid{grid-template-columns:repeat(4,1fr)}main{padding-top:20px}}
+`;
+
+export type NavKey = 'home' | 'search' | 'leads' | 'calls' | 'pipeline' | 'orders' | 'maintenance' | 'analytics' | 'settings' | '';
+const NAV: [NavKey, string, string][] = [['home', '/', 'Start'], ['search', '/search', 'Suche'], ['leads', '/leads', 'Leads'], ['calls', '/calls', 'Calls'], ['pipeline', '/pipeline', 'Pipeline'], ['orders', '/orders', 'Aufträge'], ['maintenance', '/maintenance', 'Wartung'], ['analytics', '/analytics', 'Analytics'], ['settings', '/settings', 'Einstellungen']];
+
+export type Flash = { kind: 'ok' | 'err'; text: string } | null;
+
+export function layout(o: { title: string; nav: NavKey; body: Safe; csrf: string; killSwitch: boolean; mock: boolean; flash?: Flash; hostingMock?: boolean }): Safe {
+  return html`<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>${o.title} – Agency OS</title><style>${raw(CSS)}</style></head><body>
+<header class="top"><div class="bar"><span class="brand">Agency OS</span>
+<nav aria-label="Hauptnavigation">${NAV.map(([k, href, label]) => html`<a href="${href}" class="${o.nav === k ? 'on' : ''}">${label}</a>`)}</nav>
+<form method="post" action="/killswitch"><input type="hidden" name="csrf" value="${o.csrf}"><input type="hidden" name="on" value="${o.killSwitch ? '0' : '1'}"><button class="${o.killSwitch ? 'ok' : 'danger'}" title="${o.killSwitch ? 'Automatisierung wieder erlauben' : 'Alle automatischen Läufe stoppen'}">${o.killSwitch ? 'Fortsetzen' : 'STOP'}</button></form></div>
+${o.killSwitch ? html`<div class="banner kill">KILL SWITCH AKTIV – keine Suchläufe, Analysen oder Wartungsprüfungen</div>` : ''}
+${o.mock ? html`<div class="banner mock">MOCK-MODUS – Testdaten, keine echten Unternehmen, Zahlungen oder Nachrichten</div>` : ''}</header>
+<main>${o.flash ? html`<div class="flash ${o.flash.kind}" role="status">${o.flash.text}</div>` : ''}<h1>${o.title}</h1>${o.body}</main></body></html>`;
+}
+
+export const postForm = (csrf: string, action: string, inner: Safe | string, o: { cls?: string; style?: string } = {}) =>
+  html`<form method="post" action="${action}" class="${o.cls ?? ''}" style="${o.style ?? 'display:inline'}"><input type="hidden" name="csrf" value="${csrf}">${typeof inner === 'string' ? raw(inner) : inner}</form>`;
+export const postBtn = (csrf: string, action: string, label: string, o: { cls?: string; hidden?: Record<string, string>; confirm?: boolean } = {}) =>
+  postForm(csrf, action, html`${Object.entries(o.hidden ?? {}).map(([k, v]) => html`<input type="hidden" name="${k}" value="${v}">`)}<button class="${o.cls ?? ''}">${label}</button>`);
+
+export const categoryBadge = (c: string | null | undefined) => html`<span class="badge b-${String(c ?? 'UNRATED').replace(/\s/g, '-')}">${c ?? 'nicht bewertet'}</span>`;
+export const statusBadge = (s: string) => html`<span class="badge b-info">${STAGE_LABEL[s as Status] ?? s}</span>`;
+export const readinessBadge = (r: string | null | undefined) => {
+  const m: Record<string, [string, string]> = { READY_FOR_MANUAL_CALL: ['ok', 'Bereit für Anruf'], EMAIL_PERMISSION_REQUIRED: ['warn', 'E-Mail: Einwilligung nötig'], WHATSAPP_OPT_IN_REQUIRED: ['warn', 'WhatsApp: Opt-in nötig'], MANUAL_REVIEW: ['warn', 'Manuell prüfen'], DO_NOT_CONTACT: ['bad', 'Nicht kontaktieren'] };
+  const [cls, label] = m[r ?? ''] ?? ['info', 'unbekannt'];
+  return html`<span class="badge b-${cls}">${label}</span>`;
+};
+export const mockBadge = html`<span class="badge b-mock" title="Fiktiver Testdatensatz">MOCK</span>`;
+export const scoreBar = (v: number | null | undefined) => (v === null || v === undefined ? html`<small>–</small>` : html`<div class="bar" role="img" aria-label="${v} von 100"><i style="width:${Math.max(2, Math.min(100, v))}%"></i></div>`);
+export const prioBadge = (p: string | null | undefined) => html`<span class="prio ${p ?? ''}" title="Priorität">${p ?? '–'}</span>`;
+export const STATE_TEXT: Record<string, string> = { measured: 'gemessen', implied: 'abgeleitet', unavailable: 'nicht verfügbar', unreliable: 'nicht zuverlässig ermittelbar' };
+export { html, raw, Safe, esc };

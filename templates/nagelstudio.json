@@ -1,0 +1,82 @@
+{
+  "key": "nagelstudio",
+  "label": "Nagelstudio",
+  "keywords": [
+    "nagel",
+    "nail",
+    "naegel",
+    "maniküre",
+    "nageldesign"
+  ],
+  "palette": {
+    "primary": "#9d2b62",
+    "primaryText": "#ffffff",
+    "bg": "#fff8fb",
+    "ink": "#2a1420",
+    "soft": "#fbe6ef"
+  },
+  "layout": {
+    "hero": "centered",
+    "cards": "rounded",
+    "density": "airy"
+  },
+  "sections": [
+    "hero",
+    "gallery",
+    "services",
+    "booking",
+    "hours",
+    "contact"
+  ],
+  "copy": {
+    "tagline": "{name} – {city}",
+    "heroSub": "Schöne Nägel, einfach Termin anfragen.",
+    "cta": "Termin anfragen",
+    "servicesTitle": "Leistungen",
+    "aboutTitle": "Über uns",
+    "bookingTitle": "Online-Termin",
+    "bookingText": "So könnte die Terminanfrage aussehen."
+  },
+  "booking": true,
+  "services": [
+    {
+      "title": "Neumodellage & Auffüllen",
+      "text": "Beispieltext: Hier stehen später Ihre Nagelleistungen."
+    },
+    {
+      "title": "Maniküre & Pediküre",
+      "text": "Beispieltext: Hier stehen später Ihre Pflegeangebote."
+    },
+    {
+      "title": "Nail Art",
+      "text": "Beispieltext: Hier zeigen wir später Ihre Designs."
+    }
+  ],
+  "imageLogic": {
+    "mode": "placeholder",
+    "slots": [
+      "bild-1",
+      "bild-2",
+      "bild-3",
+      "bild-4"
+    ],
+    "note": "Keine fremden Bilder oder Logos. Platzhalter, bis der Kunde eigene Fotos liefert; später lizenzierte oder generierte neutrale Assets."
+  },
+  "cta": {
+    "primary": "Termin anfragen",
+    "secondary": "Anrufen",
+    "sticky": true
+  },
+  "seo": {
+    "titleFormat": "{name} – Nagelstudio in {city}",
+    "descriptionFormat": "{name} in {city}: Nagelstudio. Kontakt, Leistungen und Öffnungszeiten."
+  },
+  "components": [
+    "hero",
+    "card-grid",
+    "gallery-placeholder",
+    "booking-cta",
+    "contact-block",
+    "hours-block"
+  ]
+}

@@ -1,0 +1,81 @@
+{
+  "key": "kosmetik",
+  "label": "Kosmetikstudio",
+  "keywords": [
+    "kosmetik",
+    "beauty",
+    "wimpern",
+    "hautpflege"
+  ],
+  "palette": {
+    "primary": "#3f6b5c",
+    "primaryText": "#ffffff",
+    "bg": "#f7fbf9",
+    "ink": "#14241e",
+    "soft": "#e3f1ea"
+  },
+  "layout": {
+    "hero": "left",
+    "cards": "outlined",
+    "density": "airy"
+  },
+  "sections": [
+    "hero",
+    "services",
+    "about",
+    "gallery",
+    "booking",
+    "hours",
+    "contact"
+  ],
+  "copy": {
+    "tagline": "{name}, {city}",
+    "heroSub": "Pflege und Wohlbefinden – Termin nach Vereinbarung.",
+    "cta": "Termin anfragen",
+    "servicesTitle": "Leistungen",
+    "aboutTitle": "Über uns",
+    "bookingTitle": "Online-Termin",
+    "bookingText": "So könnte die Terminanfrage aussehen."
+  },
+  "booking": true,
+  "services": [
+    {
+      "title": "Gesichtsbehandlungen",
+      "text": "Beispieltext: Hier beschreiben wir später Ihre Behandlungen."
+    },
+    {
+      "title": "Wimpern & Augenbrauen",
+      "text": "Beispieltext: Hier stehen später Ihre Angebote."
+    },
+    {
+      "title": "Beratung",
+      "text": "Beispieltext: Hier erklären wir später den Ablauf."
+    }
+  ],
+  "imageLogic": {
+    "mode": "placeholder",
+    "slots": [
+      "bild-1",
+      "bild-2",
+      "bild-3"
+    ],
+    "note": "Keine fremden Bilder oder Logos. Platzhalter, bis der Kunde eigene Fotos liefert; später lizenzierte oder generierte neutrale Assets."
+  },
+  "cta": {
+    "primary": "Termin anfragen",
+    "secondary": "Anrufen",
+    "sticky": true
+  },
+  "seo": {
+    "titleFormat": "{name} – Kosmetikstudio in {city}",
+    "descriptionFormat": "{name} in {city}: Kosmetikstudio. Kontakt, Leistungen und Öffnungszeiten."
+  },
+  "components": [
+    "hero",
+    "card-grid",
+    "gallery-placeholder",
+    "booking-cta",
+    "contact-block",
+    "hours-block"
+  ]
+}

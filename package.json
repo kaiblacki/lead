@@ -7,8 +7,8 @@
     "node": ">=22.18"
   },
   "scripts": {
-    "test": "node --test \"test/*.test.ts\"",
-    "analyze": "node src/cli.ts analyze",
+    "test": "node --test \"test/unit/*.test.ts\"",
+    "cli": "node src/cli.ts",
     "serve": "node src/serve.ts",
     "typecheck": "tsc -p .",
     "test:db": "bash test/run-db-tests.sh"

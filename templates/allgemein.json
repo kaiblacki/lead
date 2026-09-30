@@ -1,0 +1,70 @@
+{
+  "key": "allgemein",
+  "label": "Allgemein",
+  "keywords": [],
+  "palette": {
+    "primary": "#1d4ed8",
+    "primaryText": "#ffffff",
+    "bg": "#f8faff",
+    "ink": "#111827",
+    "soft": "#e5ecfb"
+  },
+  "layout": {
+    "hero": "left",
+    "cards": "rounded",
+    "density": "airy"
+  },
+  "sections": [
+    "hero",
+    "services",
+    "about",
+    "hours",
+    "contact"
+  ],
+  "copy": {
+    "tagline": "{name} in {city}",
+    "heroSub": "Ihr Unternehmen klar und modern präsentiert.",
+    "cta": "Kontakt aufnehmen",
+    "servicesTitle": "Leistungen",
+    "aboutTitle": "Über uns",
+    "bookingTitle": "Online-Termin",
+    "bookingText": "So könnte die Terminanfrage aussehen."
+  },
+  "booking": false,
+  "services": [
+    {
+      "title": "Leistungen",
+      "text": "Beispieltext: Hier beschreiben wir später Ihre Leistungen."
+    },
+    {
+      "title": "Über uns",
+      "text": "Beispieltext: Hier stellen wir Sie später vor."
+    },
+    {
+      "title": "Kontakt",
+      "text": "Beispieltext: Hier stehen später Ihre Kontaktmöglichkeiten."
+    }
+  ],
+  "imageLogic": {
+    "mode": "placeholder",
+    "slots": [],
+    "note": "Keine fremden Bilder oder Logos. Platzhalter, bis der Kunde eigene Fotos liefert; später lizenzierte oder generierte neutrale Assets."
+  },
+  "cta": {
+    "primary": "Kontakt aufnehmen",
+    "secondary": "Anrufen",
+    "sticky": true
+  },
+  "seo": {
+    "titleFormat": "{name} – Unternehmen in {city}",
+    "descriptionFormat": "{name} in {city}: Unternehmen. Kontakt, Leistungen und Öffnungszeiten."
+  },
+  "components": [
+    "hero",
+    "card-grid",
+    "gallery-placeholder",
+    "booking-cta",
+    "contact-block",
+    "hours-block"
+  ]
+}

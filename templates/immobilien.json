@@ -1,0 +1,70 @@
+{
+  "key": "immobilien",
+  "label": "Immobilien",
+  "keywords": [
+    "immobil",
+    "makler",
+    "hausverwalt"
+  ],
+  "palette": {
+    "primary": "#334155",
+    "primaryText": "#ffffff",
+    "bg": "#f8fafc",
+    "ink": "#0f172a",
+    "soft": "#e7ecf3"
+  },
+  "layout": {
+    "hero": "left",
+    "cards": "flat",
+    "density": "airy"
+  },
+  "sections": [
+    "hero",
+    "services",
+    "about",
+    "contact"
+  ],
+  "copy": {
+    "tagline": "{name} – {city}",
+    "heroSub": "Leistungen und persönlicher Kontakt.",
+    "cta": "Beratung anfragen",
+    "servicesTitle": "Leistungen",
+    "aboutTitle": "Über uns",
+    "bookingTitle": "Online-Termin",
+    "bookingText": "So könnte die Terminanfrage aussehen."
+  },
+  "booking": false,
+  "services": [
+    {
+      "title": "Verkauf & Vermietung",
+      "text": "Beispieltext: Hier beschreiben wir später Ihre Leistungen."
+    },
+    {
+      "title": "Bewertung",
+      "text": "Beispieltext: Hier steht später Ihr Angebot zur Wertermittlung."
+    },
+    {
+      "title": "Objekte",
+      "text": "Beispieltext: Hier erscheinen später Ihre Objekte."
+    }
+  ],
+  "imageLogic": {
+    "mode": "placeholder",
+    "slots": [],
+    "note": "Keine fremden Bilder oder Logos. Platzhalter, bis der Kunde eigene Fotos liefert; später lizenzierte oder generierte neutrale Assets."
+  },
+  "cta": {
+    "primary": "Beratung anfragen",
+    "secondary": "Anrufen",
+    "sticky": true
+  },
+  "seo": {
+    "titleFormat": "{name} – Immobilien in {city}",
+    "descriptionFormat": "{name} in {city}: Immobilien. Kontakt, Leistungen und Öffnungszeiten."
+  },
+  "components": [
+    "hero",
+    "card-grid",
+    "contact-block"
+  ]
+}

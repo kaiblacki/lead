@@ -1,5 +1,4 @@
-import type { ProjectContent } from '../orders/service.ts';
-import type { SiteFiles } from '../production/build.ts';
+import type { SiteContent as ProjectContent, SiteFiles } from '../site/engine.ts';
 
 export type Issue = { code: string; severity: 'error' | 'warn'; file: string; message: string };
 export type QaContext = { content: ProjectContent; legalConfirmed: boolean };

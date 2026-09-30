@@ -1,0 +1,76 @@
+{
+  "key": "autowerkstatt",
+  "label": "Autowerkstatt",
+  "keywords": [
+    "auto",
+    "kfz",
+    "werkstatt",
+    "reifen",
+    "fahrzeug"
+  ],
+  "palette": {
+    "primary": "#1f3a8a",
+    "primaryText": "#ffffff",
+    "bg": "#f8f9fd",
+    "ink": "#141a2e",
+    "soft": "#e6eaf7"
+  },
+  "layout": {
+    "hero": "left",
+    "cards": "outlined",
+    "density": "compact"
+  },
+  "sections": [
+    "hero",
+    "services",
+    "hours",
+    "booking",
+    "contact"
+  ],
+  "copy": {
+    "tagline": "{name} – {city}",
+    "heroSub": "Leistungen und Terminanfrage für Ihre Werkstatt.",
+    "cta": "Termin anfragen",
+    "servicesTitle": "Leistungen",
+    "aboutTitle": "Über uns",
+    "bookingTitle": "Online-Termin",
+    "bookingText": "So könnte die Terminanfrage aussehen."
+  },
+  "booking": true,
+  "services": [
+    {
+      "title": "Service & Wartung",
+      "text": "Beispieltext: Hier stehen später Ihre Service-Leistungen."
+    },
+    {
+      "title": "Reparatur",
+      "text": "Beispieltext: Hier stehen später Ihre Reparaturleistungen."
+    },
+    {
+      "title": "Reifen",
+      "text": "Beispieltext: Hier stehen später Angebote rund um Reifen."
+    }
+  ],
+  "imageLogic": {
+    "mode": "placeholder",
+    "slots": [],
+    "note": "Keine fremden Bilder oder Logos. Platzhalter, bis der Kunde eigene Fotos liefert; später lizenzierte oder generierte neutrale Assets."
+  },
+  "cta": {
+    "primary": "Termin anfragen",
+    "secondary": "Anrufen",
+    "sticky": true
+  },
+  "seo": {
+    "titleFormat": "{name} – Autowerkstatt in {city}",
+    "descriptionFormat": "{name} in {city}: Autowerkstatt. Kontakt, Leistungen und Öffnungszeiten."
+  },
+  "components": [
+    "hero",
+    "card-grid",
+    "gallery-placeholder",
+    "booking-cta",
+    "contact-block",
+    "hours-block"
+  ]
+}

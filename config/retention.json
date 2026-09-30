@@ -1,0 +1,10 @@
+{
+  "ignoredLeadDays": 180,
+  "unscoredLeadDays": 90,
+  "contactHistoryDays": 730,
+  "auditLogDays": 1095,
+  "expiredDemoDays": 90,
+  "snapshotDays": 1095,
+  "keepCustomerData": true,
+  "note": "Sperrlisten-Einträge (Opt-out) werden nie automatisch gelöscht, damit ein Widerspruch dauerhaft beachtet wird."
+}

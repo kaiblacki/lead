@@ -1,0 +1,83 @@
+{
+  "key": "restaurant",
+  "label": "Restaurant / Gastro",
+  "keywords": [
+    "restaurant",
+    "gastro",
+    "café",
+    "cafe",
+    "bistro",
+    "gasthaus"
+  ],
+  "palette": {
+    "primary": "#8a3b12",
+    "primaryText": "#ffffff",
+    "bg": "#fffaf5",
+    "ink": "#2b1d14",
+    "soft": "#f7e9dc"
+  },
+  "layout": {
+    "hero": "centered",
+    "cards": "rounded",
+    "density": "airy"
+  },
+  "sections": [
+    "hero",
+    "services",
+    "gallery",
+    "hours",
+    "booking",
+    "contact"
+  ],
+  "copy": {
+    "tagline": "{name} – {city}",
+    "heroSub": "Speisekarte, Öffnungszeiten und Reservierung auf einen Blick.",
+    "cta": "Tisch anfragen",
+    "servicesTitle": "Speisekarte",
+    "aboutTitle": "Über uns",
+    "bookingTitle": "Reservierung",
+    "bookingText": "So könnte die Tischanfrage aussehen."
+  },
+  "booking": true,
+  "services": [
+    {
+      "title": "Speisekarte",
+      "text": "Beispieltext: Hier erscheint später Ihre aktuelle Speisekarte."
+    },
+    {
+      "title": "Reservierung",
+      "text": "Beispieltext: Hier können Gäste später einen Tisch anfragen."
+    },
+    {
+      "title": "Feiern & Events",
+      "text": "Beispieltext: Hier stehen später Hinweise zu Feiern."
+    }
+  ],
+  "imageLogic": {
+    "mode": "placeholder",
+    "slots": [
+      "bild-1",
+      "bild-2",
+      "bild-3",
+      "bild-4"
+    ],
+    "note": "Keine fremden Bilder oder Logos. Platzhalter, bis der Kunde eigene Fotos liefert; später lizenzierte oder generierte neutrale Assets."
+  },
+  "cta": {
+    "primary": "Tisch anfragen",
+    "secondary": "Anrufen",
+    "sticky": true
+  },
+  "seo": {
+    "titleFormat": "{name} – Restaurant in {city}",
+    "descriptionFormat": "{name} in {city}: Restaurant. Kontakt, Leistungen und Öffnungszeiten."
+  },
+  "components": [
+    "hero",
+    "card-grid",
+    "gallery-placeholder",
+    "booking-cta",
+    "contact-block",
+    "hours-block"
+  ]
+}

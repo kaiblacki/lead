@@ -1,0 +1,76 @@
+{
+  "key": "versicherung",
+  "label": "Versicherung / Beratung",
+  "keywords": [
+    "versicher",
+    "finanz",
+    "steuer",
+    "berat",
+    "kanzlei"
+  ],
+  "palette": {
+    "primary": "#14532d",
+    "primaryText": "#ffffff",
+    "bg": "#f7fbf8",
+    "ink": "#0f2117",
+    "soft": "#e1f0e6"
+  },
+  "layout": {
+    "hero": "left",
+    "cards": "flat",
+    "density": "airy"
+  },
+  "sections": [
+    "hero",
+    "services",
+    "about",
+    "booking",
+    "contact"
+  ],
+  "copy": {
+    "tagline": "{name}, {city}",
+    "heroSub": "Beratung und Kontakt auf einen Blick.",
+    "cta": "Beratung anfragen",
+    "servicesTitle": "Beratung",
+    "aboutTitle": "Über uns",
+    "bookingTitle": "Beratungstermin",
+    "bookingText": "So könnte die Terminanfrage aussehen."
+  },
+  "booking": true,
+  "services": [
+    {
+      "title": "Beratung",
+      "text": "Beispieltext: Hier beschreiben wir später Ihre Beratungsfelder."
+    },
+    {
+      "title": "Ablauf",
+      "text": "Beispieltext: Hier erklären wir später den Ablauf eines Erstgesprächs."
+    },
+    {
+      "title": "Kontakt",
+      "text": "Beispieltext: Hier stehen später Ihre Kontaktmöglichkeiten."
+    }
+  ],
+  "imageLogic": {
+    "mode": "placeholder",
+    "slots": [],
+    "note": "Keine fremden Bilder oder Logos. Platzhalter, bis der Kunde eigene Fotos liefert; später lizenzierte oder generierte neutrale Assets."
+  },
+  "cta": {
+    "primary": "Beratung anfragen",
+    "secondary": "Anrufen",
+    "sticky": true
+  },
+  "seo": {
+    "titleFormat": "{name} – Beratung in {city}",
+    "descriptionFormat": "{name} in {city}: Beratung. Kontakt, Leistungen und Öffnungszeiten."
+  },
+  "components": [
+    "hero",
+    "card-grid",
+    "gallery-placeholder",
+    "booking-cta",
+    "contact-block",
+    "hours-block"
+  ]
+}
