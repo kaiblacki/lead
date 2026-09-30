@@ -3,7 +3,10 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import type { Repo } from '../db/repo.ts';
 import type { Lead } from '../core/types.ts';
-import type { Status } from '../core/status.ts';
+import { nextStatuses, type Status } from '../core/status.ts';
+import { pickTemplate, templateByKey, TEMPLATES, GENERIC } from '../templates/index.ts';
+import { renderDemo } from '../demo/render.ts';
+import { buildOffer, type Offer } from '../offers/generate.ts';
 import { fetchSite } from '../auditor/fetch.ts';
 import { runPipeline } from '../pipeline.ts';
 import { Budget } from '../guardrails/budget.ts';
@@ -47,6 +50,18 @@ ${killOn ? '<span class="kill"><b>KILL SWITCH AKTIV</b></span>' : ''}
   const post = (action: string, label: string, extra = '', cls = '') =>
     `<form method="post" action="${action}" style="display:inline"><input type="hidden" name="csrf" value="${csrf}">${extra}<button class="${cls}">${label}</button></form>`;
 
+
+  const offerHtml = (o: any) => {
+    const c = o.content as Offer;
+    return `<p><b>${esc(c.title)}</b> – Status: <b>${esc(o.status)}</b> · gültig bis ${esc(c.validUntil)}</p>
+      <ul>${c.scope.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
+      <table><tr><td>Gesamtpreis</td><td>${eur(c.priceCents)}</td></tr><tr><td>Anzahlung</td><td>${eur(c.depositCents)}</td></tr><tr><td>Restzahlung nach Freigabe</td><td>${eur(c.finalCents)}</td></tr>
+      <tr><td>Wartung (optional)</td><td>${eur(c.maintenanceCentsPerMonth)}/Monat</td></tr></table>
+      <p><small>Wartung: ${c.maintenanceScope.map(esc).join(', ')} · Änderungen: ${c.revisionRounds} Korrekturrunden · ${esc(c.deliveryNote)} · ${esc(c.vatNote)}</small></p>
+      <p><small>${c.terms.map(esc).join('<br>')}</small></p>
+      ${c.warnings.map((w) => `<p class="err">${esc(w)}</p>`).join('')}`;
+  };
+
   async function rowToLead(id: string): Promise<Lead> {
     const d = await repo.getLead(id);
     if (!d) throw new Error('Lead nicht gefunden');
@@ -80,6 +95,7 @@ ${killOn ? '<span class="kill"><b>KILL SWITCH AKTIV</b></span>' : ''}
         const d = await repo.getLead(m[1]);
         if (!d) return send(404, page('Nicht gefunden', '<p>Lead nicht gefunden.</p>', killSwitch));
         const { lead: l, opportunity: o, findings, sales: s, events } = d;
+        const [demos, offer] = await Promise.all([repo.listDemos(l.id), repo.latestOffer(l.id)]);
         return send(200, page(l.company_name, `<div class="card"><div class="row"><h2 style="margin:0">${esc(l.company_name)}</h2><span class="badge ${esc(String(o?.category ?? '').replace(' ', '-'))}">${esc(o?.category ?? '–')}</span><b>${o?.score ?? '–'}</b><span class="grow"></span><small>${esc(l.status)}${l.paused ? ' · ⏸ pausiert' : ''}</small></div>
           <p><small>${esc(l.address ?? '')} ${esc(l.city ?? '')} · Tel ${esc(l.phone ?? '–')} · Web ${esc(l.website_url ?? '–')} · Quelle ${esc(l.source)} · zuletzt analysiert ${fmt(l.last_analyzed_at)}</small></p>
           <div class="row">${l.paused ? post(`/lead/${l.id}/resume`, 'Fortsetzen', '', 'ok') : post(`/lead/${l.id}/pause`, 'Pausieren')}
@@ -93,6 +109,22 @@ ${killOn ? '<span class="kill"><b>KILL SWITCH AKTIV</b></span>' : ''}
             <textarea name="opener" rows="4">${esc(s.opener)}</textarea><p><button>Änderung speichern (erfordert neue Freigabe)</button></p></form>
             ${s.approved_at ? '' : post(`/lead/${l.id}/approve`, 'Freigeben', '', 'ok')}
             <p class="manual">Manuelle Kontaktaufnahme erforderlich – es wird nichts automatisch gesendet.</p></div>` : ''}
+          <div class="card"><b>Status (CRM)</b> – ${esc(l.status)}
+            <form class="row" method="post" action="/lead/${l.id}/status"><input type="hidden" name="csrf" value="${csrf}">
+            <select name="to">${nextStatuses(l.status).map((x) => `<option>${x}</option>`).join('') || '<option disabled>keine weiteren Schritte</option>'}</select>
+            <input name="reason" placeholder="Grund / Notiz" required><button>Setzen</button></form></div>
+          <div class="card"><b>Demo-Website</b>
+            ${/\[[^\]]{3,}\]/.test(JSON.stringify(cfgJson('agency.json'))) ? '<p class="err">Agentur-Angaben in config/agency.json sind noch Platzhalter – vor dem Teilen einer Demo ausfüllen.</p>' : ''}
+            <form class="row" method="post" action="/lead/${l.id}/demo"><input type="hidden" name="csrf" value="${csrf}">
+            <select name="template">${[pickTemplate(l.industry, l.company_name), ...TEMPLATES, GENERIC].filter((t, i, a) => a.findIndex((x) => x.key === t.key) === i).map((t, i) => `<option value="${t.key}">${esc(t.label)}${i === 0 ? ' (empfohlen)' : ''}</option>`).join('')}</select>
+            <button>Demo erstellen</button></form>
+            <table>${demos.map((d: any) => { const url = `/d/${d.token}`; const dead = d.revoked || new Date(d.expires_at) < new Date(); return `<tr><td>${dead ? `<s>${esc(d.template)}</s> (${d.revoked ? 'widerrufen' : 'abgelaufen'})` : `<a href="${url}" target="_blank" rel="noopener noreferrer">${esc(d.template)}</a>`}</td><td><small>bis ${fmt(d.expires_at)} · ${d.view_count}× gesehen</small></td><td>${dead ? '' : post(`/demo/${d.id}/revoke`, 'Widerrufen')}</td></tr>`; }).join('')}</table>
+            ${demos.some((d: any) => !d.revoked && new Date(d.expires_at) > new Date()) ? `<p><small>Link kopieren: Rechtsklick auf den Namen → Link-Adresse kopieren. Nicht indexierbar, nur mit dem geheimen Link erreichbar.</small></p>` : ''}</div>
+          <div class="card"><b>Angebot</b>${offer ? offerHtml(offer) : '<p>Noch kein Angebot.</p>'}
+            <div class="row">${s ? post(`/lead/${l.id}/offer`, offer ? 'Neu erstellen' : 'Angebot erstellen') : '<small>Erst nach einer Verkaufsgrundlage möglich.</small>'}
+            ${offer?.status === 'DRAFT' ? post(`/offer/${offer.id}/approve`, 'Freigeben', '', 'ok') : ''}
+            ${offer?.status === 'APPROVED' ? post(`/offer/${offer.id}/sent`, 'Als von mir versendet markieren') : ''}</div>
+            <p><small>Es wird nichts automatisch versendet. Versand und Vertragstexte liegen bei dir.</small></p></div>
           <div class="card"><b>Verlauf</b><table>${events.map((e: any) => `<tr><td><small>${fmt(e.created_at)}</small></td><td>${esc(e.type)}</td><td><small>${esc(e.payload?.reason ?? e.payload?.actor ?? '')}</small></td></tr>`).join('')}</table></div>`, killSwitch));
       }
       if (path === '/settings') {
@@ -129,6 +161,30 @@ ${killOn ? '<span class="kill"><b>KILL SWITCH AKTIV</b></span>' : ''}
         if (!['email', 'phone', 'domain', 'company'].includes(kind) || !value.trim()) throw new Error('Ungültiger Eintrag');
         await repo.addSuppression(kind, value); return back('/settings');
       }
+      let m2 = path.match(/^\/demo\/([0-9a-f-]{36})\/revoke$/);
+      if (m2) return back(`/lead/${await repo.revokeDemo(m2[1])}`);
+      m2 = path.match(/^\/offer\/([0-9a-f-]{36})\/(approve|sent)$/);
+      if (m2) return back(`/lead/${m2[2] === 'approve' ? await repo.approveOffer(m2[1]) : await repo.markOfferSent(m2[1])}`);
+      m2 = path.match(/^\/lead\/([0-9a-f-]{36})\/(status|demo|offer)$/);
+      if (m2) {
+        const [, id, act] = m2;
+        if (act === 'status') {
+          const to = form.get('to') ?? '';
+          if (!nextStatuses((await repo.getLead(id))!.lead.status).includes(to as Status)) throw new Error('Dieser Statuswechsel ist nicht erlaubt');
+          await repo.setStatus(id, to as Status, (form.get('reason') ?? '').slice(0, 300));
+        } else if (act === 'demo') {
+          const d = await repo.getLead(id); if (!d) throw new Error('Lead nicht gefunden');
+          const lead = await rowToLead(id);
+          const agency = cfgJson('agency.json');
+          const t = form.get('template') ? templateByKey(form.get('template')!) : pickTemplate(lead.industry, lead.companyName);
+          await repo.createDemo(id, t.key, renderDemo(lead, t, agency), agency.demoValidDays ?? 30);
+        } else {
+          const d = await repo.getLead(id);
+          if (!d?.sales) throw new Error('Erst eine Verkaufsgrundlage erzeugen');
+          await repo.createOffer(id, buildOffer(await rowToLead(id), { offerName: d.sales.offer_name }, cfgJson('pricing.json')));
+        }
+        return back(`/lead/${id}`);
+      }
       const m = path.match(/^\/lead\/([0-9a-f-]{36})\/(pause|resume|reject|reanalyze|approve|edit)$/);
       if (m) {
         const [, id, act] = m;
@@ -153,6 +209,16 @@ ${killOn ? '<span class="kill"><b>KILL SWITCH AKTIV</b></span>' : ''}
   }
 
   return http.createServer(async (req, res) => {
+    const pub = (req.url ?? '').match(/^\/d\/([0-9a-f]{64})(?:\?.*)?$/);
+    if (pub && req.method === 'GET') {
+      try {
+        const html = await repo.getDemoByToken(pub[1]);
+        if (!html) { res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8', 'x-robots-tag': 'noindex' }); return void res.end('Nicht gefunden'); }
+        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'x-robots-tag': 'noindex, nofollow, noarchive', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer',
+          'x-frame-options': 'DENY', 'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'" });
+        return void res.end(html);
+      } catch { res.writeHead(500); return void res.end('Fehler'); }
+    }
     if (!authOk(req)) { res.writeHead(401, { 'www-authenticate': 'Basic realm="Agency OS"' }); return void res.end('Anmeldung erforderlich'); }
     try {
       const url = new URL(req.url ?? '/', 'http://localhost');

@@ -1,9 +1,21 @@
 {
   "currency": "EUR",
   "offers": {
-    "website_starter": { "name": "Website Starter", "priceCents": 129000, "depositCents": 39000, "maintenanceCentsPerMonth": 4900 },
-    "website_modernisierung": { "name": "Website Modernisierung", "priceCents": 129000, "depositCents": 39000, "maintenanceCentsPerMonth": 4900 }
+    "website_starter": {
+      "name": "Website Starter", "priceCents": 129000, "depositCents": 39000, "maintenanceCentsPerMonth": 4900,
+      "scope": ["Individuelle mobile-first Website (bis zu 5 Seiten)", "Kontaktwege: Telefon, E-Mail, Anfrageformular", "Grundlegende Suchmaschinen-Einrichtung (SEO-Basis)", "Veröffentlichung auf eigener Domain nach Freigabe"],
+      "revisionRounds": 2, "deliveryNote": "[Lieferzeit festlegen, z. B. nach Anzahlung und Eingang aller Inhalte]"
+    },
+    "website_modernisierung": {
+      "name": "Website Modernisierung", "priceCents": 129000, "depositCents": 39000, "maintenanceCentsPerMonth": 4900,
+      "scope": ["Neue mobile-first Website anstelle der bestehenden (bis zu 5 Seiten)", "Übernahme vorhandener Inhalte, soweit vom Kunden bereitgestellt", "Klarer Kontaktweg und, falls gewünscht, Online-Terminbuchung", "Grundlegende Suchmaschinen-Einrichtung (SEO-Basis)", "Veröffentlichung nach Freigabe"],
+      "revisionRounds": 2, "deliveryNote": "[Lieferzeit festlegen, z. B. nach Anzahlung und Eingang aller Inhalte]"
+    }
   },
   "noWebsiteOffer": "website_starter",
-  "existingWebsiteOffer": "website_modernisierung"
+  "existingWebsiteOffer": "website_modernisierung",
+  "offerValidDays": 14,
+  "vatNote": "[Umsatzsteuer-Hinweis festlegen]",
+  "maintenanceScope": ["Verfügbarkeitsprüfung", "Technische Checks", "Kleinere Inhaltsänderungen nach Absprache"],
+  "termsDraft": ["[Vertragsbedingungen / AGB – vor Verwendung rechtlich prüfen lassen]", "Zahlung: Anzahlung vor Produktionsbeginn, Restzahlung nach Kundenfreigabe und vor Veröffentlichung."]
 }

@@ -8,13 +8,30 @@ import { renderReport } from './report/html.ts';
 import { Budget, DEFAULT_LIMITS } from './guardrails/budget.ts';
 import type { Lead } from './core/types.ts';
 import { Repo } from './db/repo.ts';
+import { renderDemo, demoWarnings } from './demo/render.ts';
+import { pickTemplate, templateByKey } from './templates/index.ts';
 
 const args = process.argv.slice(2);
 const flag = (n: string) => { const i = args.indexOf(`--${n}`); return i >= 0 ? args[i + 1] : undefined; };
 const json = (p: string) => JSON.parse(readFileSync(new URL(`../config/${p}`, import.meta.url), 'utf8'));
 
+async function demoCommand(file?: string) {
+  if (!file) throw new Error('Nutzung: node src/cli.ts demo <leads.csv> [--n 1] [--template friseur] [--out out/demo.html]');
+  const { leads } = leadsFromCsv(readFileSync(file, 'utf8'));
+  const lead = leads[Number(flag('n') ?? 1) - 1];
+  if (!lead) throw new Error('Lead nicht gefunden (--n beginnt bei 1)');
+  const t = flag('template') ? templateByKey(flag('template')!) : pickTemplate(lead.industry, lead.companyName);
+  const html = renderDemo(lead, t, json('agency.json'));
+  const out = flag('out') ?? 'out/demo.html';
+  mkdirSync(dirname(out), { recursive: true });
+  writeFileSync(out, html);
+  demoWarnings(html).forEach((w) => console.warn('Hinweis:', w));
+  console.log(`Demo (${t.label}) für ${lead.companyName} → ${out}`);
+}
+
 async function main() {
   const [cmd, file] = args;
+  if (cmd === 'demo') return demoCommand(file);
   if (cmd !== 'analyze') {
     console.log('Nutzung:\n  node src/cli.ts analyze <leads.csv> [--out out/report.html] [--limit 100] [--offline]\n  node src/cli.ts analyze --search "Friseur" --region "Saarland" [--limit 20]   (braucht GOOGLE_PLACES_API_KEY)');
     process.exit(cmd ? 1 : 0);

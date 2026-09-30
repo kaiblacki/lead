@@ -145,3 +145,66 @@ test('Events sind append-only für angemeldete Nutzer (über RLS-Rolle)', { skip
     await assert.rejects(() => c.query('delete from events'), /permission denied/);
   } finally { await c.query('reset role'); c.release(); }
 });
+
+test('Demo: erstellen, öffentlicher Link ohne Login, noindex, Zähler, Widerruf, Ablauf', { skip }, async () => {
+  const id = (await repo.listLeads({ q: 'Kein Web' }))[0].id;
+  assert.equal((await repo.getLead(id))!.lead.status, 'QUALIFIED');
+  assert.equal((await post(`/lead/${id}/demo`, { template: 'friseur' })).status, 303);
+  assert.equal((await repo.getLead(id))!.lead.status, 'DEMO_CREATED');
+  const [d] = await repo.listDemos(id);
+  assert.equal(d.token.length, 64);
+  // öffentlich: ohne Authorization
+  const pub = await fetch(`${base}/d/${d.token}`);
+  assert.equal(pub.status, 200);
+  assert.match(pub.headers.get('x-robots-tag') ?? '', /noindex/);
+  assert.match(pub.headers.get('content-security-policy') ?? '', /default-src 'none'/);
+  assert.match(await pub.text(), /Unverbindliche Demo/);
+  assert.equal((await repo.listDemos(id))[0].view_count, 1);
+  // Dashboard bleibt geschützt, geratene Tokens liefern 404
+  assert.equal((await fetch(`${base}/`)).status, 401);
+  assert.equal((await fetch(`${base}/d/${'0'.repeat(64)}`)).status, 404);
+  assert.equal((await fetch(`${base}/d/kurz`)).status, 401);
+  // Widerruf
+  await post(`/demo/${d.id}/revoke`, {});
+  assert.equal((await fetch(`${base}/d/${d.token}`)).status, 404);
+  // Ablauf
+  await post(`/lead/${id}/demo`, { template: 'friseur' });
+  const d2 = (await repo.listDemos(id))[0];
+  await pool.query("update demos set expires_at = now() - interval '1 minute' where id=$1", [d2.id]);
+  assert.equal((await fetch(`${base}/d/${d2.token}`)).status, 404);
+  assert.match(await (await get('/lead/' + id)).text(), /abgelaufen/);
+});
+
+test('CRM-Status: nur erlaubte Schritte, Grund Pflicht', { skip }, async () => {
+  const id = (await repo.listLeads({ q: 'Kein Web' }))[0].id;
+  assert.equal((await post(`/lead/${id}/status`, { to: 'DEPLOYED', reason: 'x' })).status, 400);
+  for (const to of ['CONTACTED', 'REPLIED', 'INTERESTED']) assert.equal((await post(`/lead/${id}/status`, { to, reason: 'Telefonat' })).status, 303);
+  assert.equal((await repo.getLead(id))!.lead.status, 'INTERESTED');
+});
+
+test('Angebot: Entwurf → Freigabe → versendet; Reihenfolge wird erzwungen', { skip }, async () => {
+  const id = (await repo.listLeads({ q: 'Kein Web' }))[0].id;
+  await post(`/lead/${id}/offer`, {});
+  let o = await repo.latestOffer(id);
+  assert.equal(o.status, 'DRAFT'); assert.equal(o.deposit_cents + o.final_cents, o.price_cents);
+  assert.equal(o.content.title, 'Website Starter');
+  assert.equal((await post(`/offer/${o.id}/sent`, {})).status, 400);       // nicht freigegeben
+  await post(`/offer/${o.id}/approve`, {});
+  assert.equal((await repo.latestOffer(id)).status, 'APPROVED');
+  assert.equal((await post(`/offer/${o.id}/approve`, {})).status, 400);    // nur aus DRAFT
+  await post(`/offer/${o.id}/sent`, {});
+  o = await repo.latestOffer(id);
+  assert.equal(o.status, 'SENT');
+  assert.equal((await repo.getLead(id))!.lead.status, 'OFFER_SENT');
+  assert.match(await (await get('/lead/' + id)).text(), /Es wird nichts automatisch versendet/);
+  // Mandantentrennung
+  assert.equal(await other.latestOffer(id), null);
+  await assert.rejects(() => other.approveOffer(o.id), /nicht gefunden/);
+  // DB-Regel: Summen müssen stimmen
+  await assert.rejects(() => pool.query("insert into offers(owner_id, lead_id, content, price_cents, deposit_cents, final_cents, maintenance_cents) values ($1,$2,'{}',100,10,10,0)", [OWNER, id]), /check/);
+});
+
+test('Angebot ohne Verkaufsgrundlage wird abgelehnt', { skip }, async () => {
+  const id = (await repo.listLeads({ q: 'Down Salon' }))[0].id;
+  assert.equal((await post(`/lead/${id}/offer`, {})).status, 400);
+});

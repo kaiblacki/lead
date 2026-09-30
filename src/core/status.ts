@@ -57,3 +57,5 @@ export function analysisPath(from: Status, to: Status): Status[] {
   }
   return [];
 }
+
+export const nextStatuses = (from: Status): Status[] => [...NEXT[from]];

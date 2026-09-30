@@ -4,6 +4,8 @@ import { analysisPath, transition, type Status } from '../core/status.ts';
 import type { LeadReport } from '../pipeline.ts';
 import type { ScoringConfig } from '../scoring/opportunity.ts';
 import { DEFAULT_LIMITS, type Limits } from '../guardrails/budget.ts';
+import { randomBytes } from 'node:crypto';
+import type { Offer } from '../offers/generate.ts';
 
 type Q = pg.Pool | pg.PoolClient;
 
@@ -196,6 +198,75 @@ export class Repo {
     await this.pool.query('insert into suppression_list(owner_id, kind, value, reason) values ($1,$2,lower($3),$4) on conflict do nothing', [this.ownerId, kind, value.trim(), reason ?? null]);
     await this.event(this.pool, null, 'suppression_added', { actor: 'user', kind });
   }
+
+  /** Legt eine Demo mit geheimem Link-Token an. Setzt den Lead auf DEMO_CREATED, wenn er QUALIFIED ist. */
+  async createDemo(leadId: string, template: string, html: string, validDays: number): Promise<{ id: string; token: string }> {
+    return this.tx(async (c) => {
+      const l = await c.query('select status from leads where id=$1 and owner_id=$2 for update', [leadId, this.ownerId]);
+      if (!l.rows[0]) throw new Error('Lead nicht gefunden');
+      const token = randomBytes(32).toString('hex');
+      const r = await c.query('insert into demos(owner_id, lead_id, template, token, html, expires_at) values ($1,$2,$3,$4,$5, now() + ($6 || \' days\')::interval) returning id',
+        [this.ownerId, leadId, template, token, html, String(validDays)]);
+      if (l.rows[0].status === 'QUALIFIED') {
+        const ev = transition(leadId, 'QUALIFIED', 'DEMO_CREATED', 'Demo erstellt');
+        await c.query("update leads set status='DEMO_CREATED' where id=$1 and owner_id=$2", [leadId, this.ownerId]);
+        await this.event(c, leadId, 'status_change', { from: ev.from, to: ev.to, reason: ev.reason, actor: 'system' });
+      }
+      await this.event(c, leadId, 'demo_created', { demo_id: r.rows[0].id, template, actor: 'user' });
+      return { id: r.rows[0].id, token };
+    });
+  }
+  async listDemos(leadId: string) {
+    return (await this.pool.query('select id, template, token, expires_at, revoked, view_count, last_viewed_at, created_at from demos where lead_id=$1 and owner_id=$2 order by created_at desc', [leadId, this.ownerId])).rows;
+  }
+  async revokeDemo(demoId: string) {
+    const r = await this.pool.query('update demos set revoked=true where id=$1 and owner_id=$2 returning lead_id', [demoId, this.ownerId]);
+    if (!r.rowCount) throw new Error('Demo nicht gefunden');
+    await this.event(this.pool, r.rows[0].lead_id, 'demo_revoked', { demo_id: demoId, actor: 'user' });
+    return r.rows[0].lead_id as string;
+  }
+  /** Öffentlicher Abruf per Token (nur gültige, nicht widerrufene, nicht abgelaufene Demos). */
+  async getDemoByToken(token: string): Promise<string | null> {
+    if (!/^[0-9a-f]{64}$/.test(token)) return null;
+    const r = await this.pool.query('update demos set view_count = view_count + 1, last_viewed_at = now() where token=$1 and owner_id=$2 and not revoked and expires_at > now() returning html', [token, this.ownerId]);
+    return r.rows[0]?.html ?? null;
+  }
+
+  async createOffer(leadId: string, o: Offer) {
+    return this.tx(async (c) => {
+      const l = await c.query('select 1 from leads where id=$1 and owner_id=$2', [leadId, this.ownerId]);
+      if (!l.rowCount) throw new Error('Lead nicht gefunden');
+      const r = await c.query('insert into offers(owner_id, lead_id, content, price_cents, deposit_cents, final_cents, maintenance_cents) values ($1,$2,$3,$4,$5,$6,$7) returning id',
+        [this.ownerId, leadId, JSON.stringify(o), o.priceCents, o.depositCents, o.finalCents, o.maintenanceCentsPerMonth]);
+      await this.event(c, leadId, 'offer_created', { offer_id: r.rows[0].id, actor: 'user' });
+      return r.rows[0].id as string;
+    });
+  }
+  async latestOffer(leadId: string) {
+    return (await this.pool.query('select * from offers where lead_id=$1 and owner_id=$2 order by created_at desc, id desc limit 1', [leadId, this.ownerId])).rows[0] ?? null;
+  }
+  async approveOffer(offerId: string) {
+    const r = await this.pool.query("update offers set status='APPROVED', approved_at=now() where id=$1 and owner_id=$2 and status='DRAFT' returning lead_id", [offerId, this.ownerId]);
+    if (!r.rowCount) throw new Error('Angebot nicht gefunden oder nicht im Entwurf');
+    await this.event(this.pool, r.rows[0].lead_id, 'offer_approved', { offer_id: offerId, actor: 'user' });
+    return r.rows[0].lead_id as string;
+  }
+  /** Markiert das Angebot als von dir versendet. Nur freigegebene Angebote, nur aus Status INTERESTED. */
+  async markOfferSent(offerId: string) {
+    return this.tx(async (c) => {
+      const o = await c.query('select lead_id, status from offers where id=$1 and owner_id=$2 for update', [offerId, this.ownerId]);
+      if (!o.rows[0]) throw new Error('Angebot nicht gefunden');
+      if (o.rows[0].status !== 'APPROVED') throw new Error('Angebot muss zuerst freigegeben werden');
+      const leadId = o.rows[0].lead_id as string;
+      const l = await c.query('select status from leads where id=$1 and owner_id=$2 for update', [leadId, this.ownerId]);
+      const ev = transition(leadId, l.rows[0].status, 'OFFER_SENT', 'Angebot versendet (manuell)');
+      await c.query("update leads set status='OFFER_SENT' where id=$1 and owner_id=$2", [leadId, this.ownerId]);
+      await c.query("update offers set status='SENT', sent_at=now() where id=$1 and owner_id=$2", [offerId, this.ownerId]);
+      await this.event(c, leadId, 'status_change', { from: ev.from, to: ev.to, reason: ev.reason, actor: 'user' });
+      return leadId;
+    });
+  }
+
   async recentEvents(limit = 30) {
     return (await this.pool.query('select e.type, e.payload, e.created_at, l.company_name from events e left join leads l on l.id=e.lead_id where e.owner_id=$1 order by e.id desc limit $2', [this.ownerId, limit])).rows;
   }
