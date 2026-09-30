@@ -162,3 +162,24 @@ test('Restzahlung → Veröffentlichung → Wartung (Abo) → Wartungscheck', { 
   const hist = (await pool.query("select type from events where owner_id=$1 and type in ('payment_paid','order_status','customer_approved','build_done')", [OWNER])).rows;
   assert.ok(hist.length >= 10);
 });
+
+test('Social Media: Kalender erzeugen, bearbeiten, freigeben (nur gültige), CSV-Export', { skip }, async () => {
+  assert.equal((await post(`/lead/${leadId}/social`, { profile: 'friseur', weeks: '2', services: 'Herrenschnitt\nFärben', openingHours: '', offer: '', website: '' })).status, 303);
+  let items = await repo.listSocial(leadId);
+  assert.ok(items.length >= 6); assert.ok(items.every((i: any) => i.status === 'DRAFT'));
+  assert.match(await (await get(`/lead/${leadId}/social`)).text(), /Kalender erzeugen/);
+  assert.equal((await post(`/lead/${leadId}/social`, { profile: 'friseur', weeks: '99' })).status, 400);
+  const it = items[0];
+  assert.equal((await post(`/social/${it.id}/approve`)).status, 303);
+  assert.equal((await repo.listSocial(leadId)).find((x: any) => x.id === it.id).status, 'APPROVED');
+  await post(`/social/${it.id}/edit`, { title: 'Neu', body: 'Geänderter Text' });
+  assert.equal((await repo.listSocial(leadId)).find((x: any) => x.id === it.id).status, 'DRAFT');   // erneute Freigabe nötig
+  await post(`/social/${it.id}/edit`, { title: 'Neu', body: 'Hallo {name}' });
+  assert.equal((await post(`/social/${it.id}/approve`)).status, 400);                              // Platzhalter blockiert Freigabe
+  await post(`/social/${it.id}/edit`, { title: 'Neu', body: 'Geänderter Text' });
+  await post(`/social/${it.id}/approve`);
+  await post(`/social/${items[1].id}/reject`);
+  const csv = await (await get(`/lead/${leadId}/social.csv`)).text();
+  assert.match(csv, /Geänderter Text/); assert.equal(csv.trim().split('\n').length, 2);             // Kopfzeile + 1 freigegebener Eintrag
+  assert.equal((await post(`/social/${'0'.repeat(8)}-0000-0000-0000-${'0'.repeat(12)}/approve`)).status, 400);
+});

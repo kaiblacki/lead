@@ -24,7 +24,7 @@ node --env-file=.env src/serve.ts                              # Dashboard auf h
 ```
 Dashboard: Lead-Liste mit Filtern, Detailseite (Begründung, Befunde mit Beleg, Verkaufsgrundlage, Verlauf), Pausieren, Retry, Ablehnen, Einstiegstext freigeben/bearbeiten, STOP-alles-Knopf, Budget-Limits, Score-Gewichte, Sperrliste.
 Sicherheit: Passwortschutz (Pflicht, mind. 12 Zeichen), CSRF-Token, nur `127.0.0.1` standardmäßig. Die DB-Verbindung umgeht RLS – `DATABASE_URL` nur serverseitig und nie in Git.
-Tests mit Datenbank: `npm run test:db` (legt lokale Test-DB `dbtest` an, 17 Tests).
+Tests mit Datenbank: `npm run test:db` (legt lokale Test-DB `dbtest` an, 18 Tests).
 
 ## Phase 2/3: Demo und Angebot
 - `node src/cli.ts demo examples/leads.csv --n 2` erzeugt eine Demo-Datei zur Ansicht (`out/demo.html`).
@@ -61,5 +61,13 @@ Die Zahlungslogik ist im Code nicht zu umgehen: keine Produktion ohne Anzahlung,
 **Nicht gegen die echten Dienste getestet:** `StripeProvider` und `VercelDeployer` sind mit gemockten HTTP-Antworten und selbst signierten Webhooks geprüft, aber noch nie gegen Stripe oder Vercel gelaufen. Erst mit Stripe-**Testschlüsseln** (`sk_test_…`) und der Stripe CLI (`stripe listen --forward-to …/webhooks/stripe`) durchspielen, dann erst live.
 Wiederkehrende Abo-Rechnungen (Verlängerung, Zahlungsausfall, Kündigung) werden noch nicht verarbeitet, nur der Start des Abos.
 
+## Phase 6: Social Media
+Lead-Detailseite → „Content-Kalender öffnen". Die Engine erzeugt für 1–12 Wochen Entwürfe: 2 Feed-Posts pro Woche und Plattform (Instagram, Facebook, bei B2B-nahen Branchen LinkedIn), Stories, Reel-Ideen, monatlich eine Blog-Gliederung und ein Newsletter-Gerüst.
+- **Branchenwechsel = anderes Profil** (`src/social/profiles.ts`: Zielgruppe, Ton, Themen, Hashtags, Plattformen). Die Engine (`src/social/generate.ts`) bleibt gleich. 8 Profile + Allgemein.
+- **Keine erfundenen Fakten:** Leistungen, Öffnungszeiten und Angebote erscheinen nur, wenn du sie einträgst. Ohne Angabe werden stattdessen Fragen, Kontakt-Posts und Ideen für eigene Fotos/Videos verwendet.
+- **Regulierte Branchen** (Zahnarzt, Versicherung): keine Ratschläge, an jedem Eintrag ein Hinweis auf Heilmittel-/Finanzwerberecht.
+- Alle Einträge sind Entwürfe. Freigabe nur, wenn der Text gültig ist (Länge je Plattform, keine Platzhalter). Bearbeiten setzt auf Entwurf zurück. Export der freigegebenen als CSV. **Es wird nichts automatisch gepostet.**
+- Die Texte sind Vorlagen, keine KI-Texte. Eine KI-Verfeinerung (mit denselben Regeln) ist möglich, aber noch nicht gebaut.
+
 ## Bewusst noch nicht gebaut
-Automatischer Versand (E-Mail/Messenger) und Antwort-Klassifizierung (rechtlich riskant, UWG § 7), KI-Sales-Agent, KI-gestützte Umsetzung von Änderungswünschen, automatische Wartungsberichte per E-Mail, Social-Media-Engine. Begründung: `docs/ARCHITEKTUR.md`.
+Automatischer Versand (E-Mail/Messenger) und Antwort-Klassifizierung (rechtlich riskant, UWG § 7), KI-Sales-Agent, KI-gestützte Umsetzung von Änderungswünschen, automatisches Posten in sozialen Netzwerken, Wartungsberichte per E-Mail, Verarbeitung von Abo-Verlängerungen/Kündigungen, Hosting des Dashboards auf Vercel. Begründung: `docs/ARCHITEKTUR.md`.

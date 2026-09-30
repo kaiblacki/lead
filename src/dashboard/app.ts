@@ -8,6 +8,8 @@ import { pickTemplate, templateByKey, TEMPLATES, GENERIC } from '../templates/in
 import { renderDemo } from '../demo/render.ts';
 import { buildOffer, type Offer } from '../offers/generate.ts';
 import { createOrdersCtx, renderOrderSection, handleOrderPost, handlePublic, servePreview, type OrdersCtx } from './orders-ui.ts';
+import { PROFILES, GENERAL, profileByKey } from '../social/profiles.ts';
+import { generatePlan, validateItem, toCsv, type Business, type Item } from '../social/generate.ts';
 import type { PaymentProvider } from '../payments/provider.ts';
 import type { Deployer } from '../deploy/adapters.ts';
 import { fetchSite } from '../auditor/fetch.ts';
@@ -131,7 +133,35 @@ ${killOn ? '<span class="kill"><b>KILL SWITCH AKTIV</b></span>' : ''}
             ${offer?.status === 'APPROVED' ? post(`/offer/${offer.id}/sent`, 'Als von mir versendet markieren') : ''}</div>
             <p><small>Es wird nichts automatisch versendet. Versand und Vertragstexte liegen bei dir.</small></p></div>
           ${orderHtml}
+          <div class="card row"><b>Social Media</b><span class="grow"></span><a href="/lead/${l.id}/social">Content-Kalender öffnen</a></div>
           <div class="card"><b>Verlauf</b><table>${events.map((e: any) => `<tr><td><small>${fmt(e.created_at)}</small></td><td>${esc(e.type)}</td><td><small>${esc(e.payload?.reason ?? e.payload?.actor ?? '')}</small></td></tr>`).join('')}</table></div>`, killSwitch));
+      }
+      const sm = path.match(/^\/lead\/([0-9a-f-]{36})\/social(\.csv)?$/);
+      if (sm) {
+        const d = await repo.getLead(sm[1]);
+        if (!d) return send(404, page('Nicht gefunden', '<p>Lead nicht gefunden.</p>', killSwitch));
+        const items = await repo.listSocial(sm[1]);
+        if (sm[2]) {
+          const csv = toCsv(items.filter((i: any) => i.status === 'APPROVED').map((i: any): Item => ({ date: new Date(i.scheduled_for).toISOString().slice(0, 10), platform: i.platform, format: i.format, title: i.title, body: i.body, hashtags: i.hashtags, notes: i.notes })));
+          res.writeHead(200, { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': 'attachment; filename="content-kalender.csv"' }); return void res.end('\ufeff' + csv);
+        }
+        const l = d.lead;
+        const defProfile = pickTemplate(l.industry, l.company_name).key;
+        return send(200, page('Social Media', `<div class="card"><h2 style="margin:0">Social Media – ${esc(l.company_name)}</h2>
+          <p><small>Alle Einträge sind Entwürfe. Es wird nichts automatisch veröffentlicht. Tatsachen (Leistungen, Angebote, Öffnungszeiten) nennt die Engine nur, wenn du sie unten einträgst.</small></p>
+          <form method="post" action="/lead/${l.id}/social"><input type="hidden" name="csrf" value="${csrf}">
+          <div class="row"><label>Branchenprofil <select name="profile">${[...PROFILES, GENERAL].map((p) => `<option value="${p.key}"${p.key === defProfile ? ' selected' : ''}>${esc(p.label)}</option>`).join('')}</select></label>
+          <label>Wochen <input type="number" name="weeks" min="1" max="12" value="4" style="width:70px"></label></div>
+          <label>Leistungen (eine pro Zeile, optional)<br><textarea name="services" rows="3"></textarea></label>
+          <label>Öffnungszeiten (optional)<br><textarea name="openingHours" rows="2">${esc(l.opening_hours ?? '')}</textarea></label>
+          <label>Aktuelles Angebot (optional)<br><input name="offer" style="width:100%;box-sizing:border-box"></label>
+          <label>Website (optional)<br><input name="website" style="width:100%;box-sizing:border-box"></label>
+          <p><button>Kalender erzeugen</button> <a href="/lead/${l.id}">Zurück zum Lead</a> · <a href="/lead/${l.id}/social.csv">Freigegebene als CSV</a></p></form></div>
+          ${items.map((i: any) => { const errs = validateItem(i); const when = new Date(i.scheduled_for).toISOString().slice(0, 10); return `<div class="card"><div class="row"><b>${when}</b><span class="badge">${esc(i.platform)}</span><small>${esc(i.format)}</small><span class="grow"></span><small>${esc(i.status)}</small></div>
+            <form method="post" action="/social/${i.id}/edit"><input type="hidden" name="csrf" value="${csrf}"><input name="title" value="${esc(i.title)}" style="width:100%;box-sizing:border-box"><textarea name="body" rows="4">${esc(i.body)}</textarea>
+            <p><button>Speichern (erfordert neue Freigabe)</button></p></form>
+            ${(i.notes as string[]).map((n) => `<p><small>ℹ️ ${esc(n)}</small></p>`).join('')}${errs.map((e) => `<p class="err">${esc(e)}</p>`).join('')}
+            <div class="row">${i.status !== 'APPROVED' && !errs.length ? post(`/social/${i.id}/approve`, 'Freigeben', '', 'ok') : ''}${i.status !== 'REJECTED' ? post(`/social/${i.id}/reject`, 'Ablehnen', '', 'danger') : ''}</div></div>`; }).join('') || '<p>Noch kein Kalender.</p>'}`, killSwitch));
       }
       const pm = path.match(/^\/order\/([0-9a-f-]{36})\/preview\/([\w.\-]+)$/);
       if (pm) { if (await servePreview(octx, res, pm[1], pm[2])) return; return send(404, page('Nicht gefunden', '<p>Keine Vorschau vorhanden.</p>', killSwitch)); }
@@ -168,6 +198,24 @@ ${killOn ? '<span class="kill"><b>KILL SWITCH AKTIV</b></span>' : ''}
         const kind = form.get('kind') ?? '', value = form.get('value') ?? '';
         if (!['email', 'phone', 'domain', 'company'].includes(kind) || !value.trim()) throw new Error('Ungültiger Eintrag');
         await repo.addSuppression(kind, value); return back('/settings');
+      }
+      let sp = path.match(/^\/lead\/([0-9a-f-]{36})\/social$/);
+      if (sp) {
+        const d = await repo.getLead(sp[1]); if (!d) throw new Error('Lead nicht gefunden');
+        const l = d.lead;
+        const lines = (k: string) => (form.get(k) ?? '').split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 10);
+        const biz: Business = { name: l.company_name, city: l.city ?? undefined, phone: l.phone ?? undefined, openingHours: (form.get('openingHours') ?? '').trim() || undefined,
+          services: lines('services'), offer: (form.get('offer') ?? '').trim() || undefined, website: (form.get('website') ?? '').trim() || undefined };
+        const weeks = Number(form.get('weeks') ?? 4);
+        if (!Number.isInteger(weeks) || weeks < 1 || weeks > 12) throw new Error('Wochen: 1 bis 12');
+        const prof = profileByKey(form.get('profile') ?? '');
+        await repo.createSocialPlan(sp[1], prof.key, generatePlan(biz, prof, { weeks }));
+        return back(`/lead/${sp[1]}/social`);
+      }
+      sp = path.match(/^\/social\/([0-9a-f-]{36})\/(approve|reject|edit)$/);
+      if (sp) {
+        const leadId = sp[2] === 'edit' ? await repo.editSocial(sp[1], form.get('title') ?? '', form.get('body') ?? '') : await repo.setSocialStatus(sp[1], sp[2] === 'approve' ? 'APPROVED' : 'REJECTED');
+        return back(`/lead/${leadId}/social`);
       }
       const orderRedirect = await handleOrderPost(octx, path, form);
       if (orderRedirect) return back(orderRedirect);
