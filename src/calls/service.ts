@@ -11,6 +11,8 @@ export const CALL_RESULTS = ['NO_ANSWER', 'NO_INTEREST', 'CALL_BACK', 'INTERESTE
 export type CallResult = (typeof CALL_RESULTS)[number];
 export const CALL_LABEL: Record<CallResult, string> = { NO_ANSWER: 'Nicht erreicht', NO_INTEREST: 'Kein Interesse', CALL_BACK: 'Rückruf', INTERESTED: 'Interessiert', DEMO: 'Demo gewünscht', OFFER: 'Angebot gewünscht', BOUGHT: 'Gekauft', DO_NOT_CONTACT: 'Nicht mehr kontaktieren' };
 const PRE_SALE: Status[] = ['QUALIFIED', 'DEMO_CREATED', 'CONTACTED', 'REPLIED', 'INTERESTED', 'OFFER_SENT'];
+/** Absteigend nach Wert; fehlende Werte zuletzt. Reihenfolge der Anrufliste: Sales Opportunity → Datenqualität → Contactability → Digital Need. */
+const cmp = (a: number | null | undefined, b: number | null | undefined) => (a ?? -1) - (b ?? -1);
 const FOLLOW_UP_DAYS = 3, MAX_ATTEMPTS = 3;
 
 export type CallOutcome = { result: CallResult; moved: Status[]; messages: string[]; demoUrl?: string; offerId?: string; orderId?: string };
@@ -29,17 +31,17 @@ export class CallService {
     const dayStart = startOfBerlinDay(now), dayEnd = endOfBerlinDay(now);
     const settings = await this.repo.getSettings();
     const base = `select l.id, l.company_name, l.city, l.sub_industry, l.status, l.phone, l.website_url, l.website_state, l.distance_km, l.callback_at, l.last_contact_at, l.call_count, l.is_mock, l.contact_reason,
-        o.score, o.category, sp.brief, sp.opener, sp.approved_at,
+        o.score, o.category, o.digital_need, (o.dimensions->'dataQuality'->>'value')::float as dq, (o.dimensions->'contactability'->>'value')::float as contactability, l.address, l.source, sp.brief, sp.opener, sp.approved_at,
         (select note from contact_history h where h.lead_id = l.id and h.note is not null order by at desc limit 1) as last_note,
         (select result from contact_history h where h.lead_id = l.id and h.channel='PHONE' order by at desc limit 1) as last_result
       from leads l
-      left join lateral (select score, category from opportunities where lead_id = l.id order by created_at desc, id desc limit 1) o on true
+      left join lateral (select score, category, digital_need, dimensions from opportunities where lead_id = l.id order by created_at desc, id desc limit 1) o on true
       left join lateral (select brief, opener, approved_at from sales_packages where lead_id = l.id order by created_at desc, id desc limit 1) sp on true
       where l.owner_id = $1 and l.contact_readiness = 'READY_FOR_MANUAL_CALL' and not l.paused and not l.contact_blocked and l.phone is not null`;
     const doneToday = (await this.pool.query("select count(*)::int n, count(distinct lead_id)::int leads from contact_history where owner_id=$1 and channel='PHONE' and at >= $2 and at < $3", [this.owner, dayStart, dayEnd])).rows[0];
     const handledIds = new Set((await this.pool.query("select distinct lead_id from contact_history where owner_id=$1 and channel='PHONE' and at >= $2 and at < $3", [this.owner, dayStart, dayEnd])).rows.map((r) => r.lead_id));
     const callbacks = (await this.pool.query(`${base} and l.callback_at < $2 and l.status = any($3) order by l.callback_at`, [this.owner, dayEnd, PRE_SALE])).rows;
-    const fresh = (await this.pool.query(`${base} and l.callback_at is null and l.status in ('QUALIFIED') and o.score is not null order by o.score desc, l.created_at`, [this.owner])).rows;
+    const fresh = (await this.pool.query(`${base} and l.callback_at is null and l.status in ('QUALIFIED') and o.score is not null order by o.score desc nulls last, l.created_at`, [this.owner])).rows.sort((a, b) => cmp(b.score, a.score) || cmp(b.dq, a.dq) || cmp(b.contactability, a.contactability) || cmp(b.digital_need, a.digital_need));
     const follow = (await this.pool.query(`${base} and l.callback_at is null and l.status in ('DEMO_CREATED','INTERESTED','OFFER_SENT') and l.last_contact_at < $2 order by case l.status when 'OFFER_SENT' then 0 when 'INTERESTED' then 1 else 2 end, l.last_contact_at`, [this.owner, new Date(now.getTime() - FOLLOW_UP_DAYS * 86400000)])).rows;
     const shape = (r: any, kind: 'callback' | 'new' | 'follow_up') => ({ ...r, kind, priority: r.brief?.priority ?? 'D' });
     const ok = (r: any) => !handledIds.has(r.id);

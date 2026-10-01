@@ -1,7 +1,8 @@
 import type { Route } from '../types.ts';
 import { UserError } from '../types.ts';
-import { html, raw, categoryBadge, mockBadge, prioBadge, readinessBadge, statusBadge, postForm } from '../ui.ts';
+import { html, raw, categoryBadge, mockBadge, prioBadge, readinessBadge, statusBadge, postForm, fmt } from '../ui.ts';
 import { render, redirect, okFlash, uuid } from './_page.ts';
+import { enrichment, orNA, NA, sourceLabel } from '../../core/enrichment.ts';
 import * as P from './lead-parts.ts';
 import { STATUSES, type Status } from '../../core/status.ts';
 import { CALL_RESULTS, type CallResult } from '../../calls/service.ts';
@@ -30,9 +31,14 @@ export const routes: Route[] = [
           <label>Min. Score<input name="minScore" type="number" min="0" max="100" value="${q.get('minScore') ?? ''}" style="width:110px"></label>
           ${g('run') ? html`<input type="hidden" name="run" value="${g('run')}">` : ''}<button class="primary">Filtern</button></div></form>
       <p class="mute">${res.total} Leads${offset ? ` · ab ${offset + 1}` : ''}</p>
-      <div class="card"><ul class="items">${res.rows.map((l) => html`<li><div class="row">${prioBadge(l.priority)}<a class="grow" href="/leads/${l.id}"><b>${l.company_name}</b> ${l.is_mock ? mockBadge : ''}<br><small>${l.city ?? ''}${l.sub_industry ? ` · ${l.sub_industry}` : ''}${l.distance_km ? ` · ${Number(l.distance_km).toFixed(1).replace('.', ',')} km` : ''} · ${P.webStateText(l.website_state)}</small></a>
-        <div style="text-align:right"><b>${l.score ?? '–'}</b> ${categoryBadge(l.category)}</div></div>
-        <div class="row" style="margin-top:4px">${statusBadge(l.status)}${readinessBadge(l.contact_readiness)}${l.paused ? html`<span class="badge b-warn">pausiert</span>` : ''}</div></li>`)}</ul>
+      <div class="card"><ul class="items">${res.rows.map((l) => { const en = enrichment(l); return html`<li><div class="row">${prioBadge(l.priority)}<a class="grow" href="/leads/${l.id}"><b>${l.company_name}</b> ${l.is_mock ? mockBadge : ''}<br><small>${l.sub_industry ?? l.industry ?? NA}</small></a>
+        <div style="text-align:right"><b>${l.score ?? NA}</b> ${categoryBadge(l.category)}<br><small class="mute">Opportunity Score</small></div></div>
+        <dl class="facts"><dt>Adresse</dt><dd>${orNA([l.address, l.city].filter(Boolean).join(', '))}</dd><dt>Entfernung</dt><dd>${l.distance_km ? `${Number(l.distance_km).toFixed(1).replace('.', ',')} km` : NA}</dd>
+          <dt>Telefon</dt><dd>${orNA(l.phone)}</dd><dt>Website</dt><dd>${l.website_url ? html`<code>${l.website_url}</code>` : NA}${l.website_state ? html` · <span class="badge">${P.webStateText(l.website_state)}</span>` : ''}</dd>
+          <dt>Quelle</dt><dd>${sourceLabel(l.source)}</dd><dt>Datenqualität</dt><dd>${l.dq !== null && l.dq !== undefined ? `${Math.round(l.dq)}/100` : NA}</dd>
+          <dt>Analyse</dt><dd>${l.last_analyzed_at ? `${P.analysisText(l.website_state)} (${fmt(l.last_analyzed_at)})` : 'noch nicht analysiert'}</dd></dl>
+        <div class="row" style="margin-top:4px">${statusBadge(l.status)}${readinessBadge(l.contact_readiness)}${l.paused ? html`<span class="badge b-warn">pausiert</span>` : ''}${en.needed ? html`<span class="badge b-warn" title="${en.missing.join(', ')}">${en.label}</span>` : ''}</div>
+        ${en.needed ? html`<small class="mute">Fehlt: ${en.missing.join(' · ')}</small>` : ''}</li>`; })}</ul>
         ${!res.rows.length ? html`<p class="mute">Keine Leads für diese Filter. <a href="/search">Neue Suche</a></p>` : ''}</div>
       <div class="row">${offset > 0 ? html`<a class="btn" href="/leads?${nextQs(Math.max(0, offset - limit))}">← Zurück</a>` : ''}${offset + limit < res.total ? html`<a class="btn" href="/leads?${nextQs(offset + limit)}">Weiter →</a>` : ''}</div>` });
   } },

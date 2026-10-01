@@ -17,6 +17,10 @@ import { WhatsAppCloudProvider } from './real/whatsapp.ts';
 import { FolderHostingProvider, VercelHostingProvider } from './real/hosting.ts';
 
 type Env = Record<string, string | undefined>;
+/** Live-Modus ohne angebundene Quelle: liefert KEINE Daten (statt erfundener Mock-Daten) – fehlende Angaben erscheinen als „nicht verfügbar“. */
+class NoDirectory implements DirectoryProvider { readonly name = 'keine-quelle'; readonly isMock = false; async search() { return { items: [], requests: 0 }; } async lookup() { return null; } }
+class NoSocial implements SocialDataProvider { readonly name = 'keine-quelle'; readonly isMock = false; async lookup() { return { profiles: [], complete: false, source: 'keine-quelle', capturedAt: new Date().toISOString() }; } }
+
 export type RegistryOptions = { baseUrl: string; now?: () => Date; hostingRoot?: string };
 export type Registry = { providers: Providers; status: ProviderStatus[]; mockHosting?: MockHostingProvider; mode: 'mock' | 'live' };
 
@@ -48,13 +52,15 @@ export function createProviders(env: Env, o: RegistryOptions): Registry {
   // Google Places, wenn ein Key da ist; sonst (oder mit PLACES_SOURCE=osm) die keyfreie OpenStreetMap-Quelle
   const useOsm = env.PLACES_SOURCE === 'osm' || (!env.GOOGLE_PLACES_API_KEY && env.PLACES_SOURCE !== 'google');
   const places = pick<PlacesProvider>('places', { ok: true, why: '', make: () => (useOsm ? new OsmPlacesProvider(env.OSM_CONTACT, now) : new GooglePlacesProvider(env.GOOGLE_PLACES_API_KEY, now)) }, () => new MockGooglePlacesProvider({ now }), useOsm ? 'OpenStreetMap (Nominatim/Overpass, ohne Key)' : 'Google Places API');
-  const directory = pick<DirectoryProvider>('directory', null, () => new MockDirectoryProvider({ now }), '');
+  const directory = want('directory') === 'real' ? (() => { const d = new NoDirectory(); note('directory', d.name, 'real', 'Kein Verzeichnis angebunden (noch nicht gebaut) – keine Daten, es wird nichts erfunden'); return d as DirectoryProvider; })()
+    : pick<DirectoryProvider>('directory', null, () => new MockDirectoryProvider({ now }), '');
   const placesReal = !places.isMock;
   // Der echte Crawler macht nur Sinn, wenn echte Unternehmensdaten kommen; bei Mock-Daten gibt es die Websites nicht.
   const crawler = pick<CrawlerProvider>('crawler', { ok: placesReal || env.PROVIDER_CRAWLER === 'real', why: 'Mock-Unternehmensdaten verweisen auf nicht existierende Websites', make: () => new HttpCrawlerProvider({ now }) },
     () => new MockCrawlerProvider({ now, hosted: mockHosting }), 'HTTP-Crawler (robots.txt, SSRF-Schutz)');
   const render = pick<RenderProvider>('render', { ok: !!findChromium() && placesReal, why: 'Chromium nicht gefunden oder Mock-Daten', make: () => new PlaywrightRenderProvider() }, () => new MockRenderProvider(), 'Playwright/Chromium');
-  const social = pick<SocialDataProvider>('social', null, () => new MockSocialDataProvider({ now }), '');
+  const social = want('social') === 'real' ? (() => { const d = new NoSocial(); note('social', d.name, 'real', 'Keine Social-Datenquelle angebunden (noch nicht gebaut) – „nicht verfügbar“, nichts erfunden'); return d as SocialDataProvider; })()
+    : pick<SocialDataProvider>('social', null, () => new MockSocialDataProvider({ now }), '');
   const ai = pick<AIProvider>('ai', { ok: !!env.ANTHROPIC_API_KEY, why: 'ANTHROPIC_API_KEY fehlt', make: () => new AnthropicProvider(env.ANTHROPIC_MODEL, env.ANTHROPIC_API_KEY) }, () => new MockAIProvider(), 'Anthropic Messages API');
   const payments = pick<PaymentProvider>('payments', { ok: !!env.STRIPE_SECRET_KEY && !!env.STRIPE_WEBHOOK_SECRET, why: 'STRIPE_SECRET_KEY/STRIPE_WEBHOOK_SECRET fehlen', make: () => new StripeProvider(env.STRIPE_SECRET_KEY, env.STRIPE_WEBHOOK_SECRET) }, () => new MockStripeProvider(o.baseUrl), 'Stripe Checkout');
   const email = pick<EmailProvider>('email', { ok: !!env.SMTP_HOST && !!env.SMTP_FROM, why: 'SMTP_HOST/SMTP_FROM fehlen', make: () => new SmtpEmailProvider({ host: env.SMTP_HOST!, port: Number(env.SMTP_PORT || 587), secure: env.SMTP_SECURE === '1' || env.SMTP_PORT === '465', user: env.SMTP_USER || undefined, pass: env.SMTP_PASS || undefined, from: env.SMTP_FROM! }) }, () => new MockEmailProvider(), 'SMTP');

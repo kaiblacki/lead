@@ -4,7 +4,7 @@ import type { Lead } from './types.ts';
 import { normPhone, norm, hostOf, socialPlatformOf } from './text.ts';
 
 export type FactKey = 'name' | 'industry' | 'subIndustry' | 'address' | 'postalCode' | 'city' | 'distanceKm' | 'phone' | 'email' | 'website' | 'social' | 'employeeBucket'
-  | 'locationsCount' | 'rating' | 'reviewCount' | 'openingHours' | 'services' | 'description' | 'businessStatus' | 'legalForm' | 'foundedYear' | 'isChain' | 'mapsUrl' | 'point';
+  | 'locationsCount' | 'rating' | 'reviewCount' | 'openingHours' | 'services' | 'description' | 'businessStatus' | 'legalForm' | 'foundedYear' | 'isChain' | 'mapsUrl' | 'point' | 'sourceCategories';
 
 /** Ein Einzelfakt mit Herkunft. Jeder externe Wert im System ist so gespeichert: Quelle, Erfassungsdatum, Datenqualität. */
 export type Fact = { key: FactKey; value: unknown; source: string; capturedAt: string; quality: Quality; url?: string; note?: string };
@@ -13,7 +13,7 @@ export const FACT_LABELS: Record<FactKey, string> = {
   name: 'Firma', industry: 'Branche', subIndustry: 'Unterbranche', address: 'Adresse', postalCode: 'PLZ', city: 'Stadt', distanceKm: 'Entfernung', phone: 'Telefon', email: 'E-Mail',
   website: 'Website', social: 'Social Media', employeeBucket: 'Mitarbeitergröße', locationsCount: 'Standorte', rating: 'Bewertung', reviewCount: 'Anzahl Bewertungen',
   openingHours: 'Öffnungszeiten', services: 'Öffentlich erkennbare Leistungen', description: 'Beschreibung', businessStatus: 'Betriebsstatus', legalForm: 'Rechtsform',
-  foundedYear: 'Gründungsjahr', isChain: 'Filialbetrieb/Kette', mapsUrl: 'Karten-Link', point: 'Standort (Koordinaten)',
+  foundedYear: 'Gründungsjahr', isChain: 'Filialbetrieb/Kette', mapsUrl: 'Karten-Link', point: 'Standort (Koordinaten)', sourceCategories: 'Kategorien laut Quelle',
 };
 export const FACT_ORDER = Object.keys(FACT_LABELS) as FactKey[];
 const QUALITY_RANK: Record<Quality, number> = { high: 3, medium: 2, low: 1 };
@@ -63,7 +63,7 @@ export function buildFacts(i: ProfileInput): Fact[] {
     const s = p.source, at = p.capturedAt, q = p.quality;
     add('name', p.name, s, at, q); add('address', p.address, s, at, q); add('postalCode', p.postalCode, s, at, q); add('city', p.city, s, at, q);
     add('phone', p.phone, s, at, q); add('rating', p.rating, s, at, q); add('reviewCount', p.reviewCount, s, at, q);
-    add('openingHours', p.openingHours, s, at, q); add('businessStatus', p.businessStatus, s, at, q); add('mapsUrl', p.mapsUrl, s, at, q, { url: p.mapsUrl }); add('point', p.point, s, at, q);
+    add('openingHours', p.openingHours, s, at, q); add('businessStatus', p.businessStatus, s, at, q); if (p.categories?.length) add('sourceCategories', p.categories, s, at, q); add('mapsUrl', p.mapsUrl, s, at, q, { url: p.mapsUrl }); add('point', p.point, s, at, q);
     if (p.website) {
       const platform = socialPlatformOf(p.website);
       if (platform) add('social', { platform, url: p.website }, s, at, 'low', { note: 'Im Website-Feld steht nur ein Social-Media-Profil – keine eigene Website hinterlegt.' });

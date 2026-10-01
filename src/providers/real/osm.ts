@@ -52,7 +52,7 @@ export class OsmPlacesProvider implements PlacesProvider {
     const street = [t['addr:street'], t['addr:housenumber']].filter(Boolean).join(' ');
     const status = t['disused:shop'] || t['disused:amenity'] ? 'CLOSED_PERMANENTLY' : undefined;
     return { externalId: `osm-${e.type}-${e.id}`, source: this.name, capturedAt: this.now().toISOString(), quality: 'medium', name: t.name,
-      categories: [t.shop, t.amenity, t.craft, t.office, t.leisure].filter(Boolean) as string[], address: street || undefined, postalCode: t['addr:postcode'], city: t['addr:city'],
+      categories: [t.shop, t.amenity, t.craft, t.office, t.leisure, t.beauty ? `beauty:${t.beauty}` : undefined].filter(Boolean) as string[], address: street || undefined, postalCode: t['addr:postcode'], city: t['addr:city'],
       point: lat !== undefined && lon !== undefined ? { lat, lng: lon } : undefined, phone: t.phone ?? t['contact:phone'], website: t.website ?? t['contact:website'] ?? t.url,
       mapsUrl: `https://www.openstreetmap.org/${e.type}/${e.id}`, openingHours: t.opening_hours ? [t.opening_hours] : undefined, businessStatus: status };
   }

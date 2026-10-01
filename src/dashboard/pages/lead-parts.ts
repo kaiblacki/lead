@@ -1,3 +1,4 @@
+import { enrichment, orNA, NA, sourceLabel } from '../../core/enrichment.ts';
 import { html, raw, type Safe, categoryBadge, eur, fmt, fmtDate, mockBadge, postBtn, postForm, prioBadge, readinessBadge, scoreBar, statusBadge, STATE_TEXT } from '../ui.ts';
 import { FACT_LABELS, FACT_ORDER, findConflicts, type Fact, type FactKey } from '../../core/profile.ts';
 import { DIM_LABELS, DIM_ORDER } from '../../scoring/intelligence.ts';
@@ -23,7 +24,10 @@ export function header(d: any, csrf: string): Safe {
     <div class="row">${categoryBadge(o?.category)}${statusBadge(l.status)}${readinessBadge(l.contact_readiness)}<span class="badge">${webStateText(l.website_state)}</span>${l.paused ? html`<span class="badge b-warn">pausiert</span>` : ''}</div>
     <div class="grid" style="margin-top:10px"><div class="kpi"><b>${o?.score ?? '–'}</b><span>Sales Opportunity</span></div><div class="kpi"><b>${o?.digital_need ?? '–'}</b><span>Digital Need</span></div>
       <div class="kpi"><b>${d.sales?.brief?.priority ?? '–'}</b><span>Priorität</span></div><div class="kpi"><b>${l.call_count}</b><span>Anrufe</span></div></div>
-    ${l.phone ? html`<p><a class="tel" href="tel:${String(l.phone).replace(/[^\d+]/g, '')}">${l.phone}</a></p>` : ''}
+    ${(() => { const en = enrichment(l); const dq = o?.dimensions?.dataQuality?.value; return html`<dl class="facts"><dt>Telefon</dt><dd>${l.phone ? html`<a class="tel" href="tel:${String(l.phone).replace(/[^\d+]/g, '')}">${l.phone}</a>` : NA}</dd>
+      <dt>Website</dt><dd>${l.website_url ? html`<code>${l.website_url}</code>` : NA}</dd><dt>E-Mail</dt><dd>${orNA(l.email)}</dd><dt>Branche</dt><dd>${orNA(l.sub_industry ?? l.industry)}</dd>
+      <dt>Quelle</dt><dd>${sourceLabel(l.source)}</dd><dt>Datenqualität</dt><dd>${dq !== undefined && dq !== null ? `${Math.round(dq)}/100` : NA}</dd></dl>
+      ${en.needed ? html`<div class="warnbox"><b>${en.label}</b> – fehlt: ${en.missing.join(' · ')}.<br><small>Der Lead bleibt gespeichert. Weitere zulässige Quellen können die Lücken später füllen; bis dahin wird nichts geraten.</small></div>` : ''}`; })()}
     <div class="row">${l.paused ? postBtn(csrf, `/leads/${l.id}/resume`, 'Fortsetzen', { cls: 'ok' }) : postBtn(csrf, `/leads/${l.id}/pause`, 'Pausieren')}
       ${postBtn(csrf, `/leads/${l.id}/reanalyze`, 'Neu analysieren (Retry)')}${postBtn(csrf, `/leads/${l.id}/reanalyze`, 'Tiefenprüfung (Browser)', { hidden: { deep: '1' } })}${postBtn(csrf, `/leads/${l.id}/reject`, 'Ablehnen', { cls: 'danger' })}</div></div>`;
 }
@@ -168,3 +172,5 @@ export function history(d: any): Safe {
   return fold('Verlauf (Audit-Log)', html`<div class="scroll"><table>${ev.map((e) => html`<tr><td><small>${fmt(e.created_at)}</small></td><td>${e.type}</td><td><small>${e.payload?.reason ?? e.payload?.actor ?? ''}${e.payload?.from ? ` (${e.payload.from} → ${e.payload.to})` : ''}</small></td></tr>`)}</table></div>`);
 }
 export { CAT_LABEL };
+
+export const analysisText = (state: string | null | undefined) => state === 'none' ? 'ohne Website bewertet (NO_WEBSITE)' : state === 'unknown' ? 'Website nicht prüfbar' : state ? 'Website analysiert' : 'Analysestand unbekannt';

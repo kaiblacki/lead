@@ -42,6 +42,7 @@ Die Telefonakquise ist bewusst gesperrt – unter **Einstellungen → Telefonakq
 | `npm run serve` | Dashboard mit eigener Konfiguration (`.env`, siehe SETUP.md) |
 | `npm test` | Unit-Tests (keine Datenbank nötig) |
 | `npm run test:db` | Datenbank-, HTTP-, End-to-End- und Browser-Tests (legt lokale Test-DB `dbtest` an) |
+| `npm run acceptance` | Kern-Abnahmetest mit echten OpenStreetMap-Daten (Live-Modus, sendet nichts): „Völklingen + 30 km + Nagelstudios“, Bericht mit Kennzahlen |
 | `npm run test:all` | Typprüfung + alle Tests |
 | `node src/cli.ts providers` | zeigt je Dienst Mock oder echt |
 | `node src/cli.ts search "<Suchsatz>"` · `import <csv>` · `seed` · `maintenance` · `retention [--execute]` | Kommandozeile |

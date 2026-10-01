@@ -28,7 +28,7 @@ export const routes: Route[] = [{
         <a class="kpi" href="/analytics" style="text-decoration:none;color:inherit"><b>${eur(overview.mrrCents)}</b><span>wiederkehrend / Monat</span></a>
       </div>
       <div class="card"><div class="row"><h2 class="grow">Nächste Schritte</h2></div>
-        <div class="row"><a class="btn primary" href="/search">Neue Suche</a><a class="btn" href="/calls">Meine heutigen Calls</a><a class="btn" href="/pipeline">Pipeline</a></div></div>
+        <div class="row"><a class="btn primary" href="/search">Neue Suche</a><a class="btn" href="/calls">Heute anrufen</a><a class="btn" href="/pipeline">Pipeline</a></div></div>
       <div class="card"><h2>Beste Chancen (bereit für Anruf)</h2>
         ${top.rows.length ? html`<ul class="items">${top.rows.map((l) => html`<li><div class="row">${prioBadge(l.priority)}<a class="grow" href="/leads/${l.id}"><b>${l.company_name}</b> <small>${l.city ?? ''} · ${l.sub_industry ?? ''}</small></a><b>${l.score ?? '–'}</b> ${categoryBadge(l.category)}</div></li>`)}</ul>` : html`<p class="mute">Noch keine Leads bereit. Erst suchen${settings.phoneEnabled ? '' : ' und die Telefonakquise in den Einstellungen freigeben'}.</p>`}</div>
       <div class="card"><h2>Letzte Suchläufe</h2>${runs.length ? html`<ul class="items">${runs.map((x) => html`<li><a href="/search/run/${x.id}"><b>${x.description}</b></a><br><small>${fmt(x.created_at)} · ${x.status} · ${x.counters?.matched ?? 0} Treffer von ${x.counters?.analyzed ?? 0} analysiert</small></li>`)}</ul>` : html`<p class="mute">Noch keine Suche gestartet.</p>`}</div>

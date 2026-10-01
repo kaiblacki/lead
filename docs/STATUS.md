@@ -8,10 +8,15 @@ Stand: Ende der Mock-Ausbaustufe. Zahlen stammen aus dem letzten vollständigen 
 |---|---|
 | **Lokaler MVP mit Mock-Diensten** (alles aus dem Auftrag, ohne externe Konten) | **≈ 95 %** gebaut und automatisch getestet |
 | **Bereit für den Betrieb mit echten Diensten** | **≈ 60 %** – 9 von 10 echten Adaptern sind gebaut, **aber noch kein einziger gegen den echten Dienst gelaufen**; 1 Adapter fehlt (Social-Daten; Verzeichnis nur über OSM); Rechtstexte/Preise fehlen |
-| Automatische Tests | **182** (108 Unit + 74 Datenbank/HTTP/Ende-zu-Ende/Browser), alle grün; Typprüfung `tsc --strict` sauber |
+| Automatische Tests | **188** (108 Unit + 80 Datenbank/HTTP/Ende-zu-Ende/Browser), alle grün; Typprüfung `tsc --strict` sauber |
 | Code | ca. 6.300 Zeilen Anwendung, ca. 2.700 Zeilen Tests, 7 Migrationen, 11 Branchenvorlagen |
 
 Begründung der Prozentzahlen: Der lokale Umfang ist vollständig; die restlichen ~5 % sind bekannte Lücken ohne Schlüsselbedarf (siehe „Noch nicht gebaut“, z. B. Mehrbenutzer-Verwaltung, Benachrichtigungen). „Bereit für echten Betrieb“ wird vor allem dadurch begrenzt, dass die echten Adapter nur mit nachgestellten HTTP-Antworten getestet sind und die rechtlichen Angaben (Preise, AGB, Impressum) bewusst leer sind.
+
+## Kern-Abnahmetest „Völklingen + 30 km + Nagelstudios“ (Stand)
+- **Vorbereitet und offline getestet:** echter OSM-Provider gegen nachgestellte OSM-Antworten → Zusammenführen → Website vorhanden/fehlt → Analyse → Digital Need → Sales Opportunity → sortierte Anrufliste („Heute anrufen“); Lücken bleiben als Leads mit `DATA ENRICHMENT NEEDED` erhalten, fehlende Angaben stehen als „nicht verfügbar“, OSM-Attribution im Dashboard (`test/db/osm-acceptance.test.ts`).
+- **Live-Lauf gegen die echten OSM-Server: noch NICHT erfolgt** – die Netzwerkrichtlinie der Entwicklungsumgebung sperrt `nominatim.openstreetmap.org` und `overpass-api.de` (HTTP 403 am Proxy). Start nach Freigabe: `npm run acceptance` (Bericht mit allen geforderten Zahlen).
+- Anthropic und Google Places sind noch nicht angeschlossen (Reihenfolge laut Plan: erst OSM live, dann Anthropic, dann Google Places als Anreicherung).
 
 ## BEREITS VOLLSTÄNDIG (lokal gebaut, automatisch getestet, ohne Schlüssel lauffähig)
 

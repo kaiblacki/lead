@@ -30,6 +30,7 @@ button,.btn{cursor:pointer;display:inline-flex;align-items:center;justify-conten
 button.primary,.btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}button.ok{background:var(--ok);border-color:var(--ok);color:#fff}button.danger,.btn.danger{background:var(--bad);border-color:var(--bad);color:#fff}button.warn{background:#fff3cd;border-color:#e0b84c}
 button:disabled{opacity:.5;cursor:not-allowed}label{display:block;font-size:14px;color:var(--mute)}label input,label select,label textarea{display:block;width:100%;margin-top:2px;color:var(--ink)}label.inline{display:inline-flex;gap:8px;align-items:center;color:var(--ink);font-size:16px;min-height:44px;margin-right:14px}table.nowrap th,table.nowrap td{white-space:nowrap}label.inline input{display:inline-block;width:22px;margin:0}
 fieldset{border:1px solid var(--line);border-radius:10px;margin:8px 0;padding:8px 12px}legend{font-size:14px;color:var(--mute);padding:0 6px}
+.attrib{max-width:1000px;margin:0 auto;padding:4px 12px 80px;font-size:13px;color:var(--mute)}.facts{display:grid;grid-template-columns:max-content 1fr;gap:2px 10px;margin:6px 0;font-size:14px}.facts dt{color:var(--mute)}.facts dd{margin:0;overflow-wrap:anywhere}
 .badge{display:inline-block;font-size:12px;font-weight:700;padding:3px 9px;border-radius:99px;background:#e6e9ee;color:#2b323d;max-width:100%;overflow-wrap:anywhere}
 .b-HOT{background:var(--hot);color:#fff}.b-HIGH-POTENTIAL{background:#e8590c;color:#fff}.b-MEDIUM{background:#ffd43b}.b-LOW{background:#dee2e6}.b-IGNORE,.b-UNRATED{background:#ced4da}
 .b-ok{background:#d3f9d8;color:#0b5d1e}.b-warn{background:#fff3bf;color:#7a4d00}.b-bad{background:#ffe3e3;color:#a61e1e}.b-mock{background:#fff3cd;color:#664d03}.b-info{background:#dbe4ff;color:#2b3a8c}
@@ -52,14 +53,14 @@ const NAV: [NavKey, string, string][] = [['home', '/', 'Start'], ['search', '/se
 
 export type Flash = { kind: 'ok' | 'err'; text: string } | null;
 
-export function layout(o: { title: string; nav: NavKey; body: Safe; csrf: string; killSwitch: boolean; mock: boolean; flash?: Flash; hostingMock?: boolean }): Safe {
+export function layout(o: { title: string; nav: NavKey; body: Safe; csrf: string; killSwitch: boolean; mock: boolean; flash?: Flash; hostingMock?: boolean; attribution?: string }): Safe {
   return html`<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>${o.title} – Agency OS</title><style>${raw(CSS)}</style></head><body>
 <header class="top"><div class="bar"><span class="brand">Agency OS</span>
 <nav aria-label="Hauptnavigation">${NAV.map(([k, href, label]) => html`<a href="${href}" class="${o.nav === k ? 'on' : ''}">${label}</a>`)}</nav>
 <form method="post" action="/killswitch"><input type="hidden" name="csrf" value="${o.csrf}"><input type="hidden" name="on" value="${o.killSwitch ? '0' : '1'}"><button class="${o.killSwitch ? 'ok' : 'danger'}" title="${o.killSwitch ? 'Automatisierung wieder erlauben' : 'Alle automatischen Läufe stoppen'}">${o.killSwitch ? 'Fortsetzen' : 'STOP'}</button></form></div>
 ${o.killSwitch ? html`<div class="banner kill">KILL SWITCH AKTIV – keine Suchläufe, Analysen oder Wartungsprüfungen</div>` : ''}
 ${o.mock ? html`<div class="banner mock">MOCK-MODUS – Testdaten, keine echten Unternehmen, Zahlungen oder Nachrichten</div>` : ''}</header>
-<main>${o.flash ? html`<div class="flash ${o.flash.kind}" role="status">${o.flash.text}</div>` : ''}<h1>${o.title}</h1>${o.body}</main></body></html>`;
+<main>${o.flash ? html`<div class="flash ${o.flash.kind}" role="status">${o.flash.text}</div>` : ''}<h1>${o.title}</h1>${o.body}</main>${o.attribution ? html`<footer class="attrib">${o.attribution} · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">openstreetmap.org/copyright</a></footer>` : ''}</body></html>`;
 }
 
 export const postForm = (csrf: string, action: string, inner: Safe | string, o: { cls?: string; style?: string } = {}) =>

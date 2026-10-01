@@ -4,6 +4,7 @@ import { render } from './_page.ts';
 import { CALL_LABEL, CALL_RESULTS } from '../../calls/service.ts';
 import { LEGAL } from '../../contact/strategy.ts';
 import { webStateText } from './lead-parts.ts';
+import { NA, orNA, sourceLabel } from '../../core/enrichment.ts';
 
 const KIND: Record<string, [string, string]> = { callback: ['b-warn', 'Rückruf fällig'], new: ['b-info', 'Neu'], follow_up: ['b-ok', 'Nachfassen'] };
 
@@ -11,7 +12,7 @@ export const routes: Route[] = [{
   method: 'GET', path: /^\/calls$/, h: async (r) => {
     const q = await r.ctx.calls.queue();
     const pct = Math.min(100, Math.round((q.done / q.target) * 100));
-    return render(r, { title: 'Meine heutigen Calls', nav: 'calls', body: html`
+    return render(r, { title: 'Heute anrufen', nav: 'calls', body: html`
       <div class="card"><div class="row"><b class="grow">${q.done} von ${q.target} Leads bearbeitet</b><small>${q.calls} Anrufe · ${q.open} offen</small></div><div class="bar" role="img" aria-label="${pct} Prozent"><i style="width:${pct}%"></i></div></div>
       ${!q.phoneEnabled ? html`<div class="warnbox"><b>Telefonakquise nicht freigegeben.</b> Ohne Freigabe erscheinen keine Leads in dieser Liste. <a class="btn" href="/settings#telefon">Einstellungen öffnen</a></div>` : ''}
       <div class="note">${LEGAL.phone}</div>
@@ -22,7 +23,8 @@ export const routes: Route[] = [{
           <div class="stack">
             <p><a class="tel" href="tel:${String(it.phone).replace(/[^\d+]/g, '')}">${it.phone}</a></p>
             <div class="row"><b>${it.score ?? '–'}</b> ${categoryBadge(it.category)} <span class="badge">${webStateText(it.website_state)}</span>${it.distance_km ? html`<small>${Number(it.distance_km).toFixed(1).replace('.', ',')} km</small>` : ''}${it.callback_at ? html`<small>Rückruf: ${fmt(it.callback_at)}</small>` : ''}</div>
-            ${it.website_url ? html`<p><small>Website: <code>${it.website_url}</code></small></p>` : ''}
+            <dl class="facts"><dt>Website</dt><dd>${it.website_url ? html`<code>${it.website_url}</code>` : NA}</dd><dt>Adresse</dt><dd>${orNA(it.address)}</dd><dt>Quelle</dt><dd>${sourceLabel(it.source)}</dd><dt>Datenqualität</dt><dd>${it.dq !== null && it.dq !== undefined ? `${Math.round(it.dq)}/100` : NA}</dd>
+              <dt>Empfohlene Leistung</dt><dd>${b?.service?.name ?? NA}</dd><dt>Opportunity Score</dt><dd>${it.score ?? NA}</dd></dl>
             ${it.contact_reason ? html`<p><small class="mute">${it.contact_reason}</small></p>` : ''}
             <div><b>Die wichtigsten Verkaufsgründe</b><ol>${(b?.reasons ?? []).slice(0, 3).map((x: any) => html`<li>${x.text}</li>`)}</ol></div>
             ${b ? html`<div class="note"><b>Gesprächseinstieg</b><br>${it.opener ?? b.opener}</div>

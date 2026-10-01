@@ -108,13 +108,13 @@ export class LeadStore {
     const order = f.sort === 'distance' ? 'l.distance_km asc nulls last' : f.sort === 'digital_need' ? 'o.digital_need desc nulls last' : f.sort === 'recent' ? 'l.created_at desc' : 'o.score desc nulls last, l.created_at desc';
     const limit = Math.min(f.limit ?? 100, 500), offset = Math.max(f.offset ?? 0, 0);
     const base = `from leads l ${join}
-      left join lateral (select score, category, digital_need from opportunities where lead_id = l.id order by created_at desc, id desc limit 1) o on true
+      left join lateral (select score, category, digital_need, data_quality_factor, dimensions from opportunities where lead_id = l.id order by created_at desc, id desc limit 1) o on true
       left join lateral (select brief, approved_at from sales_packages where lead_id = l.id order by created_at desc, id desc limit 1) sp on true where ${where}`;
     const total = (await this.pool.query(`select count(*)::int n ${base}`, p)).rows[0].n;
     p.push(limit, offset);
     const rows = (await this.pool.query(
       `select l.id, l.company_name, l.city, l.sub_industry, l.status, l.paused, l.contact_readiness, l.contact_channel, l.phone, l.website_url, l.website_state, l.distance_km, l.is_mock, l.last_analyzed_at,
-         l.call_count, l.callback_at, o.score, o.category, o.digital_need, sp.brief->>'priority' as priority, sp.approved_at ${base} order by ${order} limit $${p.length - 1} offset $${p.length}`, p)).rows;
+         l.call_count, l.callback_at, l.address, l.email, l.source, l.industry, o.score, o.category, o.digital_need, o.data_quality_factor, (o.dimensions->'dataQuality'->>'value')::float as dq, (o.dimensions->'contactability'->>'value')::float as contactability, sp.brief->>'priority' as priority, sp.approved_at ${base} order by ${order} limit $${p.length - 1} offset $${p.length}`, p)).rows;
     return { total, rows };
   }
 

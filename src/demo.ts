@@ -32,5 +32,5 @@ try {
 } finally { await pool.end(); }
 
 console.log(`\nDEMO-MODUS – Mock-Dienste, Testdaten. Login: Benutzername beliebig, ${demoLogin ? `Passwort „${DEMO_LOGIN}“` : 'Passwort wie in DASHBOARD_PASSWORD'}.`);
-console.log('Telefonakquise ist bewusst gesperrt: Einstellungen → Telefonakquise freigeben, um „Meine heutigen Calls“ zu füllen.\n');
+console.log('Telefonakquise ist bewusst gesperrt: Einstellungen → Telefonakquise freigeben, um „Heute anrufen“ zu füllen.\n');
 await import('./serve.ts');

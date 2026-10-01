@@ -14,7 +14,8 @@
     "test:db": "bash test/run-db-tests.sh",
     "demo": "node src/demo.ts",
     "demo:db": "bash scripts/setup-local-db.sh",
-    "test:all": "npm run typecheck && npm test && npm run test:db"
+    "test:all": "npm run typecheck && npm test && npm run test:db",
+    "acceptance": "node src/acceptance/run.ts"
   },
   "dependencies": {
     "pg": "^8.23.1",
