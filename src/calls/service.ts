@@ -5,6 +5,7 @@ import type { SalesDocs } from '../sales/docs.ts';
 import type { OrderService } from '../orders/service.ts';
 import { moveLead, recordOutcome } from '../db/lead-status.ts';
 import type { Status } from '../core/status.ts';
+import type { TaskStore } from '../db/tasks.ts';
 import { startOfBerlinDay, endOfBerlinDay } from '../core/time.ts';
 
 export const CALL_RESULTS = ['NO_ANSWER', 'NO_INTEREST', 'CALL_BACK', 'INTERESTED', 'DEMO', 'OFFER', 'BOUGHT', 'DO_NOT_CONTACT'] as const;
@@ -20,8 +21,8 @@ export type CallOutcome = { result: CallResult; moved: Status[]; messages: strin
 
 /** „Meine heutigen Calls“ und die Pipeline-Logik hinter den Ergebnis-Buttons. Es wird nie automatisch angerufen oder gesendet. */
 export class CallService {
-  repo: Repo; leads: LeadStore; sales: SalesStore; docs: SalesDocs; orders: OrderService; now: () => Date;
-  constructor(d: { repo: Repo; leads: LeadStore; sales: SalesStore; docs: SalesDocs; orders: OrderService; now?: () => Date }) { this.repo = d.repo; this.leads = d.leads; this.sales = d.sales; this.docs = d.docs; this.orders = d.orders; this.now = d.now ?? (() => new Date()); }
+  repo: Repo; leads: LeadStore; sales: SalesStore; docs: SalesDocs; orders: OrderService; now: () => Date; tasks?: TaskStore;
+  constructor(d: { repo: Repo; leads: LeadStore; sales: SalesStore; docs: SalesDocs; orders: OrderService; now?: () => Date; tasks?: TaskStore }) { this.tasks = d.tasks; this.repo = d.repo; this.leads = d.leads; this.sales = d.sales; this.docs = d.docs; this.orders = d.orders; this.now = d.now ?? (() => new Date()); }
   private get pool() { return this.repo.pool; }
   private get owner() { return this.repo.ownerId; }
 
@@ -41,11 +42,14 @@ export class CallService {
     const doneToday = (await this.pool.query("select count(*)::int n, count(distinct lead_id)::int leads from contact_history where owner_id=$1 and channel='PHONE' and at >= $2 and at < $3", [this.owner, dayStart, dayEnd])).rows[0];
     const handledIds = new Set((await this.pool.query("select distinct lead_id from contact_history where owner_id=$1 and channel='PHONE' and at >= $2 and at < $3", [this.owner, dayStart, dayEnd])).rows.map((r) => r.lead_id));
     const callbacks = (await this.pool.query(`${base} and l.callback_at < $2 and l.status = any($3) order by l.callback_at`, [this.owner, dayEnd, PRE_SALE])).rows;
+    const demoReady = (await this.pool.query(`${base} and exists (select 1 from lead_tasks t where t.lead_id = l.id and t.owner_id = $1 and t.kind = 'CALL_DEMO_READY' and t.status = 'OPEN') and l.callback_at is null order by o.score desc nulls last, l.created_at`, [this.owner])).rows;
+    const demoIds = new Set(demoReady.map((r) => r.id));
     const fresh = (await this.pool.query(`${base} and l.callback_at is null and l.status in ('QUALIFIED') and o.score is not null order by o.score desc nulls last, l.created_at`, [this.owner])).rows.sort((a, b) => cmp(b.score, a.score) || cmp(b.dq, a.dq) || cmp(b.contactability, a.contactability) || cmp(b.digital_need, a.digital_need));
     const follow = (await this.pool.query(`${base} and l.callback_at is null and l.status in ('DEMO_CREATED','INTERESTED','OFFER_SENT') and l.last_contact_at < $2 order by case l.status when 'OFFER_SENT' then 0 when 'INTERESTED' then 1 else 2 end, l.last_contact_at`, [this.owner, new Date(now.getTime() - FOLLOW_UP_DAYS * 86400000)])).rows;
-    const shape = (r: any, kind: 'callback' | 'new' | 'follow_up') => ({ ...r, kind, priority: r.brief?.priority ?? 'D' });
+    const shape = (r: any, kind: 'callback' | 'demo_ready' | 'new' | 'follow_up') => ({ ...r, kind, priority: r.brief?.priority ?? 'D' });
     const ok = (r: any) => !handledIds.has(r.id);
-    const list = [...callbacks.filter(ok).map((r) => shape(r, 'callback')), ...fresh.filter(ok).filter((r) => r.brief?.priority && r.brief.priority !== 'D').map((r) => shape(r, 'new')), ...follow.filter(ok).map((r) => shape(r, 'follow_up'))];
+    const okNoDemo = (r: any) => ok(r) && !demoIds.has(r.id);     // Leads mit „Demo fertig“-Aufgabe stehen schon oben
+    const list = [...callbacks.filter(ok).map((r) => shape(r, 'callback')), ...demoReady.filter((r) => !handledIds.has(r.id)).map((r) => ({ ...shape(r, 'demo_ready'), priority: r.brief?.priority ?? 'B' })), ...fresh.filter(okNoDemo).filter((r) => r.brief?.priority && r.brief.priority !== 'D').map((r) => shape(r, 'new')), ...follow.filter(okNoDemo).map((r) => shape(r, 'follow_up'))];
     const callbacksN = list.filter((x) => x.kind === 'callback').length;
     const target = settings.dailyCallTarget;
     const limited = [...list.slice(0, callbacksN), ...list.slice(callbacksN).slice(0, Math.max(0, target - doneToday.leads - callbacksN))];
@@ -86,6 +90,7 @@ export class CallService {
       await this.repo.event(c, leadId, 'call_result', { result, note: o.note ? true : false, actor: 'user' });
     });
 
+    if (result !== 'NO_ANSWER') await this.tasks?.complete(leadId, result === 'CALL_BACK' ? ['CALL_DEMO_READY'] : ['CALL_DEMO_READY', 'CALL_BACK']);
     const move = async (target: Status, reason: string) => { const steps = await this.repo.tx((c) => moveLead(this.repo, c, leadId, target, reason, 'user', { path: true, within: PRE_SALE.concat('IGNORED') })); out.moved.push(...steps); };
     const status = lead.status as Status;
     /** „Interessiert“ nur nachziehen, wenn der Lead noch davor steht (nicht von Demo/Angebot zurückspringen). */

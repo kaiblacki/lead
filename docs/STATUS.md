@@ -100,3 +100,12 @@ Begründung der Prozentzahlen: Der lokale Umfang ist vollständig; die restliche
 4. Stripe-Testmodus → kompletten Weg bis „Wartung aktiv“ einmal real durchspielen; Abo-Ereignisse prüfen.
 5. Hosting (Ordner → Vercel), Docker-Build auf dem Zielserver.
 6. Telefonakquise erst nach Klärung der Rechtsgrundlage freigeben; erste echte Anrufe → Ergebnisse speisen den Learning Loop.
+
+## Lead-Analyse- und Priorisierungsmaschine
+
+- **Zwei Scores:** `website_score` (100 = sehr gute Website; ohne Website `null`, Status `NO_WEBSITE`) und `sales_opportunity` (100 = sehr interessant). Gespeichert in `lead_analysis` (Migration `0010_analysis_tiers.sql`).
+- **Auto-Demo nur ohne Website** (`config/sales.json` → `autoDemo`); bei Firmen mit Website entscheidet der Nutzer („Demo erstellen“ / „Überspringen“).
+- **KI-Stufen** MASS (regelbasiert, kostenlos), DEEP, PREMIUM – Modelle in `config/ai.json` oder `ANTHROPIC_MODEL_MASS|DEEP|PREMIUM`. Jeder Aufruf wird mit Modell, Aufgabe, Token, Kosten und Lead in `ai_usage` protokolliert; unveränderte Grundlage wird per Hash nicht erneut berechnet. Ohne `ANTHROPIC_API_KEY` läuft der Mock-Adapter (Kosten 0).
+- **E-Mail-Status** `draft → review_required → legally_cleared → sent` (+ `follow_up_due`, `do_not_contact`); ohne Freigabe wird nie gesendet.
+- **Telefonansicht** „Was soll ich am Telefon sagen?“ und Aufgabe „Demo fertig – anrufen“ in „Heute anrufen“.
+- Agentur-Daten (Betreiber Kai Schwarz) zentral in `config/agency.json`.

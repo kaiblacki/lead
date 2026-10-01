@@ -11,10 +11,10 @@ export class AnthropicProvider implements AIProvider {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'x-api-key': this.apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-      body: JSON.stringify({ model: this.model, max_tokens: r.maxTokens ?? 600, ...(r.system ? { system: r.system } : {}), messages: [{ role: 'user', content: r.prompt }] }),
+      body: JSON.stringify({ model: r.model ?? this.model, max_tokens: r.maxTokens ?? 600, ...(r.system ? { system: r.system } : {}), messages: [{ role: 'user', content: r.prompt }] }),
     });
     if (!res.ok) throw new Error(`Anthropic API ${res.status}`);
     const data = (await res.json()) as { content: { type: string; text?: string }[]; usage?: { input_tokens?: number; output_tokens?: number } };
-    return { text: data.content.map((c) => c.text ?? '').join(''), model: this.model, inputTokens: data.usage?.input_tokens, outputTokens: data.usage?.output_tokens };
+    return { text: data.content.map((c) => c.text ?? '').join(''), model: r.model ?? this.model, inputTokens: data.usage?.input_tokens, outputTokens: data.usage?.output_tokens };
   }
 }

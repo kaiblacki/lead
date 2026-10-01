@@ -66,7 +66,7 @@ test('OSM → Leads: Namenlose und Dubletten fallen weg, Lücken bleiben als Lea
 
 test('Dashboard-Liste: Name, Adresse, Entfernung, Website, Telefon, Quelle, Branche, Datenqualität, Analyse, Score – Lücken als „nicht verfügbar“, ENRICHMENT-Status, OSM-Attribution', { skip }, async () => {
   const page = app.text(await (await app.get('/leads')).text());
-  for (const w of ['Adresse', 'Entfernung', 'Telefon', 'Website', 'Quelle', 'Datenqualität', 'Analyse', 'Opportunity Score']) assert.ok(page.includes(w), w);
+  for (const w of ['Ort', 'Website', 'Verkaufschance', 'Telefon', 'E-Mail', 'Demo', 'KI-Stufe', 'Quelle', 'Datenqualität', 'Nächste Aktion', 'Opportunity Score']) assert.ok(page.includes(w), w);
   assert.match(page, /Glamour Nails/); assert.match(page, /nicht verfügbar/); assert.match(page, /DATA ENRICHMENT NEEDED/);
   assert.match(page, /Fehlt: Telefonnummer · Website \(in OpenStreetMap nicht hinterlegt – bitte prüfen\) · Adresse/);
   assert.match(page, /OpenStreetMap/); assert.match(page, /Daten © OpenStreetMap-Mitwirkende \(ODbL\)/); assert.match(page, /openstreetmap\.org\/copyright/);

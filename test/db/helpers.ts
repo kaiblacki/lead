@@ -41,7 +41,7 @@ import { createApp } from '../../src/dashboard/server.ts';
 export const PASSWORD = 'test-passwort-123';
 export const AUTH = { authorization: 'Basic ' + Buffer.from(`u:${PASSWORD}`).toString('base64') };
 
-export async function appSetup(ownerId: string, o: { env?: Record<string, string>; cfgDir?: string; autoDeploy?: boolean; now?: () => Date } = {}) {
+export async function appSetup(ownerId: string, o: { env?: Record<string, string>; cfgDir?: string; autoDeploy?: boolean; now?: () => Date; autoDemo?: boolean } = {}) {
   const pool = new pg.Pool({ connectionString: DB_URL });
   await pool.query('insert into auth.users values ($1) on conflict do nothing', [ownerId]);
   const repo = new Repo(pool, ownerId);
@@ -52,7 +52,9 @@ export async function appSetup(ownerId: string, o: { env?: Record<string, string
   const probe = createServer(); await new Promise<void>((r) => probe.listen(0, '127.0.0.1', r));
   const port = (probe.address() as AddressInfo).port; await new Promise<void>((r) => probe.close(() => r()));
   holder.baseUrl = `http://127.0.0.1:${port}`;
-  const cfg = loadConfig(o.cfgDir ?? 'config');
+  const base0 = loadConfig(o.cfgDir ?? 'config');
+  // Auto-Demo für Firmen ohne Website ist im Produkt an; die älteren Ablauf-Tests setzen QUALIFIED-Leads voraus und schalten sie ab (neue Tests: autoDemo: true).
+  const cfg = { ...base0, sales: { ...base0.sales, autoDemo: { ...base0.sales.autoDemo, enabled: !!o.autoDemo } } };
   const ctx: Context = buildContext(repo, { env: o.env ?? {}, baseUrl: holder.baseUrl, now: () => NOW, providerNow: () => NOW, cfg, hostingRoot });
   const server = createApp(ctx, { password: PASSWORD, baseUrl: holder.baseUrl, autoDeploy: o.autoDeploy });
   await new Promise<void>((r) => server.listen(port, '127.0.0.1', r));

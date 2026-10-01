@@ -47,6 +47,12 @@ export class MockAIProvider implements AIProvider {
       const first = reasons.slice(0, 2);
       const tail = first.map((x) => x.text.replace(/\.$/, '')).join('; ');
       text = JSON.stringify({ opener: `Guten Tag, hier ist ${facts.sender ?? 'Ihr Ansprechpartner'}. Ich habe mir ${facts.company} online angesehen${tail ? `: ${tail}` : ''}. Darf ich Ihnen in zwei Minuten zeigen, wie das einfacher gehen könnte?`, used_codes: first.map((x) => x.code) });
+    } else if (r.task === 'analyze_lead' && facts?.base) {
+      const b = facts.base;                                  // Mock: gibt die geprüften Befunde unverändert in KI-Format zurück
+      text = JSON.stringify({ analysis_summary: b.analysis_summary, sales_reasons: b.sales_reasons, recommended_improvements: b.recommended_improvements, recommended_demo_features: b.recommended_demo_features, recommended_contact_angle: b.recommended_contact_angle, telephone_talking_points: b.telephone_talking_points, email_talking_points: b.email_talking_points, manual_checks: b.manual_checks });
+    } else if (r.task === 'premium_concept' && facts?.base) {
+      const b = facts.base; const feats: string[] = b.recommended_demo_features ?? [];
+      text = JSON.stringify({ concept: { site_structure: [{ page: 'Startseite', sections: ['Kopfbereich mit Hauptaktion', ...feats.slice(0, 4), 'Kontakt'] }, { page: 'Kontakt', sections: ['Telefon', 'Adresse und Karte', 'Öffnungszeiten'] }], conversion_concept: ['Hauptaktion oben auf jeder Seite', 'Telefonnummer immer sichtbar', ...(b.recommended_improvements ?? []).slice(0, 2)], copy_samples: [{ section: 'Überschrift', text: `Beispiel: ${facts.company}` }], tone: 'freundlich, klar', individual_outreach: b.recommended_contact_angle ?? '', demo_preparation: ['Nur bestätigte Daten übernehmen', 'Texte und Bilder als Beispiel kennzeichnen'] } });
     } else if (r.task === 'interpret_change' && facts) {
       const { patch, unclear } = interpretChangeRules(String(facts.request ?? ''));
       text = JSON.stringify({ patch, unclear });

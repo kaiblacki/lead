@@ -93,15 +93,26 @@ test('Nachrichten: standardmäßig nichts senden – Kanal aus, dann Einwilligun
   // 3) Einwilligung ohne Nachweis wird abgelehnt, mit Nachweis akzeptiert
   assert.match(await flash(await app.post(`/leads/${l.id}/consent`, { channel: 'EMAIL', note: '' })), /Nachweis/);
   assert.match(await flash(await app.post(`/leads/${l.id}/consent`, { channel: 'EMAIL', note: 'Einwilligung per Formular am 12.05.' })), /Einwilligung dokumentiert/);
+  // 3b) Alles andere ist erlaubt – trotzdem kein Versand, solange der E-Mail-Status nicht „Rechtlich freigegeben“ ist
+  assert.match(await flash(await send()), /Nicht gesendet.*Freigabestatus ist „Entwurf“/);
+  assert.equal(mail.sent.length, 0);
+  assert.match(await flash(await app.post(`/leads/${l.id}/email-status`, { to: 'legally_cleared' })), /nicht erlaubt/);           // Entwurf → freigegeben überspringt die Prüfung nicht
+  await app.post(`/leads/${l.id}/email-status`, { to: 'review_required' });
+  assert.match(await flash(await app.post(`/leads/${l.id}/email-status`, { to: 'legally_cleared' })), /rechtliche Grundlage/);       // ohne Bestätigung keine Freigabe
+  assert.match(await flash(await app.post(`/leads/${l.id}/email-status`, { to: 'legally_cleared', confirm: '1' })), /Es wurde nichts gesendet/);
   assert.match(await flash(await send()), /Gesendet \(Mock – nur protokolliert\)/);
+  assert.equal((await app.pool.query('select email_send_status s from leads where id=$1', [l.id])).rows[0].s, 'sent');
   assert.equal(mail.sent.length, 1);
   assert.equal((await app.pool.query("select result from contact_history where lead_id=$1 and channel='EMAIL' and direction='outbound'", [l.id])).rows[0].result, 'MOCK_RECORDED');
   // 4) Tageslimit (2) greift
-  await send('zweite'); assert.match(await flash(await send('dritte')), /Tageslimit/);
+  const clear = async () => { await app.post(`/leads/${l.id}/email-status`, { to: 'review_required' }); await app.post(`/leads/${l.id}/email-status`, { to: 'legally_cleared', confirm: '1' }); };
+  assert.match(await flash(await send('ohne neue Freigabe')), /Freigabestatus ist „Gesendet“/);     // auch ein Follow-up braucht wieder Prüfung + Freigabe
+  await clear(); await send('zweite'); await clear(); assert.match(await flash(await send('dritte')), /Tageslimit/);
   assert.equal(mail.sent.length, 2);
   // 5) Sperrliste hat Vorrang vor jeder Einwilligung
   const addr = (await app.pool.query("select value from lead_facts where lead_id=$1 and key='email' limit 1", [l.id])).rows[0].value as string;
   await app.post('/settings/suppression', { kind: 'email', value: addr, reason: 'Opt-out per Mail' });
+  await clear().catch(() => null);
   assert.match(await flash(await send('nach opt-out')), /Nicht gesendet.*(gesperrt|Sperrliste)/);
   assert.equal(mail.sent.length, 2);
   // ungültiger Kanal / leerer Text

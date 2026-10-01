@@ -86,7 +86,7 @@ export async function polishOpener(brief: SalesBrief, ctx: { company: string; ca
     'Antworte nur als JSON: {"opener": "...", "used_codes": ["CODE"]}', 'FACTS_JSON:',
     JSON.stringify({ company: ctx.company, sender: ctx.callerName, reasons: brief.reasons.filter((r) => r.code !== 'LOW_NEED').map((r) => ({ code: r.code, text: r.text })) })].join('\n');
   try {
-    const res = await ai.complete(leadKey, { task: 'sales_opener', prompt, maxTokens: 300 });
+    const res = await ai.complete(leadKey, { task: 'sales_opener', prompt, maxTokens: 300, tier: 'MASS', purpose: 'contact' });
     const raw = res.text;
     const j = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1)) as { opener?: string; used_codes?: string[] };
     const ok = typeof j.opener === 'string' && j.opener.length > 20 && j.opener.length < 700 && Array.isArray(j.used_codes) && j.used_codes.length > 0 && j.used_codes.every((c) => allowed.includes(c)) && !FORBIDDEN.test(j.opener);

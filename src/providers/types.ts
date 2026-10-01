@@ -61,8 +61,10 @@ export type SocialResult = { profiles: SocialProfile[]; complete: boolean; sourc
 export interface SocialDataProvider extends ProviderBase { lookup(q: { name: string; city?: string; website?: string; knownUrls?: string[] }): Promise<SocialResult> }
 
 // ---------- KI ----------
-export type AiTask = 'sales_opener' | 'interpret_change' | 'social_post' | 'generic';
-export type AiRequest = { task: AiTask; system?: string; prompt: string; maxTokens?: number };
+export type AiTask = 'sales_opener' | 'interpret_change' | 'social_post' | 'classify' | 'analyze_lead' | 'premium_concept' | 'generic';
+export type AiTierName = 'MASS' | 'DEEP' | 'PREMIUM';
+/** `tier` wählt Modell/Limits aus config/ai.json; `model` überschreibt einzeln (vom Gateway gesetzt). `purpose` ordnet die Kosten zu (analysis | demo | contact). */
+export type AiRequest = { task: AiTask; system?: string; prompt: string; maxTokens?: number; tier?: AiTierName; model?: string; purpose?: 'analysis' | 'demo' | 'contact' | 'other' };
 export type AiResponse = { text: string; model: string; inputTokens?: number; outputTokens?: number };
 export interface AIProvider extends ProviderBase { readonly model: string; complete(r: AiRequest): Promise<AiResponse> }
 

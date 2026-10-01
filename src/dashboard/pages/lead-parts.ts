@@ -1,3 +1,4 @@
+import { EMAIL_STATUS_LABEL, type EmailStatus } from '../../contact/service.ts';
 import { buildContactTemplates } from '../../sales/templates.ts';
 import { enrichment, orNA, NA, sourceLabel } from '../../core/enrichment.ts';
 import { html, raw, type Safe, categoryBadge, eur, fmt, fmtDate, mockBadge, postBtn, postForm, prioBadge, readinessBadge, scoreBar, statusBadge, STATE_TEXT } from '../ui.ts';
@@ -75,12 +76,16 @@ export function sales(d: any, csrf: string, id: string): Safe {
 }
 
 /** Kontaktvorlagen: E-Mail-Entwurf, Follow-up, Telefon-Einstieg – nur Entwürfe zum Kopieren, es wird nichts gesendet. */
-export function templatesCard(d: any, o: { sender?: string; demoUrl?: string }): Safe {
+export function templatesCard(d: any, o: { sender?: string; demoUrl?: string; csrf?: string; leadId?: string; emailStatus?: string; hasEmail?: boolean }): Safe {
   const b = d.sales?.brief; if (!b) return html``;
   const t = buildContactTemplates({ company: d.lead.company_name, reasons: b.reasons.map((r: any) => r.text), service: b.service.name, sender: o.sender, demoUrl: o.demoUrl, opener: d.sales.opener });
   const box = (label: string, text: string, rows: number) => html`<label>${label}<textarea readonly rows="${rows}">${text}</textarea></label>`;
   return html`<details class="card" id="vorlagen"><summary><b>Kontaktvorlagen (Entwürfe)</b></summary>
     <p class="mute">Nur zum Kopieren – das System sendet nichts. E-Mail an Unternehmen nur mit Einwilligung (UWG § 7).${o.demoUrl ? '' : ' Erst „Demo erstellen“, dann steht der Demo-Link in der E-Mail.'}${o.sender ? '' : ' Deinen Namen unter Einstellungen → Telefonakquise eintragen, dann erscheint er als Absender.'}</p>
+    ${o.csrf && o.leadId ? html`<div class="row"><b>E-Mail-Status:</b> <span class="badge ${o.emailStatus === 'legally_cleared' ? 'b-ok' : o.emailStatus === 'do_not_contact' ? 'b-bad' : 'b-warn'}">${EMAIL_STATUS_LABEL[(o.emailStatus ?? 'draft') as EmailStatus]}</span><small class="mute">${o.hasEmail ? 'Öffentliche Adresse vorhanden.' : 'Keine E-Mail-Adresse bekannt.'} Versand nur nach „Rechtlich freigegeben“ – eine gefundene Adresse allein reicht nie.</small></div>
+      ${o.emailStatus === 'draft' ? postBtn(o.csrf, `/leads/${o.leadId}/email-status`, 'Zur Prüfung vorlegen', { hidden: { to: 'review_required' } }) : ''}
+      ${o.emailStatus === 'review_required' ? html`${postForm(o.csrf, `/leads/${o.leadId}/email-status`, html`<input type="hidden" name="to" value="legally_cleared"><label class="inline"><input type="checkbox" name="confirm" value="1"> Rechtliche Grundlage ist geklärt (z. B. Einwilligung)</label> <button class="ok">Rechtlich freigeben</button>`, { style: 'display:block' })}${postBtn(o.csrf, `/leads/${o.leadId}/email-status`, 'Zurück zum Entwurf', { hidden: { to: 'draft' } })}` : ''}
+      ${o.emailStatus === 'legally_cleared' ? html`${postBtn(o.csrf, `/leads/${o.leadId}/email-status`, 'Als gesendet markieren (von Hand versendet)', { hidden: { to: 'sent' } })}${postBtn(o.csrf, `/leads/${o.leadId}/email-status`, 'Freigabe zurücknehmen', { hidden: { to: 'review_required' } })}` : ''}` : ''}
     ${box('Telefon-Einstieg', t.phoneOpener, 4)}${box(`E-Mail – Betreff: ${t.email.subject}`, t.email.text, 11)}${box(`Follow-up nach ${t.followUp.afterDays} Tagen – Betreff: ${t.followUp.subject}`, t.followUp.text, 8)}</details>`;
 }
 
@@ -185,3 +190,75 @@ export function history(d: any): Safe {
 export { CAT_LABEL };
 
 export const analysisText = (state: string | null | undefined) => state === 'none' ? 'ohne Website bewertet (NO_WEBSITE)' : state === 'unknown' ? 'Website nicht prüfbar' : state ? 'Website analysiert' : 'Analysestand unbekannt';
+
+const list = (items: unknown[], empty = 'nicht verfügbar') => (items.length ? html`<ul>${items.map((x: any) => html`<li>${typeof x === 'string' ? x : x.text}${x.evidence ? html`<br><small class="mute">Beleg: ${x.evidence}</small>` : ''}</li>`)}</ul>` : html`<p class="mute">${empty}</p>`);
+
+/** Nächste Aktion für die Liste („Demo fertig – anrufen“ usw.). */
+export function nextActionText(l: any, now = new Date()): string {
+  if (l.contact_readiness === 'DO_NOT_CONTACT' || l.status === 'IGNORED') return '—';
+  if (l.paused) return 'pausiert';
+  if (l.callback_at && new Date(l.callback_at) <= new Date(now.getTime() + 86400000)) return 'Rückruf fällig';
+  if (l.demo_ready_call) return l.phone ? 'Demo fertig – anrufen' : 'Demo fertig – Telefonnummer fehlt';
+  if (l.email_send_status === 'sent' && l.email_sent_at && now.getTime() - new Date(l.email_sent_at).getTime() >= 4 * 86400000) return 'Follow-up fällig';
+  if (l.website_url && !l.has_demo && !l.demo_decision) return 'Entscheiden: Demo erstellen oder überspringen';
+  if (!l.website_url && !l.has_demo && l.website_state === 'none') return 'Demo erstellen';
+  if (l.status === 'QUALIFIED' && !l.call_count) return l.phone ? 'Anrufen' : 'Telefonnummer ergänzen';
+  return l.has_demo && !l.call_count ? 'Anrufen' : '—';
+}
+
+/** Analyse: website_score (Qualität der Website, 100 = sehr gut) und Verkaufschance (100 = sehr interessant) sind GETRENNTE Werte. */
+export function analysisCard(d: any, a: any, o: { csrf: string; leadId: string; costs: any; demoLive: boolean }): Safe {
+  const l = d.lead; const status: Record<string, string> = { NO_WEBSITE: 'Keine Website (NO_WEBSITE)', ANALYZED: 'Website analysiert', BLOCKED: 'Website vorhanden – Abruf blockiert', UNREACHABLE: 'Website nicht erreichbar', NOT_VERIFIED: 'Website nicht zuverlässig prüfbar' };
+  const euro = (c: number) => `${(c / 100).toFixed(c < 10 ? 4 : 2).replace('.', ',')} €`;
+  if (!a) return html`<div class="card"><h2>Analyse</h2><p class="mute">Noch keine strukturierte Analyse.</p>${postBtn(o.csrf, `/leads/${o.leadId}/analysis`, 'Analyse erstellen (MASS)', { hidden: { tier: 'MASS' } })}</div>`;
+  return html`<div class="card" id="analyse"><div class="row"><h2 class="grow">Analyse</h2><span class="badge b-info">${a.tier}</span><span class="badge">${status[a.website_status] ?? a.website_status}</span></div>
+    <div class="grid"><div class="kpi"><b>${a.website_score ?? NA}</b><span>Website-Score (100 = sehr gute Website)</span></div><div class="kpi"><b>${a.sales_opportunity ?? NA}</b><span>Verkaufschance (100 = sehr interessant)</span></div>
+      <div class="kpi"><b>${Math.round(a.confidence * 100)} %</b><span>Sicherheit der Einschätzung</span></div></div>
+    <p>${a.analysis_summary}</p>
+    <h3>Positiv</h3>${list(a.positive_points, 'Keine positiven Punkte festgestellt.')}
+    <h3>Auffälligkeiten</h3>${list(a.weaknesses, a.website_status === 'NO_WEBSITE' ? 'Keine Website – es gibt nichts zu prüfen.' : 'Keine festgestellt.')}
+    <h3>Verkaufsargumente</h3>${list(a.sales_reasons)}
+    <h3>Was eine neue Website besser machen würde</h3>${list(a.recommended_improvements)}
+    <h3>Empfohlene Demo-Funktionen</h3>${list(a.recommended_demo_features)}
+    <p><b>Empfohlener Ansatz:</b> ${a.recommended_contact_angle || NA}</p>
+    ${a.manual_checks.length ? html`<div class="warnbox"><b>Manuell prüfen (nicht festgestellt)</b>${list(a.manual_checks)}</div>` : ''}
+    ${a.missing_information.length ? html`<details><summary>Fehlende Informationen (${a.missing_information.length})</summary>${list(a.missing_information)}</details>` : ''}
+    <details><summary>Belege und Quellen</summary>${a.evidence.length ? html`<ul>${a.evidence.map((e: any) => html`<li><code>${e.code}</code> (${e.status}): ${e.evidence}</li>`)}</ul>` : html`<p class="mute">Keine Auffälligkeiten mit Beleg.</p>`}
+      <p><b>Quellen:</b> ${a.sources.length ? a.sources.map((s: any) => html`${sourceLabel(s.source)}${s.url ? html` (<code>${s.url}</code>)` : ''} – ${s.fields.join(', ')}; `) : NA}</p></details>
+    ${a.concept ? html`<details><summary>Website-Konzept (PREMIUM)</summary><h3>Seitenstruktur</h3><ul>${a.concept.site_structure.map((p2: any) => html`<li><b>${p2.page}</b>: ${p2.sections.join(' · ')}</li>`)}</ul><h3>Conversion</h3>${list(a.concept.conversion_concept)}
+      <h3>Textbeispiele (nur Beispiele)</h3>${list(a.concept.copy_samples.map((c: any) => `${c.section}: ${c.text}`))}<p><b>Ton:</b> ${a.concept.tone}</p><p><b>Individuelle Ansprache:</b> ${a.concept.individual_outreach || NA}</p><h3>Demo-Vorbereitung</h3>${list(a.concept.demo_preparation)}</details>` : ''}
+    <p><small class="mute">Analysiert ${fmt(a.analyzed_at)} · Modell: ${a.ai_model_used} · geschätzte KI-Kosten dieser Analyse: ${euro(a.estimated_ai_cost)}</small></p>
+    <h3>KI-Stufe</h3>
+    ${postForm(o.csrf, `/leads/${o.leadId}/analysis`, html`<div class="row"><label>Stufe<select name="tier"><option value="MASS" ${l.ai_tier === 'MASS' ? raw('selected') : ''}>MASS – regelbasiert, kostenlos</option><option value="DEEP" ${l.ai_tier === 'DEEP' ? raw('selected') : ''}>DEEP – Tiefenanalyse (KI)</option><option value="PREMIUM" ${l.ai_tier === 'PREMIUM' ? raw('selected') : ''}>PREMIUM – Website-Konzept (KI)</option></select></label>
+      <button class="primary">Analyse ausführen</button></div><small class="mute">Unveränderte Grundlage wird nicht erneut berechnet (keine Kosten). Modell je Stufe: config/ai.json.</small>`, { style: 'display:block' })}
+    <h3>KI-Kosten dieses Leads</h3><table><tr><td>Analyse</td><td class="r">${euro(o.costs.analysisCents)}</td></tr><tr><td>Demo / Konzept</td><td class="r">${euro(o.costs.demoCents)}</td></tr><tr><td>Kontaktvorlage</td><td class="r">${euro(o.costs.contactCents)}</td></tr><tr><td><b>Gesamt</b></td><td class="r"><b>${euro(o.costs.totalCents)}</b></td></tr></table>
+    <small class="mute">${o.costs.calls} KI-Aufruf(e), ${o.costs.inputTokens + o.costs.outputTokens} Token. ${o.costs.totalCents === 0 ? 'Mock-/regelbasierte Aufrufe kosten nichts.' : ''}</small></div>`;
+}
+
+/** „Was soll ich am Telefon sagen?“ – kompakt, persönlich, nur belegte Punkte. */
+export function phoneView(d: any, a: any, o: { sender: string; demoUrl?: string; contactPerson?: string; csrf: string; leadId: string }): Safe {
+  const l = d.lead; const b = d.sales?.brief;
+  const top3 = [...(a?.weaknesses ?? []).map((w: any) => w.text), ...((a?.website_status === 'NO_WEBSITE' ? a?.sales_reasons ?? [] : []).map((w: any) => w.text))].filter((x, i, arr) => arr.indexOf(x) === i).slice(0, 3);
+  const existing = a?.website_status === 'NO_WEBSITE' ? 'Keine eigene Website gefunden.' : a?.website_status === 'ANALYZED' ? `Website vorhanden (${l.website_url}), Website-Score ${a.website_score ?? NA}/100.` : l.website_url ? `Website vorhanden (${l.website_url}), aber nicht zuverlässig prüfbar – bitte vorher kurz ansehen.` : NA;
+  const opener = `Hallo, hier ist ${o.sender}. Ich habe mir den Online-Auftritt von ${l.company_name} angeschaut und Ihnen unverbindlich etwas vorbereitet${o.demoUrl ? ' – einen ersten Entwurf, den ich Ihnen gern zeige' : ''}. Haben Sie kurz Zeit?`;
+  const points: string[] = a?.telephone_talking_points ?? [];
+  const goal = o.demoUrl ? 'Kurzes Interesse klären und den Demo-Link senden bzw. einen Termin für eine Vorstellung vereinbaren.' : 'Interesse klären; bei Interesse eine unverbindliche Demo vorbereiten.';
+  return html`<div class="card" id="telefon"><h2>Was soll ich am Telefon sagen?</h2>
+    <dl class="facts"><dt>Unternehmen</dt><dd><b>${l.company_name}</b></dd><dt>Branche</dt><dd>${orNA(l.sub_industry ?? l.industry)}</dd><dt>Ansprechpartner</dt><dd>${orNA(o.contactPerson)}</dd>
+      <dt>Telefon</dt><dd>${l.phone ? html`<a class="tel" style="font-size:20px;font-weight:700" href="tel:${String(l.phone).replace(/[^\d+]/g, '')}">${l.phone}</a>` : NA}</dd>
+      <dt>Bestehende Website</dt><dd>${existing}</dd><dt>Demo</dt><dd>${o.demoUrl ? html`vorhanden: <code>${o.demoUrl}</code>` : 'noch keine Demo'}</dd><dt>Kontaktstatus</dt><dd>${statusBadge(l.status)} · ${l.call_count} Anruf(e)</dd></dl>
+    <h3>3 wichtigste Punkte</h3>${list(top3, 'Keine belegten Schwächen oder Chancen – Anruf nur bei konkretem Anlass.')}
+    <h3>Gesprächseinstieg</h3><div class="note">${opener}</div>
+    <h3>Individuelle Argumente</h3>${list(points)}
+    <p><b>Ziel des Telefonats:</b> ${goal}</p>
+    ${b?.objections?.length ? html`<details><summary>Mögliche Einwände</summary><ul>${b.objections.map((x: any) => html`<li><b>${x.objection}</b><br>${x.response}</li>`)}</ul></details>` : ''}
+    <small class="mute">Persönlich bleiben, nichts versprechen, keine Zahlen zu Umsatz oder Kunden nennen.</small></div>`;
+}
+
+/** Demo-Entscheidung bei Firmen mit Website: erst ansehen, dann selbst entscheiden. */
+export function demoDecision(d: any, o: { csrf: string; leadId: string; hasDemo: boolean }): Safe {
+  const l = d.lead;
+  if (!l.website_url || o.hasDemo) return html``;
+  return html`<div class="card"><h2>Demo für diese Firma?</h2>${l.demo_decision === 'skipped' ? html`<p>Du hast <b>Überspringen</b> gewählt.</p>${postBtn(o.csrf, `/leads/${o.leadId}/demo/skip`, 'Entscheidung zurücknehmen', { hidden: { undo: '1' } })}`
+    : html`<p class="mute">Diese Firma hat eine Website – es wird nichts automatisch erstellt. Prüfe die Analyse und entscheide.</p><div class="row">${postBtn(o.csrf, `/leads/${o.leadId}/demo`, 'Demo erstellen', { cls: 'primary', hidden: { template: 'auto' } })}${postBtn(o.csrf, `/leads/${o.leadId}/demo/skip`, 'Überspringen')}</div>`}</div>`;
+}

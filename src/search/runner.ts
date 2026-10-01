@@ -5,6 +5,7 @@ import type { LeadStore } from '../db/leads.ts';
 import type { RunStore } from '../db/runs.ts';
 import { Budget, BudgetExceeded, KillSwitchActive } from '../guardrails/budget.ts';
 import { AiGateway } from '../ai/gateway.ts';
+import { AiUsageStore } from '../db/ai-usage.ts';
 import { analyzeCandidate } from './analyze-candidate.ts';
 import { describeCriteria, postfilter, prefilter, sortKey, type SearchCriteria } from './criteria.ts';
 import { assessContact, suppressionKeys } from '../contact/strategy.ts';
@@ -47,6 +48,8 @@ export type RunnerDeps = { repo: Repo; leads: LeadStore; runs: RunStore; provide
 export class SearchRunner {
   d: RunnerDeps;
   private inflight = new Set<Promise<void>>();
+  /** Nachbearbeitung je gespeichertem Lead (strukturierte Analyse, Auto-Demo). Wird vom Kontext gesetzt. */
+  afterSave?: (leadId: string, info: { matched: boolean; noWebsite: boolean; opportunity: number | null; blocked: boolean; run: { left: number } }) => Promise<void>;
   constructor(d: RunnerDeps) { this.d = d; }
 
   /** Startet einen Lauf im Hintergrund und gibt sofort die Lauf-ID zurück. */
@@ -120,9 +123,13 @@ export class SearchRunner {
     const budget = new Budget({ ...limits, maxLeadsPerRun: Math.min(limits.maxLeadsPerRun, Math.max(c.maxLeads * 4, 20)) });
     const settings = await repo.getSettings();
     const scoring = scoringOverride ?? await repo.getScoringConfig<ScoringConfig>(cfg.scoring);
-    const gateway = new AiGateway(P.ai, budget);
+    const aiStore = new AiUsageStore(repo);
+    const spent = await aiStore.spent(now);
+    budget.dailyCents = spent.dailyCents; budget.monthlyCents = spent.monthlyCents;       // bereits verbrauchte KI-Kosten zählen mit
+    const gateway = new AiGateway(P.ai, budget, { cfg: cfg.ai, store: aiStore });
     const sum: RunSummary = { found: 0, prefiltered: 0, analyzed: 0, matched: 0, errors: 0, warnings: [], skipped: {}, usage: { places: 0, directory: 0, crawl: 0, social: 0, render: 0 }, errorSamples: [] };
     const save = () => runs.progress(runId, { found: sum.found, prefiltered: sum.prefiltered, analyzed: sum.analyzed, matched: sum.matched, errors: sum.errors });
+    const autoDemo = { left: Number(cfg.sales?.autoDemo?.maxPerRun ?? 100) };      // Obergrenze automatisch erzeugter Demos je Lauf
     const matchedLeads: { leadId: string; sales: number | null; dn: number | null; dist?: number; reviews?: number }[] = [];
     let status: 'DONE' | 'STOPPED' = 'DONE';
 
@@ -176,6 +183,9 @@ export class SearchRunner {
           const matched = fail.length === 0 && contact.readiness !== 'DO_NOT_CONTACT';
           if (matched && brief && (brief.priority === 'A' || brief.priority === 'B')) brief = await polishOpener(brief, { company: res.lead.companyName, callerName: callerOf(settings.callerName, cfg.agency.callerName) }, gateway, res.externalId);
           const saved = await leads.saveAnalysis({ res, contact, brief, runId, scoring, runResult: { matched, failReasons: contact.readiness === 'DO_NOT_CONTACT' && !fail.length ? ['Auf der Sperrliste'] : fail } });
+          await gateway.flush(saved.leadId);
+          try { await this.afterSave?.(saved.leadId, { matched, noWebsite: res.audit.status === 'NO_WEBSITE', opportunity: res.analysis.salesOpportunity.value, blocked: contact.readiness === 'DO_NOT_CONTACT', run: autoDemo }); }
+          catch (e) { if (sum.warnings.length < 5) sum.warnings.push(`Nachbearbeitung ${res.lead.companyName}: ${e instanceof Error ? e.message : String(e)}`); }
           if (matched) { sum.matched++; matchedLeads.push({ leadId: saved.leadId, sales: res.analysis.salesOpportunity.value, dn: res.analysis.digitalNeed.value, dist: res.lead.distanceKm, reviews: res.lead.reviewCount }); }
         } catch (e) {
           if (e instanceof BudgetExceeded || e instanceof KillSwitchActive) throw e;

@@ -16,7 +16,7 @@ const textOf = (h: string) => h.replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ').
 
 export type AuditInput = {
   websiteUrl?: string;
-  lead: { companyName: string; city?: string; postalCode?: string; bookingRelevant?: boolean };
+  lead: { companyName: string; city?: string; postalCode?: string; bookingRelevant?: boolean; /** Branchen-Features aus der Config (z. B. menu, gallery, maps) – steuern die branchenabhängigen Prüfpunkte. */ features?: string[] };
   crawl?: CrawlResult | null;
   render?: RenderMetrics | null;
   now: Date;
@@ -154,6 +154,19 @@ export function runAudit(input: AuditInput): AuditReport {
   }
   const contactPage = crawl.pages.slice(1).some((p) => /kontakt|contact/i.test(p.url) && p.status < 400);
   if (crawl.pages.length > 1) add('CONTACT_PAGE', 'conversion', contactPage ? 'pass' : 'warn', 'low', contactPage ? 'Eigene Kontaktseite vorhanden.' : 'Keine eigene Kontaktseite gefunden.', contactPage ? 'Kontaktseite erreichbar' : 'Keine erreichbare Seite „Kontakt“ gefunden');
+
+
+  // ---- Branchenabhängige Prüfpunkte (nur wenn die Branche das Feature laut Config braucht)
+  const feats = input.lead.features ?? [];
+  if (feats.length && !spa) {
+    const mapsOk = /google\.[a-z.]+\/maps|maps\.app\.goo\.gl|goo\.gl\/maps|openstreetmap\.org|<iframe[^>]+maps/i.test(allHtml);
+    if (feats.includes('maps')) add('MAPS', 'content', mapsOk ? 'pass' : 'warn', 'low', mapsOk ? 'Karte bzw. Anfahrt eingebunden.' : 'Auf der geprüften Website war keine Karte bzw. Anfahrtsskizze erkennbar.', mapsOk ? 'Karten-Link oder -Einbettung gefunden' : 'Kein Maps-/OSM-Link und kein Karten-iframe gefunden');
+    if (feats.includes('menu')) { const m = /speisekarte|getränkekarte|menü\b|mittagstisch|unsere gerichte|\.pdf/i.test(allHtml); add('MENU', 'content', m ? 'pass' : 'warn', 'medium', m ? 'Speisekarte erkennbar.' : 'Auf der geprüften Website war keine Speisekarte erkennbar.', m ? 'Hinweis auf Speisekarte gefunden' : 'Kein Begriff wie Speisekarte/Gerichte gefunden'); }
+    if (feats.includes('gallery')) { const n2 = (allHtml.match(/<img\b/gi) ?? []).length; add('GALLERY', 'design', n2 >= 4 ? 'pass' : n2 >= 1 ? 'warn' : 'fail', 'low', n2 >= 4 ? 'Bildmaterial vorhanden.' : n2 >= 1 ? 'Auf der geprüften Website waren nur wenige Bilder erkennbar.' : 'Auf der geprüften Website waren keine Bilder erkennbar.', `${n2} Bild(er) im HTML gefunden`); }
+    if (feats.includes('reservation')) { const r = /reservier|tisch\s+buchen|opentable|resmio|quandoo/i.test(allHtml); add('RESERVATION', 'conversion', r ? 'pass' : 'warn', 'medium', r ? 'Reservierungsmöglichkeit erkennbar.' : 'Auf der geprüften Website war keine Reservierungsmöglichkeit erkennbar.', r ? 'Reservierungsbegriff oder -dienst gefunden' : 'Kein Hinweis auf Reservierung gefunden'); }
+    if (feats.includes('quote')) { add('QUOTE_REQUEST', 'conversion', form ? 'pass' : 'warn', 'medium', form ? 'Anfrage per Formular möglich.' : 'Auf der geprüften Website war kein Anfrageformular erkennbar.', form ? '<form> mit Eingabefeld gefunden' : 'Kein <form> mit Eingabefeld gefunden'); }
+    if (feats.includes('service_area')) { const a = /einsatzgebiet|umkreis|wir (?:sind|arbeiten) (?:in|für)|region|landkreis|saarland|raum\s+[A-ZÄÖÜ]/i.test(allText); add('SERVICE_AREA', 'content', a ? 'pass' : 'warn', 'low', a ? 'Einsatzgebiet erkennbar.' : 'Auf der geprüften Website war kein Einsatzgebiet erkennbar.', a ? 'Hinweis auf Einsatzgebiet gefunden' : 'Kein Hinweis auf Einsatzgebiet gefunden'); }
+  }
 
   // ---- Vertrauen / Rechtliches
   textual('REVIEWS', 'trust', TRUST.test(allText), 'low', 'Bewertungen/Referenzen erkennbar.', 'Keine Bewertungen oder Referenzen erkennbar.', 'Hinweis auf Bewertungen/Referenzen', 'Keine Begriffe wie Bewertung, Referenz, Kundenstimmen', 'warn');

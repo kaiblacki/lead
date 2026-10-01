@@ -1,0 +1,9 @@
+{
+  "_hinweis": "Drei KI-Stufen. Modell-IDs sind konfigurierbar (hier oder per Umgebungsvariable ANTHROPIC_MODEL_MASS / _DEEP / _PREMIUM). Preise sind SCHÄTZWERTE in US-Dollar je 1 Mio. Token – bitte mit der aktuellen Preisliste des Anbieters abgleichen; sie dienen nur der Kostenanzeige.",
+  "eurPerUsd": 0.92,
+  "tiers": {
+    "MASS":    { "label": "Massenanalyse",   "model": "claude-haiku-4-5-20251001", "modelEnv": "ANTHROPIC_MODEL_MASS",    "maxTokens": 700,  "inputUsdPerMTok": 1,  "outputUsdPerMTok": 5,  "purpose": "Klassifizierung, Website-Grundprüfung, Extraktion, erste Bewertung" },
+    "DEEP":    { "label": "Tiefenanalyse",   "model": "claude-sonnet-5-5",         "modelEnv": "ANTHROPIC_MODEL_DEEP",    "maxTokens": 2200, "inputUsdPerMTok": 3,  "outputUsdPerMTok": 15, "purpose": "tiefere Analyse, Verkaufsargumente, Verbesserungsvorschläge, Telefonleitfaden" },
+    "PREMIUM": { "label": "Premium-Konzept", "model": "claude-opus-5-5",           "modelEnv": "ANTHROPIC_MODEL_PREMIUM", "maxTokens": 4500, "inputUsdPerMTok": 5,  "outputUsdPerMTok": 25, "purpose": "individuelles Website-Konzept, Seitenstruktur, Conversion-Konzept, hochwertige Texte" }
+  }
+}

@@ -1,18 +1,65 @@
 {
   "priorities": {
-    "A": { "label": "A – heute anrufen", "minScore": 75 },
-    "B": { "label": "B – diese Woche", "minScore": 60 },
-    "C": { "label": "C – bei Gelegenheit", "minScore": 45 },
-    "D": { "label": "D – zurückstellen", "minScore": 0 }
+    "A": {
+      "label": "A – heute anrufen",
+      "minScore": 75
+    },
+    "B": {
+      "label": "B – diese Woche",
+      "minScore": 60
+    },
+    "C": {
+      "label": "C – bei Gelegenheit",
+      "minScore": 45
+    },
+    "D": {
+      "label": "D – zurückstellen",
+      "minScore": 0
+    }
   },
   "objections": [
-    { "key": "no_time", "objection": "„Dafür habe ich gerade keine Zeit.“", "response": "Der Aufwand für Sie ist gering: Sie geben Fotos und Texte frei, den Rest übernehmen wir. Darf ich Ihnen zunächst nur den unverbindlichen Entwurf zeigen?", "when": "always" },
-    { "key": "too_expensive", "objection": "„Das ist mir zu teuer.“", "response": "Der Einmalpreis liegt laut Preisliste bei {price}; die Wartung ist optional ({maintenance}/Monat). Wir beginnen erst nach der Anzahlung und Sie geben jeden Schritt frei.", "when": "always" },
-    { "key": "has_website", "objection": "„Wir haben doch schon eine Website.“", "response": "Das habe ich gesehen. Mir ist Folgendes aufgefallen: {top_reason}. Darf ich Ihnen zeigen, wie eine modernisierte Version aussehen könnte?", "when": "has_website" },
-    { "key": "no_website_needed", "objection": "„Wir brauchen keine Website, die Kunden kommen über Empfehlungen.“", "response": "Empfehlungen sind Gold wert. Viele prüfen danach trotzdem online Adresse, Öffnungszeiten und Kontakt. Eine einfache Seite macht das für Interessenten leicht.", "when": "no_website" },
-    { "key": "social_enough", "objection": "„Wir sind ja auf Instagram.“", "response": "Das ist eine gute Basis. Eine eigene Website ergänzt sie: Adresse, Leistungen und Kontakt sind dort dauerhaft und unabhängig von einer Plattform auffindbar.", "when": "social_present" },
-    { "key": "send_email", "objection": "„Schicken Sie mir das per E-Mail.“", "response": "Gern, sobald Sie zugestimmt haben, dass ich Ihnen schreiben darf. Wie lautet die E-Mail-Adresse, und passt es für Sie, wenn ich Ihnen den Entwurf dorthin sende?", "when": "always" },
-    { "key": "already_agency", "objection": "„Wir haben schon jemanden, der das macht.“", "response": "Verstehe. Wenn Sie möchten, lasse ich Ihnen den Entwurf unverbindlich zukommen, dann können Sie vergleichen.", "when": "always" }
+    {
+      "key": "no_time",
+      "objection": "„Dafür habe ich gerade keine Zeit.“",
+      "response": "Der Aufwand für Sie ist gering: Sie geben Fotos und Texte frei, den Rest übernehmen wir. Darf ich Ihnen zunächst nur den unverbindlichen Entwurf zeigen?",
+      "when": "always"
+    },
+    {
+      "key": "too_expensive",
+      "objection": "„Das ist mir zu teuer.“",
+      "response": "Der Einmalpreis liegt laut Preisliste bei {price}; die Wartung ist optional ({maintenance}/Monat). Wir beginnen erst nach der Anzahlung und Sie geben jeden Schritt frei.",
+      "when": "always"
+    },
+    {
+      "key": "has_website",
+      "objection": "„Wir haben doch schon eine Website.“",
+      "response": "Das habe ich gesehen. Mir ist Folgendes aufgefallen: {top_reason}. Darf ich Ihnen zeigen, wie eine modernisierte Version aussehen könnte?",
+      "when": "has_website"
+    },
+    {
+      "key": "no_website_needed",
+      "objection": "„Wir brauchen keine Website, die Kunden kommen über Empfehlungen.“",
+      "response": "Empfehlungen sind Gold wert. Viele prüfen danach trotzdem online Adresse, Öffnungszeiten und Kontakt. Eine einfache Seite macht das für Interessenten leicht.",
+      "when": "no_website"
+    },
+    {
+      "key": "social_enough",
+      "objection": "„Wir sind ja auf Instagram.“",
+      "response": "Das ist eine gute Basis. Eine eigene Website ergänzt sie: Adresse, Leistungen und Kontakt sind dort dauerhaft und unabhängig von einer Plattform auffindbar.",
+      "when": "social_present"
+    },
+    {
+      "key": "send_email",
+      "objection": "„Schicken Sie mir das per E-Mail.“",
+      "response": "Gern, sobald Sie zugestimmt haben, dass ich Ihnen schreiben darf. Wie lautet die E-Mail-Adresse, und passt es für Sie, wenn ich Ihnen den Entwurf dorthin sende?",
+      "when": "always"
+    },
+    {
+      "key": "already_agency",
+      "objection": "„Wir haben schon jemanden, der das macht.“",
+      "response": "Verstehe. Wenn Sie möchten, lasse ich Ihnen den Entwurf unverbindlich zukommen, dann können Sie vergleichen.",
+      "when": "always"
+    }
   ],
   "nextActions": {
     "READY_FOR_MANUAL_CALL": "Heute anrufen (Gesprächseinstieg unten) und Ergebnis erfassen.",
@@ -21,5 +68,16 @@
     "MANUAL_REVIEW": "Lead manuell prüfen: Kontaktdaten und Rechtsgrundlage klären.",
     "DO_NOT_CONTACT": "Nicht kontaktieren."
   },
-  "defaultSender": "Ihr Ansprechpartner"
+  "defaultSender": "Ihr Ansprechpartner",
+  "autoDemo": {
+    "_hinweis": "Firmen OHNE Website bekommen automatisch eine Demo, wenn genug öffentliche Daten da sind. Firmen MIT Website: nie automatisch – nur nach deiner Entscheidung.",
+    "enabled": true,
+    "minOpportunity": 45,
+    "maxPerRun": 100,
+    "requireAnyOf": [
+      "phone",
+      "address"
+    ]
+  },
+  "emailFollowUpDays": 4
 }

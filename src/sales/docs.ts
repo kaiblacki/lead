@@ -2,6 +2,7 @@ import type { Repo } from '../db/repo.ts';
 import type { LeadStore } from '../db/leads.ts';
 import type { SalesStore } from '../db/sales.ts';
 import type { AppConfig } from '../core/config.ts';
+import type { TaskStore } from '../db/tasks.ts';
 import { pickTemplate, templateByKey } from '../site/templates.ts';
 import { contentFromFacts } from '../site/content.ts';
 import { renderDemo, type DemoHints } from '../site/engine.ts';
@@ -9,10 +10,10 @@ import { buildOffer } from '../offers/generate.ts';
 
 /** Erzeugt Demo und Angebot für einen Lead aus den gespeicherten Daten (Fakten, Audit, Branche, Profil). */
 export class SalesDocs {
-  repo: Repo; leads: LeadStore; sales: SalesStore; cfg: AppConfig; baseUrl: string; now: () => Date;
-  constructor(d: { repo: Repo; leads: LeadStore; sales: SalesStore; cfg: AppConfig; baseUrl: string; now?: () => Date }) { this.repo = d.repo; this.leads = d.leads; this.sales = d.sales; this.cfg = d.cfg; this.baseUrl = d.baseUrl.replace(/\/$/, ''); this.now = d.now ?? (() => new Date()); }
+  repo: Repo; leads: LeadStore; sales: SalesStore; cfg: AppConfig; baseUrl: string; now: () => Date; tasks?: TaskStore;
+  constructor(d: { repo: Repo; leads: LeadStore; sales: SalesStore; cfg: AppConfig; baseUrl: string; now?: () => Date; tasks?: TaskStore }) { this.tasks = d.tasks; this.repo = d.repo; this.leads = d.leads; this.sales = d.sales; this.cfg = d.cfg; this.baseUrl = d.baseUrl.replace(/\/$/, ''); this.now = d.now ?? (() => new Date()); }
 
-  async demoFor(leadId: string, templateKey?: string): Promise<{ id: string; token: string; url: string; template: string }> {
+  async demoFor(leadId: string, templateKey?: string, actor = 'user'): Promise<{ id: string; token: string; url: string; template: string }> {
     const d = await this.leads.get(leadId);
     if (!d) throw new Error('Lead nicht gefunden');
     const facts = await this.leads.factsOf(leadId);
@@ -23,7 +24,9 @@ export class SalesDocs {
     const mobile = d.opportunity?.dimensions?.mobileNeed?.value ?? null;
     const h: DemoHints = { ...hints, noWebsite: d.lead.website_state === 'none', bookingGap: sub?.booking !== false && (d.lead.website_state === 'none' || booking?.status === 'fail'), mobileWeak: mobile !== null && mobile >= this.cfg.scoring.mobileProblemAt };
     const html = renderDemo(content, useTpl, this.cfg.agency, h);
-    const created = await this.sales.createDemo(leadId, useTpl.key, html, this.cfg.agency.demoValidDays ?? 30);
+    const created = await this.sales.createDemo(leadId, useTpl.key, html, this.cfg.agency.demoValidDays ?? 30, actor);
+    // Erinnerung: Demo fertig → anrufen (nur mit Telefonnummer, nicht bei gesperrten Leads)
+    if (this.tasks && d.lead.phone && !d.lead.contact_blocked) await this.tasks.ensure(leadId, 'CALL_DEMO_READY', 'Demo fertig – anrufen');
     return { ...created, url: `${this.baseUrl}/d/${created.token}`, template: useTpl.key };
   }
 

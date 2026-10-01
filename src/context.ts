@@ -16,13 +16,21 @@ import { Retention } from './retention/run.ts';
 import { Notifier } from './notify/service.ts';
 import { InvoiceService } from './orders/invoice.ts';
 import { Gdpr } from './compliance/gdpr.ts';
+import { AiUsageStore } from './db/ai-usage.ts';
+import { AiGateway } from './ai/gateway.ts';
+import { Budget } from './guardrails/budget.ts';
+import { AnalysisService } from './analysis/service.ts';
+import { TaskStore } from './db/tasks.ts';
+import { Automation } from './workflow/automation.ts';
 import { loadConfig, type AppConfig } from './core/config.ts';
 import { createProviders, type Registry } from './providers/registry.ts';
 
 export type Context = {
   repo: Repo; cfg: AppConfig; registry: Registry; baseUrl: string; now: () => Date;
   leads: LeadStore; runs: RunStore; sales: SalesStore; social: SocialStore; analytics: AnalyticsStore; learning: LearningStore;
-  runner: SearchRunner; orders: OrderService; delivery: DeliveryService; maintenance: MaintenanceService; docs: SalesDocs; calls: CallService; contact: ContactService; retention: Retention; notifier: Notifier; invoices: InvoiceService; gdpr: Gdpr;
+  runner: SearchRunner; orders: OrderService; delivery: DeliveryService; maintenance: MaintenanceService; docs: SalesDocs; calls: CallService; contact: ContactService; retention: Retention; notifier: Notifier; invoices: InvoiceService; gdpr: Gdpr; aiUsage: AiUsageStore; analysis: AnalysisService; tasks: TaskStore; automation: Automation;
+  /** KI-Aufruf mit Stufe, Budget-Prüfung und Kostenprotokoll (für Dashboard-Aktionen außerhalb eines Suchlaufs). */
+  aiComplete: (leadId: string | null, req: Parameters<AiGateway['complete']>[1]) => ReturnType<AiGateway['complete']>;
 };
 
 export type ContextOptions = { env?: Record<string, string | undefined>; baseUrl: string; now?: () => Date; providerNow?: () => Date; cfg?: AppConfig; hostingRoot?: string };
@@ -39,13 +47,25 @@ export function buildContext(repo: Repo, o: ContextOptions): Context {
   const orders = new OrderService(repo, cfg, now);
   const delivery = new DeliveryService(orders);
   const maintenance = new MaintenanceService(repo, P.crawler, now);
-  const docs = new SalesDocs({ repo, leads, sales, cfg, baseUrl: o.baseUrl, now });
-  const calls = new CallService({ repo, leads, sales, docs, orders, now });
+  const tasks = new TaskStore(repo);
+  const docs = new SalesDocs({ repo, leads, sales, cfg, baseUrl: o.baseUrl, now, tasks });
+  const calls = new CallService({ repo, leads, sales, docs, orders, now, tasks });
   const contact = new ContactService({ repo, leads, providers: P, now });
   const retention = new Retention(repo, cfg.retention);
   const notifier = new Notifier(repo, P.email, o.baseUrl, now);
   repo.onEvent = (type, leadId, payload) => { void notifier.onEvent(type, leadId, payload); };
   const invoices = new InvoiceService(repo, cfg.agency, cfg.pricing, now);
   const gdpr = new Gdpr(repo, leads);
-  return { repo, cfg, registry, notifier, invoices, gdpr, baseUrl: o.baseUrl, now, leads, runs, sales, social, analytics, learning, runner, orders, delivery, maintenance, docs, calls, contact, retention };
+  const aiUsage = new AiUsageStore(repo);
+  const aiComplete: Context['aiComplete'] = async (leadId, req) => {
+    const { limits, killSwitch } = await repo.getLimits();
+    if (killSwitch) throw new Error('Kill Switch ist aktiv');
+    const spent = await aiUsage.spent(now());
+    const budget = new Budget(limits, spent);
+    return new AiGateway(P.ai, budget, { cfg: cfg.ai, store: aiUsage, env }).complete(leadId, req);
+  };
+  const analysis = new AnalysisService({ repo, leads, usage: aiUsage, cfg, complete: aiComplete as never, now, aiIsMock: () => P.ai.isMock });
+  const automation = new Automation({ repo, docs, cfg, analysis });
+  runner.afterSave = (leadId, info) => automation.afterAnalysis(leadId, info);
+  return { repo, cfg, registry, notifier, invoices, gdpr, aiUsage, aiComplete, analysis, tasks, automation, baseUrl: o.baseUrl, now, leads, runs, sales, social, analytics, learning, runner, orders, delivery, maintenance, docs, calls, contact, retention };
 }

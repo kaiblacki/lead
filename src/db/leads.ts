@@ -14,7 +14,7 @@ export type SaveAnalysisInput = {
   runResult?: { matched: boolean; failReasons: string[] };
 };
 
-export type LeadFilter = { q?: string; category?: string; status?: string; readiness?: string; websiteState?: string; minScore?: number; runId?: string; matchedOnly?: boolean; priority?: string; sort?: string; limit?: number; offset?: number };
+export type LeadFilter = { quick?: string; tier?: string; q?: string; category?: string; status?: string; readiness?: string; websiteState?: string; minScore?: number; runId?: string; matchedOnly?: boolean; priority?: string; sort?: string; limit?: number; offset?: number };
 
 export class LeadStore {
   repo: Repo;
@@ -102,20 +102,49 @@ export class LeadStore {
     if (f.websiteState) add('l.website_state = ?', f.websiteState);
     if (f.minScore) add('o.score >= ?', f.minScore);
     if (f.priority) add("sp.brief->>'priority' = ?", f.priority);
+    if (f.tier) add('l.ai_tier = ?', f.tier);
     if (f.q) add('(l.company_name ilike ? or l.city ilike ? or l.sub_industry ilike ?)', `%${f.q}%`);
+    const hasDemo = 'exists (select 1 from demos d where d.lead_id = l.id and not d.revoked)';
+    const openCall = "exists (select 1 from lead_tasks t where t.lead_id = l.id and t.status = 'OPEN' and t.kind = 'CALL_DEMO_READY')";
+    const hasEmail = "(l.email is not null or exists (select 1 from lead_facts lf where lf.lead_id = l.id and lf.key = 'email'))";
+    // Schnellfilter (je einer): die Fragen, die man im Vertrieb am häufigsten stellt
+    const QUICK: Record<string, string> = {
+      no_website: "l.website_state = 'none'",
+      worst_websites: 'au.overall_quality is not null',
+      demo_ready: hasDemo,
+      demo_open: `l.website_url is not null and not ${hasDemo} and l.demo_decision is null`,
+      not_contacted: "l.call_count = 0 and l.last_contact_at is null and l.status in ('QUALIFIED','DEMO_CREATED')",
+      call_today: `(${openCall} or (l.callback_at is not null and l.callback_at < now() + interval '1 day')) and l.contact_readiness = 'READY_FOR_MANUAL_CALL' and not l.paused`,
+      has_email: hasEmail, has_phone: 'l.phone is not null',
+    };
+    if (f.quick && QUICK[f.quick]) where += ` and ${QUICK[f.quick]}`;
     let join = '';
     if (f.runId) { p.push(f.runId); join = `join run_results rr on rr.lead_id = l.id and rr.run_id = $${p.length}`; if (f.matchedOnly) where += ' and rr.matched'; }
-    const order = f.sort === 'distance' ? 'l.distance_km asc nulls last' : f.sort === 'digital_need' ? 'o.digital_need desc nulls last' : f.sort === 'recent' ? 'l.created_at desc' : 'o.score desc nulls last, l.created_at desc';
+    // Standard: vertriebsorientiert – höchste Verkaufschance zuerst; bei Gleichstand Firmen ohne Website, dann schlechteste Website, dann mit Telefonnummer
+    const sort = f.sort || (f.quick === 'worst_websites' ? 'website_asc' : '');
+    const order = sort === 'website_asc' ? 'au.overall_quality asc nulls last, o.score desc nulls last' : sort === 'distance' ? 'l.distance_km asc nulls last' : sort === 'digital_need' ? 'o.digital_need desc nulls last' : sort === 'recent' ? 'l.created_at desc'
+      : `o.score desc nulls last, (l.website_state = 'none') desc, au.overall_quality asc nulls last, (l.phone is not null) desc, l.created_at desc`;
     const limit = Math.min(f.limit ?? 100, 500), offset = Math.max(f.offset ?? 0, 0);
     const base = `from leads l ${join}
       left join lateral (select score, category, digital_need, data_quality_factor, dimensions from opportunities where lead_id = l.id order by created_at desc, id desc limit 1) o on true
+      left join lateral (select overall_quality, status as audit_status from audits where lead_id = l.id order by created_at desc, id desc limit 1) au on true
       left join lateral (select brief, approved_at from sales_packages where lead_id = l.id order by created_at desc, id desc limit 1) sp on true where ${where}`;
     const total = (await this.pool.query(`select count(*)::int n ${base}`, p)).rows[0].n;
     p.push(limit, offset);
     const rows = (await this.pool.query(
       `select l.id, l.company_name, l.city, l.sub_industry, l.status, l.paused, l.contact_readiness, l.contact_channel, l.phone, l.website_url, l.website_state, l.distance_km, l.is_mock, l.last_analyzed_at,
-         l.call_count, l.callback_at, l.address, l.email, l.source, l.industry, o.score, o.category, o.digital_need, o.data_quality_factor, (o.dimensions->'dataQuality'->>'value')::float as dq, (o.dimensions->'contactability'->>'value')::float as contactability, sp.brief->>'priority' as priority, sp.approved_at ${base} order by ${order} limit $${p.length - 1} offset $${p.length}`, p)).rows;
+         l.call_count, l.callback_at, l.address, l.email, l.source, l.industry, l.ai_tier, l.email_send_status, l.email_sent_at, l.demo_decision, l.last_contact_at, o.score, o.category, o.digital_need, o.data_quality_factor,
+         (o.dimensions->'dataQuality'->>'value')::float as dq, (o.dimensions->'contactability'->>'value')::float as contactability,
+         case when l.website_state = 'none' then null else au.overall_quality end as website_score, au.audit_status,
+         ${hasDemo} as has_demo, ${openCall} as demo_ready_call, ${hasEmail} as has_email,
+         sp.brief->>'priority' as priority, sp.approved_at ${base} order by ${order} limit $${p.length - 1} offset $${p.length}`, p)).rows;
     return { total, rows };
+  }
+
+  async setDemoDecision(leadId: string, decision: 'skipped' | null) {
+    const r = await this.pool.query('update leads set demo_decision=$3 where id=$1 and owner_id=$2', [leadId, this.owner, decision]);
+    if (!r.rowCount) throw new Error('Lead nicht gefunden');
+    await this.repo.event(this.pool, leadId, 'demo_decision', { decision, actor: 'user' });
   }
 
   /** Pipeline: pro Status die besten Leads (nach Score). */
@@ -211,7 +240,7 @@ export class LeadStore {
     const keys = suppressionKeys(facts, lead.company_name).filter((k) => k.kind !== 'domain' || !/^(gmail|gmx|web|t-online|outlook|yahoo|mail)\./.test(k.value));
     await this.repo.tx(async (c) => {
       for (const k of keys) await this.repo.addSuppression(k.kind, k.value, reason || 'Do not contact', leadId, c);
-      await c.query('update leads set contact_blocked=true, contact_readiness=$3, contact_channel=$4, contact_reason=$5 where id=$1 and owner_id=$2', [leadId, this.owner, 'DO_NOT_CONTACT', 'DO_NOT_CONTACT', `Do not contact: ${reason || 'Wunsch des Unternehmens'}`]);
+      await c.query("update leads set contact_blocked=true, email_send_status='do_not_contact', contact_readiness=$3, contact_channel=$4, contact_reason=$5 where id=$1 and owner_id=$2", [leadId, this.owner, 'DO_NOT_CONTACT', 'DO_NOT_CONTACT', `Do not contact: ${reason || 'Wunsch des Unternehmens'}`]);
       try { await moveLead(this.repo, c, leadId, 'IGNORED', `Do not contact: ${reason || '—'}`, actor, { path: true }); } catch { /* Status passt nicht (z. B. Kunde) – Sperre bleibt */ }
       await this.repo.event(c, leadId, 'do_not_contact', { actor, reason });
     });
@@ -225,3 +254,5 @@ export class LeadStore {
   async rowToEntry(id: string) { return (await this.pool.query('select * from leads where id=$1 and owner_id=$2', [id, this.owner])).rows[0] ?? null; }
   async snapshotOutcome(c: pg.PoolClient, leadId: string, kind: 'call' | 'stage' | 'final', value: string, payload: object) { await recordOutcome(this.repo, c, leadId, kind, value, payload); }
 }
+
+export const LEAD_DEMO_DECISIONS = ['skipped'] as const;

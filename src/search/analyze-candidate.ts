@@ -51,7 +51,7 @@ export async function analyzeCandidate(p: Providers, cfg: AppConfig, i: Candidat
   const subKey = (bestFact(facts, 'subIndustry')?.value as string | undefined) ?? i.searchSub;
   const sub = cfg.taxonomy.sub(subKey) ?? cfg.taxonomy.match(`${name} ${place?.categories?.join(' ') ?? ''}`);
   const bookingRelevant = sub ? sub.booking : undefined;
-  const audit = runAudit({ websiteUrl, lead: { companyName: name, city, postalCode: bestFact(facts, 'postalCode')?.value as string | undefined, bookingRelevant }, crawl, render, now: i.now });
+  const audit = runAudit({ websiteUrl, lead: { companyName: name, city, postalCode: bestFact(facts, 'postalCode')?.value as string | undefined, bookingRelevant, features: sub?.features }, crawl, render, now: i.now });
   const websiteSources = [...new Set(facts.filter((f) => f.key === 'name').map((f) => f.source))];
   const analysis = analyzeLead({ facts, audit, social, bookingRelevant, upsells: cfg.pricing.upsells ?? [], now: i.now, websiteSources }, cfg.scoring);
 

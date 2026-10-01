@@ -6,8 +6,9 @@ import type { Range } from '../../db/analytics.ts';
 export const routes: Route[] = [
   { method: 'GET', path: /^\/analytics$/, h: async (r) => {
     const range = (['7', '30', '90', 'all'].includes(r.url.searchParams.get('range') ?? '') ? r.url.searchParams.get('range') : 'all') as Range;
-    const [o, buckets, usage] = await Promise.all([r.ctx.analytics.overview(range, r.ctx.now()), r.ctx.learning.buckets(),
-      r.ctx.repo.pool.query('select provider, sum(requests)::int n from provider_usage where owner_id=$1 group by 1 order by 2 desc', [r.ctx.repo.ownerId]).then((x) => x.rows)]);
+    const [o, buckets, usage, ai] = await Promise.all([r.ctx.analytics.overview(range, r.ctx.now()), r.ctx.learning.buckets(),
+      r.ctx.repo.pool.query('select provider, sum(requests)::int n from provider_usage where owner_id=$1 group by 1 order by 2 desc', [r.ctx.repo.ownerId]).then((x) => x.rows), r.ctx.aiUsage.overview()]);
+    const eur4 = (c: number | null) => (c === null ? 'nicht verfügbar' : `${(c / 100).toFixed(c < 10 ? 4 : 2).replace('.', ',')} €`);
     const max = Math.max(1, ...o.funnel.map((f) => f.count));
     const tab = (k: string, label: string) => html`<a class="btn ${range === k ? 'primary' : ''}" href="/analytics?range=${k}">${label}</a>`;
     return render(r, { title: 'Analytics', nav: 'analytics', body: html`
@@ -21,6 +22,10 @@ export const routes: Route[] = [
         <div class="scroll"><table class="nowrap"><tr><th>Score</th><th>Leads</th><th>Angerufen</th><th>Erreicht</th><th>Interessiert</th><th>Gewonnen</th><th>Interesse</th><th>Kauf</th></tr>
           ${buckets.map((b) => html`<tr><td><b>${b.label}</b></td><td>${b.leads}</td><td>${b.called}</td><td>${b.reached}</td><td>${b.interested}</td><td>${b.won}</td><td>${pct(b.interestedRate)}</td><td>${pct(b.wonRate)}</td></tr>`)}</table></div>
         <p><a class="btn" href="/analytics/learning.csv">Export (CSV)</a> <a class="btn" href="/analytics/learning.json">Export (JSON)</a></p><small class="mute">Export ohne Firmennamen und Kontaktdaten: Merkmale, Scores (Stand der Bewertung), Anrufe, erreichte Stufen, Ergebnis.</small></div>
+      <div class="card" id="ki-kosten"><h2>KI-Kosten</h2><div class="grid"><div class="kpi"><b>${eur4(ai.totalCents)}</b><span>Gesamtkosten aller Leads (${ai.calls} Aufrufe)</span></div><div class="kpi"><b>${eur4(ai.analysisCents)}</b><span>davon Analyse</span></div><div class="kpi"><b>${eur4(ai.demoCents)}</b><span>davon Demo / Konzept</span></div>
+        <div class="kpi"><b>${eur4(ai.avgPerAnalysedCents)}</b><span>Ø je analysiertem Unternehmen (${ai.analysedLeads})</span></div><div class="kpi"><b>${eur4(ai.avgPerDemoCents)}</b><span>Ø je Demo (${ai.demoLeads} Leads mit Demo)</span></div></div>
+        <div class="scroll"><table class="nowrap"><tr><th>Stufe</th><th>Aufrufe</th><th>Kosten</th></tr>${ai.byTier.map((t: any) => html`<tr><td>${t.tier}</td><td>${t.calls}</td><td>${eur4(t.cents)}</td></tr>`)}</table></div>
+        <small class="mute">Geschätzt aus den gemeldeten Token und den Preisen in config/ai.json. Regelbasierte (MASS-)Analysen und Mock-Aufrufe kosten nichts. Pro Aufruf gespeichert: Modell, Aufgabe, Token, Kosten, Lead, Zeitpunkt.</small></div>
       <div class="card"><h2>Provider-Nutzung</h2>${usage.length ? html`<ul>${usage.map((u) => html`<li>${u.provider}: ${u.n} Anfragen</li>`)}</ul>` : html`<p class="mute">Noch keine Nutzung.</p>`}</div>` });
   } },
   { method: 'GET', path: /^\/analytics\/learning\.csv$/, h: async (r) => ({ body: '﻿' + (await r.ctx.learning.csv()), type: 'text/csv; charset=utf-8', headers: { 'content-disposition': 'attachment; filename="learning-loop.csv"' } }) },

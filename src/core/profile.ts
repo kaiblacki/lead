@@ -4,7 +4,7 @@ import type { Lead } from './types.ts';
 import { normPhone, norm, hostOf, socialPlatformOf } from './text.ts';
 
 export type FactKey = 'name' | 'industry' | 'subIndustry' | 'address' | 'postalCode' | 'city' | 'distanceKm' | 'phone' | 'email' | 'website' | 'social' | 'employeeBucket'
-  | 'locationsCount' | 'rating' | 'reviewCount' | 'openingHours' | 'services' | 'description' | 'businessStatus' | 'legalForm' | 'foundedYear' | 'isChain' | 'mapsUrl' | 'point' | 'sourceCategories';
+  | 'locationsCount' | 'rating' | 'reviewCount' | 'openingHours' | 'services' | 'description' | 'businessStatus' | 'legalForm' | 'foundedYear' | 'isChain' | 'mapsUrl' | 'point' | 'sourceCategories' | 'whatsapp' | 'contactForm' | 'contactPerson';
 
 /** Ein Einzelfakt mit Herkunft. Jeder externe Wert im System ist so gespeichert: Quelle, Erfassungsdatum, Datenqualität. */
 export type Fact = { key: FactKey; value: unknown; source: string; capturedAt: string; quality: Quality; url?: string; note?: string };
@@ -13,7 +13,7 @@ export const FACT_LABELS: Record<FactKey, string> = {
   name: 'Firma', industry: 'Branche', subIndustry: 'Unterbranche', address: 'Adresse', postalCode: 'PLZ', city: 'Stadt', distanceKm: 'Entfernung', phone: 'Telefon', email: 'E-Mail',
   website: 'Website', social: 'Social Media', employeeBucket: 'Mitarbeitergröße', locationsCount: 'Standorte', rating: 'Bewertung', reviewCount: 'Anzahl Bewertungen',
   openingHours: 'Öffnungszeiten', services: 'Öffentlich erkennbare Leistungen', description: 'Beschreibung', businessStatus: 'Betriebsstatus', legalForm: 'Rechtsform',
-  foundedYear: 'Gründungsjahr', isChain: 'Filialbetrieb/Kette', mapsUrl: 'Karten-Link', point: 'Standort (Koordinaten)', sourceCategories: 'Kategorien laut Quelle',
+  foundedYear: 'Gründungsjahr', isChain: 'Filialbetrieb/Kette', mapsUrl: 'Karten-Link', point: 'Standort (Koordinaten)', sourceCategories: 'Kategorien laut Quelle', whatsapp: 'WhatsApp-Link', contactForm: 'Kontaktformular', contactPerson: 'Ansprechpartner (laut Impressum)',
 };
 export const FACT_ORDER = Object.keys(FACT_LABELS) as FactKey[];
 const QUALITY_RANK: Record<Quality, number> = { high: 3, medium: 2, low: 1 };
@@ -48,7 +48,7 @@ export function findConflicts(facts: Fact[]): Conflict[] {
 
 export type ProfileInput = {
   place?: PlaceCandidate | null; directory?: DirectoryRecord | null; social?: SocialResult | null; audit?: AuditReport | null;
-  distanceKm?: number; searchIndustry?: string; searchSub?: string; csv?: Lead | null; capturedAt: string; siteFacts?: { phone?: string; email?: string; services?: string[]; url?: string } | null;
+  distanceKm?: number; searchIndustry?: string; searchSub?: string; csv?: Lead | null; capturedAt: string; siteFacts?: SiteFacts | null;
 };
 
 /** Baut aus allen Quellen die Faktenliste. Nichts wird erfunden oder geschätzt; fehlende Werte fehlen. */
@@ -88,6 +88,9 @@ export function buildFacts(i: ProfileInput): Fact[] {
   if (i.siteFacts) {
     const at = i.audit?.capturedAt ?? i.capturedAt;
     add('phone', i.siteFacts.phone, 'website-crawl', at, 'medium', { url: i.siteFacts.url }); add('email', i.siteFacts.email, 'website-crawl', at, 'medium', { url: i.siteFacts.url });
+    add('whatsapp', i.siteFacts.whatsapp, 'website-crawl', at, 'medium', { url: i.siteFacts.url }); add('contactForm', i.siteFacts.contactForm, 'website-crawl', at, 'medium', { url: i.siteFacts.url });
+    add('contactPerson', i.siteFacts.contactPerson, 'website-crawl', at, 'low', { url: i.siteFacts.url, note: 'Aus dem Impressum gelesen – bitte prüfen' });
+    for (const [pf, u] of [['instagram', i.siteFacts.instagram], ['facebook', i.siteFacts.facebook]] as const) if (u) add('social', { platform: pf, url: u }, 'website-crawl', at, 'medium', { url: i.siteFacts.url, note: 'Auf der Website verlinkt' });
     add('services', i.siteFacts.services, 'website-crawl', at, 'medium', { url: i.siteFacts.url, note: 'Aus Überschriften/Listen der Website gelesen' });
   }
   if (i.distanceKm !== undefined) add('distanceKm', Math.round(i.distanceKm * 10) / 10, 'computed', i.capturedAt, 'high', { note: 'Luftlinie zum Suchzentrum' });
@@ -97,7 +100,10 @@ export function buildFacts(i: ProfileInput): Fact[] {
 }
 
 /** Liest Telefon/E-Mail/Leistungen aus den Seiten (nur was dort tatsächlich steht). */
-export function extractSiteFacts(pages: { url: string; html: string }[]): { phone?: string; email?: string; services?: string[]; url?: string } {
+export type SiteFacts = { phone?: string; email?: string; services?: string[]; url?: string; whatsapp?: string; contactForm?: boolean; contactPerson?: string; instagram?: string; facebook?: string };
+
+/** Öffentliche Kontaktwege aus den geprüften Seiten (nur was dort steht; Ansprechpartner nur aus dem gesetzlich öffentlichen Impressum). */
+export function extractSiteFacts(pages: { url: string; html: string }[]): SiteFacts {
   const html = pages.map((p) => p.html).join('\n');
   const tel = /href=["']tel:([+\d\s()/-]+)["']/i.exec(html)?.[1];
   const mail = /href=["']mailto:([^"'?]+)/i.exec(html)?.[1];
@@ -105,7 +111,14 @@ export function extractSiteFacts(pages: { url: string; html: string }[]): { phon
   for (const m of html.matchAll(/<h[23][^>]*>\s*(?:Leistungen|Unser Angebot|Angebot|Preise|Speisekarte)[^<]*<\/h[23]>\s*(?:<p[^>]*>[^<]*<\/p>\s*)?<ul[^>]*>([\s\S]*?)<\/ul>/gi)) {
     for (const li of m[1].matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi)) { const t = li[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim(); if (t && t.length < 80) services.push(t); }
   }
-  return { phone: tel?.trim(), email: mail?.trim(), services: [...new Set(services)].slice(0, 8), url: pages[0]?.url };
+  const wa = /https?:\/\/(?:wa\.me\/\d+|api\.whatsapp\.com\/send[^\s"'<>]*)/i.exec(html)?.[0];
+  const ig = /https?:\/\/(?:www\.)?instagram\.com\/(?!p\/|explore|share)[\w.]+/i.exec(html)?.[0];
+  const fb = /https?:\/\/(?:www\.)?facebook\.com\/(?!sharer|share|tr\?)[\w.\-/]+/i.exec(html)?.[0];
+  const form = /<form\b[\s\S]*?<(?:input|textarea)/i.test(html) ? true : undefined;
+  const imprintHtml = pages.filter((p) => /impressum|imprint/i.test(p.url)).map((p) => p.html).join(' ');
+  const imprintText = imprintHtml.replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ');
+  const person = /(?:Inhaber(?:in)?|Geschäftsführer(?:in)?|Geschäftsführung)\s*:?\s*((?:Dr\.\s+)?[A-ZÄÖÜ][a-zäöüß]+(?:\s+[A-ZÄÖÜ][a-zäöüß-]+){1,2})/.exec(imprintText)?.[1];
+  return { phone: tel?.trim(), email: mail?.trim(), services: [...new Set(services)].slice(0, 8), url: pages[0]?.url, whatsapp: wa, contactForm: form, contactPerson: person, instagram: ig, facebook: fb };
 }
 
 /** Flache Bestwerte für Listen/Suche aus den Fakten. */

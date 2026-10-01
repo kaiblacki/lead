@@ -1,35 +1,344 @@
 {
   "industries": [
-    { "key": "beauty", "label": "Beauty & Körperpflege", "subIndustries": [
-      { "key": "friseur", "label": "Friseur", "keywords": ["friseur", "friseursalon", "haarstudio", "haarsalon", "hairstyling"], "template": "friseur", "booking": true },
-      { "key": "barbershop", "label": "Barbershop", "keywords": ["barbershop", "barber", "herrenfriseur"], "template": "friseur", "booking": true },
-      { "key": "nagelstudio", "label": "Nagelstudio", "keywords": ["nagelstudio", "nail", "nails", "naegel", "maniküre", "manikuere", "nageldesign"], "template": "nagelstudio", "booking": true },
-      { "key": "kosmetik", "label": "Kosmetikstudio", "keywords": ["kosmetik", "kosmetikstudio", "beautysalon", "wimpern", "hautpflege"], "template": "kosmetik", "booking": true }
-    ] },
-    { "key": "gesundheit", "label": "Gesundheit", "subIndustries": [
-      { "key": "zahnarzt", "label": "Zahnarzt", "keywords": ["zahnarzt", "zahnaerzte", "zahnarztpraxis", "kieferorthopaede"], "template": "zahnarzt", "booking": true },
-      { "key": "physiotherapie", "label": "Physiotherapie", "keywords": ["physiotherapie", "physio", "krankengymnastik"], "template": "zahnarzt", "booking": true }
-    ] },
-    { "key": "handwerk", "label": "Handwerk", "subIndustries": [
-      { "key": "elektriker", "label": "Elektriker", "keywords": ["elektriker", "elektro", "elektroinstallation"], "template": "handwerker", "booking": false },
-      { "key": "sanitaer", "label": "Sanitär & Heizung", "keywords": ["sanitaer", "sanitär", "heizung", "installateur"], "template": "handwerker", "booking": false },
-      { "key": "maler", "label": "Maler & Lackierer", "keywords": ["maler", "lackierer", "malerbetrieb"], "template": "handwerker", "booking": false }
-    ] },
-    { "key": "gastro", "label": "Gastronomie", "subIndustries": [
-      { "key": "restaurant", "label": "Restaurant", "keywords": ["restaurant", "gaststaette", "gaststätte", "gasthaus"], "template": "restaurant", "booking": true },
-      { "key": "cafe", "label": "Café", "keywords": ["cafe", "café", "bistro"], "template": "restaurant", "booking": false }
-    ] },
-    { "key": "immobilien", "label": "Immobilien", "subIndustries": [
-      { "key": "makler", "label": "Immobilienmakler", "keywords": ["makler", "immobilienmakler", "immobilien"], "template": "immobilien", "booking": false }
-    ] },
-    { "key": "auto", "label": "Auto & Fahrzeug", "subIndustries": [
-      { "key": "kfz", "label": "Kfz-Werkstatt", "keywords": ["kfz", "autowerkstatt", "werkstatt", "autoreparatur"], "template": "autowerkstatt", "booking": true }
-    ] },
-    { "key": "fitness", "label": "Fitness & Sport", "subIndustries": [
-      { "key": "fitnessstudio", "label": "Fitnessstudio", "keywords": ["fitnessstudio", "fitness", "gym", "sportstudio"], "template": "fitness", "booking": true }
-    ] },
-    { "key": "beratung", "label": "Beratung", "subIndustries": [
-      { "key": "versicherung", "label": "Versicherungsagentur", "keywords": ["versicherung", "versicherungsagentur", "versicherungsmakler"], "template": "versicherung", "booking": true }
-    ] }
+    {
+      "key": "beauty",
+      "label": "Beauty & Körperpflege",
+      "subIndustries": [
+        {
+          "key": "friseur",
+          "label": "Friseur",
+          "keywords": [
+            "friseur",
+            "friseursalon",
+            "haarstudio",
+            "haarsalon",
+            "hairstyling"
+          ],
+          "template": "friseur",
+          "booking": true,
+          "features": [
+            "booking",
+            "gallery",
+            "whatsapp",
+            "social",
+            "maps",
+            "opening_hours",
+            "services"
+          ]
+        },
+        {
+          "key": "barbershop",
+          "label": "Barbershop",
+          "keywords": [
+            "barbershop",
+            "barber",
+            "herrenfriseur"
+          ],
+          "template": "friseur",
+          "booking": true,
+          "features": [
+            "booking",
+            "gallery",
+            "whatsapp",
+            "social",
+            "maps",
+            "opening_hours",
+            "services"
+          ]
+        },
+        {
+          "key": "nagelstudio",
+          "label": "Nagelstudio",
+          "keywords": [
+            "nagelstudio",
+            "nail",
+            "nails",
+            "naegel",
+            "maniküre",
+            "manikuere",
+            "nageldesign"
+          ],
+          "template": "nagelstudio",
+          "booking": true,
+          "features": [
+            "booking",
+            "gallery",
+            "whatsapp",
+            "social",
+            "maps",
+            "opening_hours",
+            "services"
+          ]
+        },
+        {
+          "key": "kosmetik",
+          "label": "Kosmetikstudio",
+          "keywords": [
+            "kosmetik",
+            "kosmetikstudio",
+            "beautysalon",
+            "wimpern",
+            "hautpflege"
+          ],
+          "template": "kosmetik",
+          "booking": true,
+          "features": [
+            "booking",
+            "gallery",
+            "whatsapp",
+            "social",
+            "maps",
+            "opening_hours",
+            "services"
+          ]
+        }
+      ]
+    },
+    {
+      "key": "gesundheit",
+      "label": "Gesundheit",
+      "subIndustries": [
+        {
+          "key": "zahnarzt",
+          "label": "Zahnarzt",
+          "keywords": [
+            "zahnarzt",
+            "zahnaerzte",
+            "zahnarztpraxis",
+            "kieferorthopaede"
+          ],
+          "template": "zahnarzt",
+          "booking": true,
+          "features": [
+            "booking",
+            "services",
+            "maps",
+            "opening_hours",
+            "trust"
+          ]
+        },
+        {
+          "key": "physiotherapie",
+          "label": "Physiotherapie",
+          "keywords": [
+            "physiotherapie",
+            "physio",
+            "krankengymnastik"
+          ],
+          "template": "zahnarzt",
+          "booking": true,
+          "features": [
+            "booking",
+            "services",
+            "maps",
+            "opening_hours",
+            "trust"
+          ]
+        }
+      ]
+    },
+    {
+      "key": "handwerk",
+      "label": "Handwerk",
+      "subIndustries": [
+        {
+          "key": "elektriker",
+          "label": "Elektriker",
+          "keywords": [
+            "elektriker",
+            "elektro",
+            "elektroinstallation"
+          ],
+          "template": "handwerker",
+          "booking": false,
+          "features": [
+            "services",
+            "references",
+            "quote",
+            "service_area",
+            "maps"
+          ]
+        },
+        {
+          "key": "sanitaer",
+          "label": "Sanitär & Heizung",
+          "keywords": [
+            "sanitaer",
+            "sanitär",
+            "heizung",
+            "installateur"
+          ],
+          "template": "handwerker",
+          "booking": false,
+          "features": [
+            "services",
+            "references",
+            "quote",
+            "service_area",
+            "maps"
+          ]
+        },
+        {
+          "key": "maler",
+          "label": "Maler & Lackierer",
+          "keywords": [
+            "maler",
+            "lackierer",
+            "malerbetrieb"
+          ],
+          "template": "handwerker",
+          "booking": false,
+          "features": [
+            "services",
+            "references",
+            "gallery",
+            "quote",
+            "service_area",
+            "maps"
+          ]
+        }
+      ]
+    },
+    {
+      "key": "gastro",
+      "label": "Gastronomie",
+      "subIndustries": [
+        {
+          "key": "restaurant",
+          "label": "Restaurant",
+          "keywords": [
+            "restaurant",
+            "gaststaette",
+            "gaststätte",
+            "gasthaus"
+          ],
+          "template": "restaurant",
+          "booking": true,
+          "features": [
+            "menu",
+            "reservation",
+            "gallery",
+            "maps",
+            "opening_hours",
+            "social"
+          ]
+        },
+        {
+          "key": "cafe",
+          "label": "Café",
+          "keywords": [
+            "cafe",
+            "café",
+            "bistro"
+          ],
+          "template": "restaurant",
+          "booking": false,
+          "features": [
+            "menu",
+            "gallery",
+            "maps",
+            "opening_hours",
+            "social"
+          ]
+        }
+      ]
+    },
+    {
+      "key": "immobilien",
+      "label": "Immobilien",
+      "subIndustries": [
+        {
+          "key": "makler",
+          "label": "Immobilienmakler",
+          "keywords": [
+            "makler",
+            "immobilienmakler",
+            "immobilien"
+          ],
+          "template": "immobilien",
+          "booking": false,
+          "features": [
+            "references",
+            "quote",
+            "maps",
+            "trust"
+          ]
+        }
+      ]
+    },
+    {
+      "key": "auto",
+      "label": "Auto & Fahrzeug",
+      "subIndustries": [
+        {
+          "key": "kfz",
+          "label": "Kfz-Werkstatt",
+          "keywords": [
+            "kfz",
+            "autowerkstatt",
+            "werkstatt",
+            "autoreparatur"
+          ],
+          "template": "autowerkstatt",
+          "booking": true,
+          "features": [
+            "booking",
+            "services",
+            "quote",
+            "maps",
+            "opening_hours"
+          ]
+        }
+      ]
+    },
+    {
+      "key": "fitness",
+      "label": "Fitness & Sport",
+      "subIndustries": [
+        {
+          "key": "fitnessstudio",
+          "label": "Fitnessstudio",
+          "keywords": [
+            "fitnessstudio",
+            "fitness",
+            "gym",
+            "sportstudio"
+          ],
+          "template": "fitness",
+          "booking": true,
+          "features": [
+            "booking",
+            "services",
+            "gallery",
+            "maps",
+            "opening_hours",
+            "social"
+          ]
+        }
+      ]
+    },
+    {
+      "key": "beratung",
+      "label": "Beratung",
+      "subIndustries": [
+        {
+          "key": "versicherung",
+          "label": "Versicherungsagentur",
+          "keywords": [
+            "versicherung",
+            "versicherungsagentur",
+            "versicherungsmakler"
+          ],
+          "template": "versicherung",
+          "booking": true,
+          "features": [
+            "booking",
+            "services",
+            "trust",
+            "maps"
+          ]
+        }
+      ]
+    }
   ]
 }

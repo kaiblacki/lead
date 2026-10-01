@@ -1,6 +1,6 @@
 import { norm } from './text.ts';
 
-export type SubIndustry = { key: string; label: string; keywords: string[]; template: string; booking: boolean; industryKey: string; industryLabel: string };
+export type SubIndustry = { key: string; label: string; keywords: string[]; template: string; booking: boolean; features?: string[]; industryKey: string; industryLabel: string };
 export type Industry = { key: string; label: string; subIndustries: Omit<SubIndustry, 'industryKey' | 'industryLabel'>[] };
 export type IndustryConfig = { industries: Industry[] };
 

@@ -15,5 +15,6 @@
     "amountsAreGross": false,
     "iban": "",
     "paymentNote": "Mock-Rechnung – keine echte Zahlung."
-  }
+  },
+  "ownerName": "Alex Demo"
 }

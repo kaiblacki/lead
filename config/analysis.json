@@ -1,0 +1,40 @@
+{
+  "_hinweis": "Zuordnung von Prüfpunkten (Audit-Codes) zu Verbesserungen und Gesprächspunkten sowie Bezeichnungen der Branchen-Features. Keine Branche ist im Code festgelegt – die Features je Unterbranche stehen in industries.json.",
+  "featureLabels": {
+    "booking": "Online-Terminbuchung", "reservation": "Tisch-Reservierung", "menu": "Speisekarte", "gallery": "Bildergalerie", "whatsapp": "WhatsApp-Kontakt", "social": "Social-Media-Anbindung",
+    "maps": "Karte / Anfahrt", "opening_hours": "Öffnungszeiten", "services": "Leistungsübersicht", "references": "Referenzen", "quote": "Angebotsanfrage", "service_area": "Einsatzgebiet", "trust": "Vertrauenselemente (echte Bewertungen/Zertifikate)"
+  },
+  "improvements": {
+    "VIEWPORT": "Für Smartphones optimierte Darstellung (responsives Layout)",
+    "RESPONSIVE_CSS": "Responsives Layout, das sich an die Bildschirmbreite anpasst",
+    "HORIZONTAL_SCROLL": "Seite so gestalten, dass auf dem Smartphone nicht seitlich gescrollt werden muss",
+    "MOBILE_NAV": "Übersichtliche mobile Navigation",
+    "TAP_TARGETS": "Ausreichend große Schaltflächen für die Bedienung mit dem Finger",
+    "HTTPS": "Verschlüsselte Verbindung (HTTPS)",
+    "LOAD_TIME": "Schnellere Ladezeit der Startseite",
+    "PHONE": "Telefonnummer gut sichtbar und per Tipp anrufbar",
+    "CONTACT_OPTION": "Klarer Kontaktweg auf der Startseite",
+    "CTA": "Deutliche Handlungsaufforderung (z. B. Termin anfragen / anrufen) auf der Startseite",
+    "ONLINE_BOOKING": "Prominente Online-Terminbuchung bzw. Terminanfrage",
+    "WHATSAPP": "WhatsApp als schneller Kontaktweg",
+    "SERVICES_CLEAR": "Klar gegliederte Leistungsübersicht",
+    "OPENING_HOURS": "Öffnungszeiten gut auffindbar",
+    "LOCAL_INFO": "Adresse und Ort auf der Website sichtbar",
+    "FRESHNESS": "Aktuelle, gepflegte Inhalte",
+    "OLD_TECH": "Zeitgemäße technische Umsetzung",
+    "IMPRINT": "Impressum (Pflichtangabe) verlinken",
+    "PRIVACY": "Datenschutzerklärung verlinken",
+    "REVIEWS": "Echte Kundenbewertungen bzw. Referenzen einbinden (nur belegte)",
+    "SOCIAL_LINKS": "Social-Media-Profile verlinken",
+    "MAPS": "Karte bzw. Anfahrt einbinden",
+    "MENU": "Speisekarte online bereitstellen",
+    "GALLERY": "Bildergalerie mit eigenen Fotos",
+    "RESERVATION": "Online-Reservierung bzw. Reservierungsanfrage",
+    "QUOTE_REQUEST": "Einfache Angebotsanfrage per Formular",
+    "SERVICE_AREA": "Einsatzgebiet klar benennen",
+    "CONTENT_AMOUNT": "Verständliche Texte zu Leistungen und Betrieb",
+    "TITLE": "Aussagekräftiger Seitentitel für die Suche",
+    "META_DESCRIPTION": "Beschreibung für Suchmaschinen"
+  },
+  "noWebsiteImprovements": ["Eine eigene, mobil gut nutzbare Website als zentrale Anlaufstelle", "Telefonnummer, Adresse und Öffnungszeiten an einer Stelle", "Klarer nächster Schritt für Besucher (Anrufen / Anfragen)"]
+}

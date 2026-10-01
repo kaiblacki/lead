@@ -67,7 +67,7 @@ export const routes: Route[] = [
     // Änderung speichern → Produktion zurücksetzen (passiert in decide) → KI setzt um → QA → neue Vorschau
     let applied = false;
     try {
-      const gateway = { complete: (_k: string, req: Parameters<typeof r.ctx.registry.providers.ai.complete>[0]) => r.ctx.registry.providers.ai.complete(req) };
+      const gateway = { complete: (leadKey: string, req: Parameters<typeof r.ctx.aiComplete>[1]) => r.ctx.aiComplete(null, { ...req, purpose: 'other' }) };
       const out = await r.ctx.delivery.processChange(res.reviewId, gateway);
       applied = out.status === 'APPLIED' && !!out.build?.passed;
     } catch { /* bleibt als offener Änderungswunsch im Dashboard */ }

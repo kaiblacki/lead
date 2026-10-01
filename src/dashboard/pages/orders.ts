@@ -136,7 +136,7 @@ ${d.smallBusiness ? '<p class="s">Gemäß § 19 UStG wird keine Umsatzsteuer ber
   { method: 'POST', path: new RegExp(`^/reviews/${id}/process$`), h: async (r) => {
     const rv = (await r.ctx.repo.pool.query('select order_id from reviews where id=$1 and owner_id=$2', [r.params[0], r.ctx.repo.ownerId])).rows[0];
     if (!rv) throw new UserError('Änderungswunsch nicht gefunden');
-    const gateway = { complete: (leadKey: string, req: Parameters<typeof r.ctx.registry.providers.ai.complete>[0]) => r.ctx.registry.providers.ai.complete(req) };
+    const gateway = { complete: (leadKey: string, req: Parameters<typeof r.ctx.aiComplete>[1]) => r.ctx.aiComplete(null, { ...req, purpose: 'other' }) };
     const out = await r.ctx.delivery.processChange(r.params[0], gateway);
     return redirect(`/orders/${rv.order_id}`, out.status === 'APPLIED' ? okFlash(`Änderung umgesetzt. ${out.build?.passed ? 'Neue Vorschau ist bereit.' : 'QA nicht bestanden – bitte Fehler prüfen.'}`) : { kind: 'err', text: `Nicht automatisch umsetzbar: ${out.unclear.join(' | ')}` });
   } },

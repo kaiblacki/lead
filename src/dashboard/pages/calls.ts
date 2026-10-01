@@ -6,7 +6,7 @@ import { LEGAL } from '../../contact/strategy.ts';
 import { webStateText } from './lead-parts.ts';
 import { NA, orNA, sourceLabel } from '../../core/enrichment.ts';
 
-const KIND: Record<string, [string, string]> = { callback: ['b-warn', 'Rückruf fällig'], new: ['b-info', 'Neu'], follow_up: ['b-ok', 'Nachfassen'] };
+const KIND: Record<string, [string, string]> = { demo_ready: ['b-ok', 'Demo fertig – anrufen'], callback: ['b-warn', 'Rückruf fällig'], new: ['b-info', 'Neu'], follow_up: ['b-ok', 'Nachfassen'] };
 
 export const routes: Route[] = [{
   method: 'GET', path: /^\/calls$/, h: async (r) => {
