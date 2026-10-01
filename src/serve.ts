@@ -23,5 +23,10 @@ app.listen(port, host, () => {
 if (env.MAINTENANCE_AUTORUN === '1') {
   setInterval(() => { ctx.maintenance.runDue().then((r) => r.checked && console.log(`Wartung: ${r.checked} geprüft, ${r.failed} mit Problemen`)).catch((e) => console.error('Wartungslauf fehlgeschlagen:', e.message)); }, 3600_000).unref();
 }
+// Tagesübersicht per E-Mail: ab 7 Uhr (Berlin) einmal pro Tag, wenn Benachrichtigungen eingestellt sind. Prüfung alle 15 Minuten.
+setInterval(() => {
+  const h = Number(new Intl.DateTimeFormat('de-DE', { hour: 'numeric', hour12: false, timeZone: 'Europe/Berlin' }).format(new Date()));
+  if (h >= 7) ctx.notifier.dailyDigest().catch((e) => console.error('Tagesübersicht fehlgeschlagen:', e.message));
+}, 900_000).unref();
 const shutdown = () => { app.close(() => repo.close().finally(() => process.exit(0))); setTimeout(() => process.exit(0), 3000).unref(); };
 process.on('SIGTERM', shutdown); process.on('SIGINT', shutdown);

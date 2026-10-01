@@ -72,3 +72,16 @@ test('Postausgang: Fehler beim Senden werden protokolliert statt zu stören; nic
   const leadMails = (await app.pool.query("select count(*)::int n from outbox where owner_id=$1 and kind not like 'owner_%' and kind not like 'customer_%' and kind <> 'test'", [OWNER])).rows[0].n;
   assert.equal(leadMails, 0);
 });
+
+test('Tagesübersicht: Zahlen stimmen, Knopf sendet, automatisch nur einmal pro Tag', { skip }, async () => {
+  const r = await flash(await app.post('/settings/notify', { notifyEmail: 'chef@beispiel.example', notifyEnabled: '1', digest: '1' }));
+  assert.match(r, /Tagesübersicht im Postausgang aufgezeichnet/);
+  const [d] = (await outbox("kind='owner_digest'")).slice(-1);
+  assert.match(d.subject, /Tagesübersicht/); assert.match(d.body, /neue Leads bereit/); assert.match(d.body, /warten auf Kundenfreigabe/); assert.match(d.body, /\/calls/);
+  const n = (await outbox("kind='owner_digest'")).length;
+  assert.equal(await app.ctx.notifier.dailyDigest(), null, 'heute schon gesendet');
+  assert.equal((await outbox("kind='owner_digest'")).length, n);
+  await app.post('/settings/notify', { notifyEmail: 'chef@beispiel.example' });
+  assert.equal(await app.ctx.notifier.dailyDigest({ force: true }), null, 'abgeschaltet → keine Mail');
+  await app.post('/settings/notify', { notifyEmail: 'chef@beispiel.example', notifyEnabled: '1' });
+});

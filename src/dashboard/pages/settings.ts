@@ -41,8 +41,8 @@ export const routes: Route[] = [
       <div class="card" id="email"><h2>E-Mail und Benachrichtigungen</h2>
         <p>${ctx.registry.providers.email.isMock ? html`<span class="badge b-mock">Mock</span> Mails werden <b>nicht verschickt</b>, sondern nur im Postausgang angezeigt. Für echten Versand SMTP einrichten (SMTP_HOST, SMTP_FROM, …, siehe SETUP.md).` : html`<span class="badge b-ok">SMTP aktiv</span> Mails werden über ${ctx.registry.providers.email.name} verschickt.`}</p>
         ${postForm(r.app.csrf, '/settings/notify', html`<label>Deine E-Mail-Adresse für Benachrichtigungen<input type="email" name="notifyEmail" value="${settings.notifyEmail ?? ''}" maxlength="200" placeholder="du@beispiel.de"></label>
-          <label class="inline"><input type="checkbox" name="notifyEnabled" value="1" ${settings.notifyEnabled ? raw('checked') : ''}> Benachrichtigen bei: Anzahlung/Restzahlung eingegangen, Seite wartet auf Freigabe, Kunde hat freigegeben oder Änderung gewünscht, Wartungsproblem</label>
-          <p class="row"><button class="primary">Speichern</button><button name="test" value="1">Test-E-Mail senden</button><a class="btn" href="/outbox">Postausgang</a></p>`, { style: 'display:block' })}
+          <label class="inline"><input type="checkbox" name="notifyEnabled" value="1" ${settings.notifyEnabled ? raw('checked') : ''}> Benachrichtigen bei (und tägliche Übersicht ab 7 Uhr): Anzahlung/Restzahlung eingegangen, Seite wartet auf Freigabe, Kunde hat freigegeben oder Änderung gewünscht, Wartungsproblem</label>
+          <p class="row"><button class="primary">Speichern</button><button name="test" value="1">Test-E-Mail senden</button><button name="digest" value="1">Tagesübersicht jetzt senden</button><a class="btn" href="/outbox">Postausgang</a></p>`, { style: 'display:block' })}
         <small class="mute">An Kunden geht nur, was du im Auftrag selbst auslöst (Zahlungslink, Freigabe-Link). Interessenten bekommen nichts automatisch.</small></div>
       <div class="card" id="provider"><h2>Provider</h2><div class="scroll"><table><tr><th>Dienst</th><th>Aktiv</th><th>Modus</th><th>Hinweis</th></tr>${ctx.registry.status.map((s) => html`<tr><td>${s.kind}</td><td>${s.name}</td><td><span class="badge ${s.mode === 'mock' ? 'b-mock' : 'b-ok'}">${s.mode}</span></td><td>${s.note}</td></tr>`)}</table></div>
         <p class="mute">Modus: APP_MODE=${ctx.registry.mode}. Einzeln umschaltbar über PROVIDER_PLACES, PROVIDER_AI, PROVIDER_PAYMENTS, … (mock|real). Echte Keys gehören nur in die Umgebungsvariablen.</p></div>
@@ -89,6 +89,11 @@ export const routes: Route[] = [
   { method: 'POST', path: /^\/settings\/notify$/, h: async (r) => {
     const to = (r.form.get('notifyEmail') ?? '').trim();
     await r.ctx.repo.saveSettings({ notifyEmail: to || null, notifyEnabled: r.form.get('notifyEnabled') === '1' });
+    if (r.form.get('digest') === '1') {
+      if (!to) throw new UserError('Bitte zuerst eine Adresse eintragen.');
+      const res = await r.ctx.notifier.dailyDigest({ force: true });
+      return redirect('/settings#email', res?.ok ? okFlash(res.status === 'sent' ? 'Tagesübersicht gesendet.' : 'Mock-Modus: Tagesübersicht im Postausgang aufgezeichnet.') : { kind: 'err', text: `Senden fehlgeschlagen: ${res?.error ?? 'Benachrichtigungen sind abgeschaltet'}` });
+    }
     if (r.form.get('test') === '1') {
       if (!to) throw new UserError('Bitte zuerst eine Adresse eintragen.');
       const res = await r.ctx.notifier.send('test', to, 'Test-E-Mail von AI Agency OS', 'Wenn du das liest, funktioniert der E-Mail-Versand.');

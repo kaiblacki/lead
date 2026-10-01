@@ -41,7 +41,7 @@ export function buildContext(repo: Repo, o: ContextOptions): Context {
   const calls = new CallService({ repo, leads, sales, docs, orders, now });
   const contact = new ContactService({ repo, leads, providers: P, now });
   const retention = new Retention(repo, cfg.retention);
-  const notifier = new Notifier(repo, P.email, o.baseUrl);
+  const notifier = new Notifier(repo, P.email, o.baseUrl, now);
   repo.onEvent = (type, leadId, payload) => { void notifier.onEvent(type, leadId, payload); };
   return { repo, cfg, registry, notifier, baseUrl: o.baseUrl, now, leads, runs, sales, social, analytics, learning, runner, orders, delivery, maintenance, docs, calls, contact, retention };
 }

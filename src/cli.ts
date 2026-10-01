@@ -18,6 +18,7 @@ const HELP = `Nutzung: node src/cli.ts <befehl>
   search "<Suchsatz>"               z. B. "Völklingen + 30 km + Nagelstudios + Website fehlt oder verbesserungswürdig"
   import <datei.csv>                Eigene Liste analysieren
   seed                              Beispielsuchen ausführen (füllt das Dashboard mit Mock-Daten)
+  digest                            Tagesübersicht per E-Mail senden
   maintenance                       Fällige Wartungsprüfungen ausführen
   retention [--execute]             Datenaufbewahrung: Probelauf bzw. Löschung
   demo <datei.csv> [--n 1] [--out out/demo.html]   Demo-Seite offline aus einer CSV-Zeile erzeugen (ohne Datenbank)
@@ -57,6 +58,7 @@ async function main() {
       if (c.registry.providers.places.isMock === false) throw new Error('seed ist nur im Mock-Modus erlaubt (APP_MODE=mock).');
       for (const q of EXAMPLE_SEARCHES) await runQuick(c, q);
     }); break;
+    case 'digest': await withCtx(async (c) => console.log(await c.notifier.dailyDigest({ force: true }) ?? 'Keine Benachrichtigungs-Adresse eingestellt.')); break;
     case 'maintenance': await withCtx(async (c) => console.log(await c.maintenance.runDue())); break;
     case 'retention': await withCtx(async (c) => { const out = args.includes('--execute') ? await c.retention.execute() : await c.retention.plan(); for (const r of out) console.log(`${String(r.count).padStart(5)}  ${r.label} (${r.days} Tage)`); if (!args.includes('--execute')) console.log('Probelauf. Mit --execute wirklich löschen.'); }); break;
     case 'demo': {

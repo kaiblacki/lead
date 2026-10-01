@@ -1,6 +1,7 @@
 import type { Repo } from '../db/repo.ts';
 import type { EmailProvider } from '../providers/types.ts';
 import { Repo as RepoCls } from '../db/repo.ts';
+import { startOfBerlinDay, endOfBerlinDay } from '../core/time.ts';
 
 export type MailRef = { leadId?: string | null; orderId?: string | null };
 export type MailResult = { ok: boolean; status: 'sent' | 'mock_recorded' | 'failed'; error?: string };
@@ -12,8 +13,8 @@ export const EMAIL_RE = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
  * Es gibt keinen automatischen Versand an Interessenten/Kaltkontakte – dafür gelten die Kontaktregeln (ContactService).
  */
 export class Notifier {
-  repo: Repo; email: EmailProvider; baseUrl: string;
-  constructor(repo: Repo, email: EmailProvider, baseUrl: string) { this.repo = repo; this.email = email; this.baseUrl = baseUrl; }
+  repo: Repo; email: EmailProvider; baseUrl: string; now: () => Date;
+  constructor(repo: Repo, email: EmailProvider, baseUrl: string, now: () => Date = () => new Date()) { this.repo = repo; this.email = email; this.baseUrl = baseUrl; this.now = now; }
   private get pool() { return this.repo.pool; }
 
   async send(kind: string, to: string, subject: string, text: string, ref: MailRef = {}): Promise<MailResult> {
@@ -31,6 +32,28 @@ export class Notifier {
       await this.repo.event(this.pool, ref.leadId ?? null, status === 'failed' ? 'email_failed' : 'email_sent', { kind, to_domain: to.split('@')[1], status, error, actor: 'system' }, true);
     } catch (e) { console.error('Postausgang konnte nicht gespeichert werden:', e instanceof Error ? e.message : e); }
     return { ok: status !== 'failed', status, error };
+  }
+
+
+  /** Tagesübersicht an den Betreiber: heutige Calls, fällige Rückrufe, wartende Aufträge, offene Wartungsaufgaben. `force` ignoriert „schon heute gesendet“. */
+  async dailyDigest(o: { force?: boolean } = {}): Promise<MailResult | null> {
+    const s = await this.repo.getSettings();
+    if (!s.notifyEnabled || !s.notifyEmail) return null;
+    const now = this.now(), day0 = startOfBerlinDay(now), day1 = endOfBerlinDay(now), owner = this.repo.ownerId;
+    if (!o.force && (await this.pool.query("select 1 from outbox where owner_id=$1 and kind='owner_digest' and created_at >= $2 limit 1", [owner, day0])).rowCount) return null;
+    const one = async (sql: string, args: unknown[] = []) => (await this.pool.query(sql, [owner, ...args])).rows[0].n as number;
+    const callbacks = await one("select count(*)::int n from leads where owner_id=$1 and callback_at < $2 and not paused and not contact_blocked and status in ('QUALIFIED','DEMO_CREATED','CONTACTED','REPLIED','INTERESTED','OFFER_SENT')", [day1]);
+    const fresh = await one("select count(*)::int n from leads where owner_id=$1 and status='QUALIFIED' and contact_readiness='READY_FOR_MANUAL_CALL' and not paused and callback_at is null");
+    const review = await one("select count(*)::int n from orders where owner_id=$1 and status='CUSTOMER_REVIEW'");
+    const payWait = await one("select count(*)::int n from orders where owner_id=$1 and status in ('PAYMENT_PENDING','FINAL_PAYMENT_PENDING')");
+    const toDeploy = await one("select count(*)::int n from orders where owner_id=$1 and status='FULLY_PAID'");
+    const prod = await one("select count(*)::int n from orders where owner_id=$1 and status in ('IN_PRODUCTION','QA')");
+    const tasks = await one("select count(*)::int n from maintenance_tasks where owner_id=$1 and status='OPEN'");
+    const target = s.dailyCallTarget;
+    const lines = [`Guten Morgen! Deine Übersicht für heute:`, '', `• Calls: ${callbacks} fällige Rückruf(e) und ${fresh} neue Leads bereit (Tagesziel ${target})${s.phoneEnabled ? '' : ' – Telefonakquise ist noch nicht freigegeben'}`,
+      `• Aufträge: ${prod} in Produktion, ${review} warten auf Kundenfreigabe, ${payWait} warten auf Zahlung, ${toDeploy} bereit zur Veröffentlichung`, `• Wartung: ${tasks} offene Aufgabe(n)`, '',
+      `Calls: ${this.baseUrl}/calls`, `Aufträge: ${this.baseUrl}/orders`, `Wartung: ${this.baseUrl}/maintenance`];
+    return this.send('owner_digest', s.notifyEmail, `Tagesübersicht: ${callbacks + fresh} Calls, ${review + toDeploy + tasks} offene To-dos`, lines.join('\n'), {});
   }
 
   async outbox(limit = 100, offset = 0) {
