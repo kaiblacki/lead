@@ -36,11 +36,20 @@ export class OsmPlacesProvider implements PlacesProvider {
   readonly name = 'osm'; readonly isMock = false;
   private ua: string; private now: () => Date; private last = 0;
   constructor(contact = process.env.OSM_CONTACT, now: () => Date = () => new Date()) { this.ua = `AI-Agency-OS/1.0${contact ? ` (${contact})` : ''}`; this.now = now; }
+  /** Eine Anfrage mit Höflichkeitsregeln: 1/s, bei 429/5xx bis zu zweimal mit Wartezeit (Retry-After) wiederholen. */
+  private async call(url: string, init: RequestInit, name: string): Promise<Response> {
+    let res: Response;
+    for (let attempt = 0; ; attempt++) {
+      await this.throttle(); res = await fetch(url, init);
+      if (![429, 502, 503, 504].includes(res.status) || attempt >= 2) return res;
+      const ra = Number(res.headers.get('retry-after')); await new Promise((r) => setTimeout(r, Math.min(60_000, (Number.isFinite(ra) && ra > 0 ? ra : 5 * 3 ** attempt) * 1000)));
+    }
+    void name;
+  }
   private async throttle() { const wait = this.last + 1100 - Date.now(); if (wait > 0) await new Promise((r) => setTimeout(r, wait)); this.last = Date.now(); }
 
   async geocode(query: string): Promise<GeocodeResult | null> {
-    await this.throttle();
-    const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=jsonv2&limit=1&countrycodes=de&accept-language=de`, { headers: { 'user-agent': this.ua } });
+    const res = await this.call(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=jsonv2&limit=1&countrycodes=de&accept-language=de`, { headers: { 'user-agent': this.ua } }, 'Nominatim');
     if (!res.ok) throw new Error(`Nominatim ${res.status}`);
     const d = (await res.json()) as { lat: string; lon: string; display_name: string }[];
     return d[0] ? { query, name: d[0].display_name, point: { lat: Number(d[0].lat), lng: Number(d[0].lon) }, source: this.name } : null;
@@ -57,11 +66,21 @@ export class OsmPlacesProvider implements PlacesProvider {
       mapsUrl: `https://www.openstreetmap.org/${e.type}/${e.id}`, openingHours: t.opening_hours ? [t.opening_hours] : undefined, businessStatus: status };
   }
 
+  /** Overpass-Server (öffentlich, geteilt): bei Überlastung/Zeitüberschreitung der Reihe nach probieren. Ein Fehler wird gemeldet – nie als „0 Treffer“ ausgegeben. */
+  static ENDPOINTS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
   private async overpass(data: string): Promise<El[]> {
-    await this.throttle();
-    const res = await fetch('https://overpass-api.de/api/interpreter', { method: 'POST', headers: { 'user-agent': this.ua, 'content-type': 'application/x-www-form-urlencoded' }, body: 'data=' + encodeURIComponent(data) });
-    if (!res.ok) throw new Error(`Overpass ${res.status}`);
-    return ((await res.json()) as { elements?: El[] }).elements ?? [];
+    const errors: string[] = [];
+    for (const url of OsmPlacesProvider.ENDPOINTS) {
+      try {
+        const res = await this.call(url, { method: 'POST', headers: { 'user-agent': this.ua, 'content-type': 'application/x-www-form-urlencoded' }, body: 'data=' + encodeURIComponent(data), signal: AbortSignal.timeout(60_000) }, 'Overpass');
+        if (!res.ok) { errors.push(`${new URL(url).host}: HTTP ${res.status}`); continue; }
+        const text = await res.text(); let j: { elements?: El[]; remark?: string };
+        try { j = JSON.parse(text); } catch { errors.push(`${new URL(url).host}: keine JSON-Antwort (überlastet?)`); continue; }
+        if (j.remark && /error|timeout|out of memory/i.test(j.remark)) { errors.push(`${new URL(url).host}: ${j.remark.slice(0, 80)}`); continue; }
+        return j.elements ?? [];
+      } catch (e) { errors.push(`${new URL(url).host}: ${e instanceof Error ? e.message : String(e)}`); }
+    }
+    throw new Error(`Overpass nicht erreichbar/überlastet (${errors.join('; ')})`);
   }
 
   async search(q: PlaceQuery) {

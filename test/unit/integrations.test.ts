@@ -31,7 +31,10 @@ test('OSM: Orte und Firmen werden übernommen (Qualität „mittel“, fehlende 
     { type: 'node', id: 1, lat: 49.25, lon: 6.85, tags: { name: 'Salon A', shop: 'hairdresser', phone: '06898 1234', 'addr:street': 'Hauptstraße', 'addr:housenumber': '5', 'addr:city': 'Völklingen' } },
     { type: 'way', id: 2, center: { lat: 49.3, lon: 6.9 }, tags: { name: 'Salon B', shop: 'hairdresser', 'contact:website': 'https://b.example' } },
     { type: 'node', id: 3, lat: 1, lon: 1, tags: { shop: 'hairdresser' } }, { type: 'node', id: 1, lat: 49.25, lon: 6.85, tags: { name: 'Salon A' } }] });
-  await withFetch(async () => { await assert.rejects(p.search({ center: { lat: 1, lng: 1 }, radiusKm: 5, keywords: ['x'], limit: 5 }), /Overpass 429/); }, () => ({}), 429);
+  (p as any).call = async (url: string) => new Response(JSON.stringify({ elements: [], remark: 'runtime error: Query timed out' }), { status: 200 });
+  await assert.rejects(p.search({ center: { lat: 1, lng: 1 }, radiusKm: 5, keywords: ['x'], limit: 5 }), /Overpass nicht erreichbar.*timed out/);   // Fehler statt „0 Treffer“
+  let n = 0; (p as any).call = async (url: string) => (++n === 1 ? new Response('<html>busy</html>', { status: 200 }) : new Response(JSON.stringify({ elements: [{ type: 'node', id: 9, lat: 1, lon: 1, tags: { name: 'X' } }] }), { status: 200 }));
+  assert.equal((await p.search({ center: { lat: 1, lng: 1 }, radiusKm: 5, keywords: ['x'], limit: 5 })).items.length, 1, 'zweiter Server springt ein');
 });
 
 test('WhatsApp: Nummern-Normalisierung und API-Aufruf (Bearer, Text, Fehlertext), keine Nachricht bei ungültiger Nummer', async () => {
