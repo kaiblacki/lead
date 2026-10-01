@@ -3,7 +3,7 @@ import type { GeocodeResult, PlaceCandidate, PlaceQuery, PlacesProvider } from '
 /** Schlagwort → OpenStreetMap-Filter. Was nicht passt, wird über den Namen gesucht. */
 const TAGS: [RegExp, string[]][] = [
   [/friseur|barber|haarschnitt|hair/i, ['["shop"="hairdresser"]']],
-  [/nagel|nail|maniküre|manikure/i, ['["shop"="beauty"]["beauty"~"nails"]', '["shop"="beauty"]["name"~"nail|nagel",i]']],
+  [/nagel|nail|maniküre|manikure/i, ['["shop"="beauty"]', '["beauty"~"nails"]']],
   [/kosmetik|beauty|wellness|spa/i, ['["shop"="beauty"]', '["leisure"="spa"]']],
   [/restaurant|gastro|café|cafe|bistro|imbiss/i, ['["amenity"~"^(restaurant|cafe|fast_food)$"]']],
   [/zahnarzt|dental|zahn/i, ['["amenity"="dentist"]', '["healthcare"="dentist"]']],
@@ -18,10 +18,10 @@ const esc = (s: string) => s.replace(/[\\"]/g, '').replace(/[^\p{L}\p{N} .&'-]/g
 export function overpassQuery(q: PlaceQuery): string {
   const r = Math.round(Math.min(50, Math.max(1, q.radiusKm)) * 1000), at = `(around:${r},${q.center.lat},${q.center.lng})`;
   const filters = new Set<string>();
-  for (const kw of q.keywords) { const hit = TAGS.find(([re]) => re.test(kw)); if (hit) hit[1].forEach((f) => filters.add(f)); else if (esc(kw).length >= 3) filters.add(`["name"~"${esc(kw)}",i]`); }
+  for (const kw of q.keywords) { const hit = TAGS.find(([re]) => re.test(kw)); if (hit) hit[1].forEach((f) => filters.add(f)); else if (esc(kw).length >= 3) filters.add(`["shop"]["name"~"${esc(kw)}",i]`);   }   // Namenssuche nur innerhalb von Läden (sonst zu teuer für Overpass)
   if (!filters.size) filters.add('["shop"]');
   const body = [...filters].map((f) => `nwr${f}["name"]${at};`).join('');
-  return `[out:json][timeout:25];(${body});out center tags ${Math.min(300, Math.max(10, q.limit * 3))};`;
+  return `[out:json][timeout:60];(${body});out center tags ${Math.min(300, Math.max(10, q.limit * 3))};`;
 }
 
 type El = { type: string; id: number; lat?: number; lon?: number; center?: { lat: number; lon: number }; tags?: Record<string, string> };
