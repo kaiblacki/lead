@@ -18,7 +18,21 @@ if [ -z "${DATABASE_URL:-}" ]; then
     su postgres -c "psql -q -c \"alter user postgres password 'pw'\"" >/dev/null 2>&1 || true
     export DATABASE_URL="postgres://postgres:pw@localhost:5432/agency_live"
   else
-    export DATABASE_URL="postgres://postgres:postgres@localhost:5432/agency_live"
+    # Lokales PostgreSQL finden (psql nötig): zuerst postgres/postgres (Projektstandard der Demo), dann der Mac-Benutzer ohne Passwort (Homebrew/Postgres.app)
+    command -v psql >/dev/null 2>&1 || { printf '%s\n' "psql nicht gefunden – PostgreSQL installieren und starten (macOS: brew install postgresql@16 && brew services start postgresql@16) oder DATABASE_URL setzen." >&2; exit 2; }
+    for cred in "postgres:postgres" "$(id -un):"; do
+      u="${cred%%:*}"; p="${cred#*:}"
+      if PGCONNECT_TIMEOUT=3 PGPASSWORD="$p" psql -h localhost -U "$u" -d postgres -Atqc 'select 1' >/dev/null 2>&1; then
+        export PGHOST=localhost PGUSER="$u"; if [ -n "$p" ]; then export PGPASSWORD="$p"; fi
+        export DATABASE_URL="postgres://$u${p:+:$p}@localhost:5432/agency_live"; break
+      fi
+    done
+    if [ -z "${DATABASE_URL:-}" ]; then
+      printf '%s\n' "Kein lokales PostgreSQL erreichbar (versucht auf localhost:5432: Benutzer postgres/postgres und $(id -un) ohne Passwort)." \
+        "Starten: brew services start postgresql@16 (oder Postgres.app öffnen), danach den Befehl wiederholen." \
+        "Hat dein PostgreSQL andere Zugangsdaten: export DATABASE_URL='postgres://BENUTZER:PASSWORT@localhost:5432/agency_live' und wiederholen (Datenbank vorher anlegen: createdb agency_live)." >&2
+      exit 2
+    fi
   fi
   bash scripts/setup-local-db.sh agency_live
 fi

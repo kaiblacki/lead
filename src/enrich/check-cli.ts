@@ -40,6 +40,9 @@ Ohne Schlüssel geht: npm run enrich:check -- --dry-run   (zeigt Auswahl und Zus
 type Probe = { file: string; table: string; column: string };
 const PROBES: Probe[] = [{ file: '0011_pipeline.sql', table: 'leads', column: 'effective_priority' }, { file: '0012_enrichment_approvals.sql', table: 'leads', column: 'work_status' }, { file: '0013_provider_cost_currency.sql', table: 'enrichment_log', column: 'provider_cost_currency' }];
 
+/** Sicherheitsnetz: der Schlüssel darf in keiner Ausgabe (auch nicht in Fehlermeldungen) vorkommen. */
+const scrub = (t: string) => { const k = process.env.BRAVE_SEARCH_API_KEY; return k && k.length >= 8 ? t.split(k).join('***') : t; };
+
 async function main() {
   if (has('help') || has('h')) { console.log(HELP); return 0; }
   const env = process.env; const dry = has('dry-run');
@@ -63,9 +66,7 @@ async function main() {
     let runId = val('run');
     if (!runId) { const r = await ensureRun(ctx, { start: has('ensure-run') }); runId = r.runId; console.error(r.created ? `Suchlauf neu angelegt (ohne Websuche): ${r.leads} Leads, ${runId}` : `Vorhandener Suchlauf: ${r.leads} Leads, ${runId}`); }
     const names = vals('lead');
-    const report = await runEnrichmentCheck(ctx, { runId, names: names.length ? names : undefined, maxLeads: val('max-leads') ? Number(val('max-leads')) : undefined, maxRequests: val('max-requests') ? Number(val('max-requests')) : undefined, dryRun: dry, ignoreCache: has('ignore-cache'), onProgress: (m) => console.error(m) });
-    // Sicherheitsnetz: der Schlüssel darf in keiner Ausgabe vorkommen
-    const scrub = (t: string) => (env.BRAVE_SEARCH_API_KEY && env.BRAVE_SEARCH_API_KEY.length >= 8 ? t.split(env.BRAVE_SEARCH_API_KEY).join('***') : t);
+    const report = await runEnrichmentCheck(ctx, { runId, names: names.length ? names : undefined, maxLeads: val('max-leads') ? Number(val('max-leads')) : undefined, maxRequests: val('max-requests') ? Number(val('max-requests')) : undefined, dryRun: dry, ignoreCache: has('ignore-cache'), onProgress: (m) => console.error(scrub(m)) });
     const md = scrub(renderReport(report)), json = scrub(JSON.stringify(report, null, 1));
     const dir = val('out') ?? join('out', 'enrich-check'); mkdirSync(dir, { recursive: true }); const stamp = report.startedAt.replace(/[:.]/g, '-');
     const base = join(dir, `enrich-check-${dry ? 'dry-' : ''}${stamp}`); writeFileSync(`${base}.md`, md); writeFileSync(`${base}.json`, json);
@@ -73,4 +74,12 @@ async function main() {
     return report.safety.ok ? 0 : 3;
   } finally { await repo.close(); }
 }
-main().then((c) => process.exit(c), (e) => { console.error(`Fehler: ${e instanceof Error ? e.message : String(e)}`); process.exit(1); });
+/** Verständliche Hilfe bei typischen Datenbankfehlern (lokal: Postgres nicht gestartet, falsche Zugangsdaten, Datenbank fehlt). */
+const dbHelp = (e: unknown): string => {
+  const code = String((e as { code?: string })?.code ?? '');
+  if (['ECONNREFUSED', 'ENOTFOUND', 'ETIMEDOUT'].includes(code)) return 'PostgreSQL ist nicht erreichbar. Lokal starten (macOS: brew services start postgresql@16 oder Postgres.app öffnen) und den Befehl wiederholen; DATABASE_URL prüfen.';
+  if (code === '28P01' || code === '28000') return 'PostgreSQL lehnt die Zugangsdaten ab – Benutzer/Passwort in DATABASE_URL prüfen.';
+  if (code === '3D000') return 'Die Datenbank existiert nicht. Anlegen: bash scripts/setup-local-db.sh agency_live (mit gesetzten PGHOST/PGUSER/PGPASSWORD, falls nötig) und den Befehl wiederholen.';
+  return '';
+};
+main().then((c) => process.exit(c), (e) => { const h = dbHelp(e); console.error(scrub(`Fehler: ${e instanceof Error ? e.message : String(e)}${h ? `\n${h}` : ''}`)); process.exit(1); });
