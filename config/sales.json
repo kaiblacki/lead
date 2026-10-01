@@ -70,14 +70,13 @@
   },
   "defaultSender": "Ihr Ansprechpartner",
   "autoDemo": {
-    "_hinweis": "Firmen OHNE Website bekommen automatisch eine Demo – aber höchstens maxPerSearch je Suchlauf (die am höchsten priorisierten); alle weiteren geeigneten Firmen bekommen „Demo empfohlen“. Firmen MIT Website: nie automatisch – nur nach deiner Entscheidung.",
-    "enabled": true,
+    "_hinweis": "Demos werden NIE automatisch erstellt – das System empfiehlt nur (Freigabe-Workflow). Schalter bleibt aus Kompatibilitätsgründen, wirkt nicht.",
+    "enabled": false,
     "minOpportunity": 45,
     "requireAnyOf": [
       "phone",
       "address"
-    ],
-    "maxPerSearch": 5
+    ]
   },
   "emailFollowUpDays": 4
 }

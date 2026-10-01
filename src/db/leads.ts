@@ -121,7 +121,9 @@ export class LeadStore {
       has_email: hasEmail, has_phone: 'l.phone is not null',
       has_website: 'l.website_url is not null',
       demo_recommended: `l.demo_decision = 'recommended' and not ${hasDemo}`,
-      manual_check: "(l.review_flag is not null or l.contact_readiness = 'MANUAL_REVIEW')",
+      manual_check: "(l.review_flag is not null or l.contact_readiness = 'MANUAL_REVIEW' or l.official_website_verified = 'UNCERTAIN')",
+      data_needed: "l.work_status = 'DATA_NEEDED' and l.contact_readiness <> 'DO_NOT_CONTACT' and l.status <> 'IGNORED'",
+      ready_contact: "l.work_status = 'CONTACTABLE' and l.effective_priority in ('A','B') and not l.paused and l.contact_readiness <> 'DO_NOT_CONTACT' and l.status in ('QUALIFIED','DEMO_CREATED')",
       new_a: "l.effective_priority = 'A' and l.call_count = 0 and l.created_at > now() - interval '14 days' and l.status in ('QUALIFIED','DEMO_CREATED')",
       // „Heute bearbeiten“: alle A-Leads, die noch nicht kontaktiert sind, fällige Rückrufe und Leads mit fertiger Demo
       today_work: `(l.contact_readiness <> 'DO_NOT_CONTACT' and not l.paused and l.status in ('QUALIFIED','DEMO_CREATED') and ((l.effective_priority = 'A' and l.call_count = 0) or ${openCall} or (l.callback_at is not null and l.callback_at < now() + interval '1 day')))`,
@@ -147,7 +149,7 @@ export class LeadStore {
          (o.dimensions->'dataQuality'->>'value')::float as dq, (o.dimensions->'contactability'->>'value')::float as contactability,
          case when l.website_state = 'none' then null else au.overall_quality end as website_score, au.audit_status,
          ${hasDemo} as has_demo, ${openCall} as demo_ready_call, ${hasEmail} as has_email,
-         coalesce(l.effective_priority, sp.brief->>'priority') as priority, l.effective_priority, l.auto_priority, l.manual_priority, l.priority_reason, l.review_flag, sp.approved_at ${base} order by ${order} limit $${p.length - 1} offset $${p.length}`, p)).rows;
+         coalesce(l.effective_priority, sp.brief->>'priority') as priority, l.effective_priority, l.auto_priority, l.manual_priority, l.priority_reason, l.review_flag, l.work_status, l.contactability, l.preferred_contact_channel, l.demo_recommendation, l.demo_recommendation_reason, l.enrichment_status, l.last_enrichment_at, l.official_website_candidate, l.official_website_confidence, l.official_website_verified, sp.approved_at ${base} order by ${order} limit $${p.length - 1} offset $${p.length}`, p)).rows;
     return { total, rows };
   }
 

@@ -120,3 +120,15 @@ Begründung der Prozentzahlen: Der lokale Umfang ist vollständig; die restliche
 - **Demo v2:** Layout-Familien SERVICE / APPOINTMENT / GASTRO_RETAIL, wählbare Module (empfohlen ≠ ausgewählt), Demo passt sich an (gleicher Link).
 - **Dashboard:** Liste mit Priorität/Filtern, Seite „Heute“, Lead-Seite mit Priorität, Modulen, Notizen, Dubletten-Prüfung.
 - Nicht gebaut (bewusst): Angebots-/Vertrags-/Rechnungs-/Domain-/Abo-Automation, Benachrichtigungen nach außen. Es wird nichts gesendet.
+
+## Freigabe-Regel, Enrichment, DATA_NEEDED (Stand dieser Version)
+
+**Grundregel:** Das System darf analysieren, empfehlen und vorbereiten – nichts Relevantes für einen einzelnen Lead wird ohne deine Bestätigung ausgeführt. Automatisch erlaubt: von dir gestartete Suche, Discovery, Dedupe, MASS-Analyse, Scores, Priorisierung, Empfehlungen und budgetkonformes Web-Enrichment. Nicht automatisch: Demo erstellen, Nachrichten, Veröffentlichung, Vertrag, Premium außerhalb des Budgets.
+
+- **Freigaben** (`approvals`, `src/workflow/approvals.ts`): `NOT_REQUIRED → RECOMMENDED → AWAITING_APPROVAL → APPROVED → COMPLETED` oder `REJECTED`. Genutzt für `DEMO_CREATE`; `EMAIL_SEND`, `FOLLOW_UP_SEND`, `PREMIUM_ANALYSIS`, `PUBLISH_WEBSITE` sind vorgesehen, aber nicht umgesetzt.
+- **Demo:** nur Empfehlung (`demo_recommendation`, Begründung). „Demo erstellen“ → Bestätigungsseite → erst dann wird gebaut. Ablehnung bleibt gespeichert. Module: empfohlen ≠ ausgewählt, vor der Erstellung änderbar.
+- **DATA_NEEDED** (`work_status`): weder Telefon noch geschäftliche E-Mail. Getrennt von A/B/C/D. Ansicht „Daten“ (`/enrichment`). `contactability`: READY, PHONE_ONLY, EMAIL_ONLY, WEB_FORM_ONLY, SOCIAL_ONLY, NO_CONTACT_DATA; `preferred_contact_channel`.
+- **Web-Enrichment** (`src/enrich/`): Brave (`BRAVE_SEARCH_API_KEY`; ohne Schlüssel `provider_unavailable`). ≤ 3 Suchen je Lead, nur bei fehlender Website/fehlenden Kontaktdaten, Reihenfolge A → B → interessante C, D nie. Treffer werden bewertet (Name, Ort, PLZ, Adresse, Telefon, Branche, Impressum, Kontakt): VERIFIED / LIKELY (übernommen, mit Prüfhinweis) / UNCERTAIN (nicht übernommen, manuell prüfen) / REJECTED. Danach Website-Abruf (bis 5 Seiten), Neubewertung, Priorität, Empfehlung.
+- **Budget** (`config/pipeline.json` → `enrichment`): `monthly_enrichment_budget_eur` 10, `daily_enrichment_budget_eur` 2. Bei Erreichen: kein weiterer kostenpflichtiger Aufruf, Lauf läuft weiter, Leads bleiben `budget_blocked`/DATA_NEEDED. Cache je Lead (Hash, auch Misserfolge).
+- **Nachträglich anreichern:** Lead-Seite „Enrichment erneut starten“, Ansicht „Daten“ „Enrichment für Daten beschaffen starten“.
+- **Migration 0012:** bestehende Demos und Entscheidungen bleiben; frühere „empfohlen/übersprungen“ wurden zu Freigaben übernommen.

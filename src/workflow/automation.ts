@@ -5,7 +5,6 @@ import type { AnalysisService } from '../analysis/service.ts';
 import type { PipelineStore } from '../db/pipeline.ts';
 import { familyFor, recommendModules } from '../site/modules.ts';
 
-const RANK: Record<string, number> = { A: 0, B: 1, C: 2, D: 3 };
 
 /** Was nach einer Analyse bzw. nach einem Suchlauf automatisch passiert. Mit Website: nie automatisch eine Demo. Nichts wird gesendet. */
 export class Automation {
@@ -25,27 +24,10 @@ export class Automation {
     await this.pipeline.setModuleState(leadId, { family: l.demo_family ?? family, recommended: recommendModules(this.cfg, { family: l.demo_family ?? family, subIndustry: l.sub_industry }) });
   }
 
-  /**
-   * Nach dem Lauf: Firmen OHNE Website mit genug Daten bekommen – nach Priorität und Verkaufschance sortiert – höchstens `maxAutoDemos` automatische Demos;
-   * die übrigen geeigneten Leads erhalten demo_decision = recommended („Demo empfohlen“). Firmen mit Website: nie automatisch.
-   */
-  async afterRun(_runId: string, leadIds: string[], opts: { maxAutoDemos: number }): Promise<{ autoDemos: number; recommended: number }> {
-    if (!leadIds.length) return { autoDemos: 0, recommended: 0 };
-    const c = this.cfg.sales?.autoDemo ?? {};
-    const any: string[] = c.requireAnyOf ?? ['phone', 'address'];
-    const rows = (await this.repo.pool.query(
-      `select l.id, l.phone, l.address, l.paused, l.contact_blocked, l.demo_decision, l.effective_priority, o.score,
-         exists (select 1 from demos d where d.lead_id = l.id and d.owner_id = l.owner_id) has_demo
-       from leads l left join lateral (select score from opportunities where lead_id = l.id order by created_at desc, id desc limit 1) o on true
-       where l.owner_id=$1 and l.id = any($2) and l.website_state = 'none'`, [this.repo.ownerId, leadIds])).rows as any[];
-    const eligible = rows.filter((l) => !l.paused && !l.contact_blocked && l.demo_decision !== 'skipped' && !l.has_demo && l.score !== null && l.score >= (c.minOpportunity ?? 45)
-      && any.some((k) => (k === 'phone' ? l.phone : k === 'address' ? l.address : null)));
-    eligible.sort((a, b) => (RANK[a.effective_priority ?? 'D'] - RANK[b.effective_priority ?? 'D']) || (b.score - a.score) || (Number(!!b.phone) - Number(!!a.phone)));
-    let autoDemos = 0, recommended = 0;
-    for (const l of eligible) {
-      if (c.enabled && autoDemos < opts.maxAutoDemos) { await this.docs.demoFor(l.id, 'auto', 'system'); autoDemos++; }
-      else { await this.pipeline.setDemoRecommended(l.id); recommended++; }
-    }
-    return { autoDemos, recommended };
+  /** Nach dem Lauf: nur zählen. Demos werden nie automatisch erstellt – das System empfiehlt (siehe PipelineStore/Freigaben), der Nutzer bestätigt. */
+  async afterRun(_runId: string, leadIds: string[]): Promise<{ recommended: number }> {
+    if (!leadIds.length) return { recommended: 0 };
+    const n = (await this.repo.pool.query("select count(*)::int n from approvals where owner_id=$1 and lead_id = any($2) and action='DEMO_CREATE' and state in ('RECOMMENDED','AWAITING_APPROVAL')", [this.repo.ownerId, leadIds])).rows[0].n as number;
+    return { recommended: n };
   }
 }

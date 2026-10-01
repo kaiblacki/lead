@@ -9,7 +9,6 @@ import { dedupeCandidates } from '../../src/dedupe/merge.ts';
 import { computePriority, type PriorityInput } from '../../src/scoring/priority.ts';
 import { effectiveModules, familyFor, recommendModules, FAMILIES } from '../../src/site/modules.ts';
 import { extractContactFacts } from '../../src/sources/site-contact.ts';
-import { Enricher } from '../../src/sources/enrich.ts';
 import { createSources } from '../../src/sources/registry.ts';
 import { BraveSearchProvider } from '../../src/providers/real/websearch.ts';
 import { MockWebSearchProvider } from '../../src/providers/mock/websearch.ts';
@@ -19,7 +18,7 @@ import { normalizeCriteria, parseQuickSearch, criteriaFromForm } from '../../src
 import { renderDemo } from '../../src/site/engine.ts';
 import { contentFromFacts } from '../../src/site/content.ts';
 import { templateByKey } from '../../src/site/templates.ts';
-import { SyntheticPlaces, StubCrawler } from '../synthetic.ts';
+import { SyntheticPlaces } from '../synthetic.ts';
 import { getWorld } from '../../src/fixtures/world.ts';
 
 const cfg = loadConfig(); const D = cfg.pipeline.dedupe; const tax = cfg.taxonomy;
@@ -131,22 +130,6 @@ test('Website-Anreicherung: Telefon, E-Mail, Adresse, Formular, WhatsApp, Social
 });
 
 // ---------- 6. Web Search ----------
-test('Websuche: Verzeichnisse/Social zählen nicht, Treffer nur mit Abgleich (Telefon oder Name+Ort), unsichere Treffer nur als Hinweis; nicht für jeden Lead', async () => {
-  const hits = [{ url: 'https://www.gelbeseiten.de/firma/1', title: 'Verzeichnis', snippet: '', rank: 1 }, { url: 'https://www.facebook.com/kovan', title: '', snippet: '', rank: 2 }, { url: 'https://www.kovan-nails.example/', title: 'Kovan', snippet: '', rank: 3 }];
-  const ws = { name: 'fake', isMock: true, async search() { return { hits, requests: 1, source: 'fake', retrievedAt: '2026-06-01T10:00:00Z', costCents: 0.5 }; } };
-  const crawler = new StubCrawler(); const mk = (c = crawler) => new Enricher({ sources: { webSearch: ws }, providers: { crawler: c }, genericWords: D.genericWords, cfg: { minOpportunity: 40, maxPerRun: 2, resultsPerQuery: 5 } });
-  crawler.pages['https://www.kovan-nails.example/'] = '<html><body><h1>Nagelstudio Kovan</h1><p>Völklingen, 66333 – Tel 06898 111111</p></body></html>';
-  const ok = await mk().findWebsite({ name: 'Nagelstudio Kovan', city: 'Völklingen', phone: '06898 111111', postalCode: '66333' }, '2026-06-01T10:00:00Z');
-  assert.equal(ok.url, 'https://www.kovan-nails.example/'); assert.equal(crawler.calls, 1, 'Verzeichnis und Social wurden nicht abgerufen'); assert.equal(ok.costCents, 0.5);
-  assert.equal(ok.facts[0].source, 'web-search'); assert.match(ok.facts[0].note!, /Telefonnummer stimmt überein/);
-  crawler.pages['https://www.kovan-nails.example/'] = '<html><body><h1>Ganz anderer Laden</h1><p>Köln</p></body></html>';
-  const no = await mk().findWebsite({ name: 'Nagelstudio Kovan', city: 'Völklingen', phone: '06898 111111', postalCode: '66333' }, 'x');
-  assert.equal(no.url, undefined); assert.equal(no.facts[0].key, 'websiteCandidate'); assert.match(no.note, /manuell prüfen/);
-  // nur wenn Daten fehlen UND interessant genug; Obergrenze je Lauf
-  const e = mk(); const l = { hasWebsite: false, hasPhone: true, hasEmail: false, opportunity: 60, callsUsed: 0 };
-  assert.ok(e.wants(l)); assert.equal(e.wants({ ...l, hasWebsite: true }), null); assert.equal(e.wants({ ...l, opportunity: 20 }), null); assert.equal(e.wants({ ...l, callsUsed: 2 }), null); assert.equal(e.wants({ ...l, closed: true }), null);
-  assert.deepEqual(e.wants({ ...l, hasWebsite: true, hasPhone: false }), { website: false, contact: true });
-});
 test('Websuche-Adapter: Brave (Schlüssel, Anfrage, Antwort, Kosten), ohne Schlüssel Mock/„keine Quelle“, Quellenübersicht', async () => {
   const orig = globalThis.fetch; const calls: { url: string; init?: RequestInit }[] = [];
   globalThis.fetch = (async (url: string, init?: RequestInit) => { calls.push({ url: String(url), init }); return new Response(JSON.stringify({ web: { results: [{ url: 'https://a.example', title: '<b>A</b> GmbH', description: 'Text' }] } }), { status: 200 }); }) as typeof fetch;

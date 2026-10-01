@@ -6,6 +6,8 @@ import { NA } from '../../core/enrichment.ts';
 
 const VIEWS: { key: string; title: string; hint: string }[] = [
   { key: 'today_work', title: 'Heute bearbeiten', hint: 'A-Leads ohne Kontakt, fällige Rückrufe und Leads mit fertiger Demo' },
+  { key: 'data_needed', title: 'Daten beschaffen', hint: 'Weder Telefonnummer noch E-Mail bekannt – erst Daten beschaffen (Enrichment)' },
+  { key: 'ready_contact', title: 'Bereit zum Kontakt', hint: 'Kontaktmöglichkeit vorhanden und Priorität A/B' },
   { key: 'call_today', title: 'Heute anrufen', hint: 'Anruf fällig (Rückruf oder „Demo fertig – anrufen“)' },
   { key: 'new_a', title: 'Neue A-Leads', hint: 'Priorität A, in den letzten 14 Tagen gefunden, noch nicht kontaktiert' },
   { key: 'demo_ready', title: 'Demo fertig', hint: 'Demo vorhanden – Telefonnummer prüfen und anrufen' },

@@ -11,7 +11,7 @@ import { allTemplates } from '../../site/templates.ts';
 import { pickTemplate } from '../../site/templates.ts';
 import { parseBerlinLocal } from '../../core/time.ts';
 import { esc } from '../html.ts';
-import { FAMILIES, familyFor, moduleDefs, moduleKeys, recommendModules, type Family } from '../../site/modules.ts';
+import { FAMILIES, effectiveModules, familyFor, moduleDefs, moduleKeys, recommendModules, type Family } from '../../site/modules.ts';
 
 const id = uuid.source;
 const back = (leadId: string, text: string, anchor = '') => redirect(`/leads/${leadId}${anchor}`, okFlash(text));
@@ -25,7 +25,7 @@ export const routes: Route[] = [
     const nextQs = (o: number) => { const u = new URLSearchParams(q); u.set('offset', String(o)); return u.toString(); };
     return render(r, { title: 'Leads', nav: 'leads', body: html`
       <div class="row chips" style="margin:6px 0">${(['A', 'B', 'C', 'D'] as const).map((pr) => html`<a class="btn ${q.get('priority') === pr ? 'primary' : ''}" href="/leads?priority=${pr}" title="Priorität ${pr}">${prioBadge(pr)}</a>`)}
-        ${([['', 'Alle'], ['no_website', 'Keine Website'], ['has_website', 'Website vorhanden'], ['worst_websites', 'Schlechteste Websites'], ['top', 'Höchste Verkaufschance'], ['demo_ready', 'Demo fertig'], ['demo_recommended', 'Demo empfohlen'], ['demo_open', 'Demo offen'], ['not_contacted', 'Noch nicht kontaktiert'], ['call_today', 'Heute anrufen'], ['manual_check', 'Manuell prüfen'], ['has_email', 'E-Mail vorhanden'], ['has_phone', 'Telefon vorhanden']] as [string, string][]).map(([k, label]) => html`<a class="btn ${(q.get('quick') ?? '') === k && !q.get('tier') && !q.get('priority') && (k !== 'top' || q.get('sort') === 'score') && (k === 'top' || q.get('sort') !== 'score') ? 'primary' : ''}" href="/leads?${k && k !== 'top' ? `quick=${k}` : k === 'top' ? 'sort=score' : ''}">${label}</a>`)}
+        ${([['', 'Alle'], ['no_website', 'Keine Website'], ['has_website', 'Website vorhanden'], ['worst_websites', 'Schlechteste Websites'], ['top', 'Höchste Verkaufschance'], ['demo_ready', 'Demo fertig'], ['demo_recommended', 'Demo empfohlen'], ['demo_open', 'Demo offen'], ['data_needed', 'Daten beschaffen'], ['ready_contact', 'Bereit zum Kontakt'], ['not_contacted', 'Noch nicht kontaktiert'], ['call_today', 'Heute anrufen'], ['manual_check', 'Manuell prüfen'], ['has_email', 'E-Mail vorhanden'], ['has_phone', 'Telefon vorhanden']] as [string, string][]).map(([k, label]) => html`<a class="btn ${(q.get('quick') ?? '') === k && !q.get('tier') && !q.get('priority') && (k !== 'top' || q.get('sort') === 'score') && (k === 'top' || q.get('sort') !== 'score') ? 'primary' : ''}" href="/leads?${k && k !== 'top' ? `quick=${k}` : k === 'top' ? 'sort=score' : ''}">${label}</a>`)}
         ${(['MASS', 'DEEP', 'PREMIUM'] as const).map((t) => html`<a class="btn ${q.get('tier') === t ? 'primary' : ''}" href="/leads?tier=${t}">${t}</a>`)}</div>
       <form class="card" method="get" action="/leads"><div class="row"><label class="grow">Suche<input name="q" value="${q.get('q') ?? ''}" placeholder="Name, Ort, Branche"></label></div>
         <div class="row">${sel('Status', [['', 'alle'], ...STATUSES.map((s) => [s, s] as [string, string])])}${sel('Kategorie', [['', 'alle'], ['HOT', 'HOT'], ['HIGH POTENTIAL', 'HIGH POTENTIAL'], ['MEDIUM', 'MEDIUM'], ['LOW', 'LOW'], ['IGNORE', 'IGNORE'], ['UNRATED', 'nicht bewertet']])}
@@ -37,7 +37,7 @@ export const routes: Route[] = [
       <p class="mute">${res.total} Leads${offset ? ` · ab ${offset + 1}` : ''}</p>
       <div class="card"><ul class="items">${res.rows.map((l) => { const en = enrichment(l); return html`<li><div class="row"><span title="${l.priority_reason ?? ''}">${prioBadge(l.priority)}</span><a class="grow" href="/leads/${l.id}"><b>${l.company_name}</b> ${l.is_mock ? mockBadge : ''}<br><small>${l.sub_industry ?? l.industry ?? NA}</small></a>
         <div style="text-align:right"><b>${l.score ?? NA}</b> ${categoryBadge(l.category)}<br><small class="mute">Opportunity Score</small></div></div>
-        <dl class="facts"><dt>Priorität</dt><dd><b>${l.priority ?? NA}</b>${l.manual_priority ? ' (manuell)' : ''}</dd><dt>Status</dt><dd>${statusBadge(l.status)}</dd><dt>Branche</dt><dd>${l.sub_industry ?? l.industry ?? NA}</dd><dt>Ort</dt><dd>${orNA(l.city)}${l.distance_km ? ` · ${Number(l.distance_km).toFixed(1).replace('.', ',')} km` : ''}</dd>
+        <dl class="facts"><dt>Priorität</dt><dd><b>${l.priority ?? NA}</b>${l.manual_priority ? ' (manuell)' : ''}</dd><dt>Work Status</dt><dd>${l.work_status === 'DATA_NEEDED' ? html`<span class="badge b-warn">DATA_NEEDED</span>` : 'kontaktierbar'}</dd><dt>Contactability</dt><dd>${l.contactability ?? NA}</dd><dt>Demo Recommendation</dt><dd>${l.demo_recommendation === 'DEMO_RECOMMENDED' ? html`<span class="badge b-ok">DEMO_RECOMMENDED</span>` : l.demo_recommendation === 'DEMO_NOT_RECOMMENDED' ? 'nicht empfohlen' : NA}</dd><dt>Status</dt><dd>${statusBadge(l.status)}</dd><dt>Branche</dt><dd>${l.sub_industry ?? l.industry ?? NA}</dd><dt>Ort</dt><dd>${orNA(l.city)}${l.distance_km ? ` · ${Number(l.distance_km).toFixed(1).replace('.', ',')} km` : ''}</dd>
           <dt>Website</dt><dd>${l.website_url ? html`vorhanden · Website-Score <b>${l.website_score ?? NA}</b>` : html`<b>nicht vorhanden</b>`}${l.audit_status === 'UNREACHABLE' ? html` <span class="badge b-warn">Abruf nicht möglich</span>` : ''}</dd>
           <dt>Verkaufschance</dt><dd><b>${l.score ?? NA}</b> ${categoryBadge(l.category)}</dd>
           <dt>Telefon</dt><dd>${l.phone ? html`<a class="tel" href="tel:${String(l.phone).replace(/[^\d+]/g, '')}"><b>${l.phone}</b></a>` : NA}</dd><dt>E-Mail</dt><dd>${l.has_email ? 'vorhanden' : NA}</dd>
@@ -57,6 +57,7 @@ export const routes: Route[] = [
     d.factsT = await ctx.leads.factsOf(leadId);
     d.assessment = await ctx.leads.assess(leadId);
     const [settings, demos, offer, order, analysis, costs, note, dupes] = await Promise.all([ctx.repo.getSettings(), ctx.sales.listDemos(leadId), ctx.sales.latestOffer(leadId), ctx.orders.orderForLead(leadId), ctx.analysis.best(leadId), ctx.aiUsage.forLead(leadId), ctx.pipeline.note(leadId), ctx.pipeline.candidatesOf(leadId)]);
+    const [approval, bstat] = await Promise.all([ctx.pipeline.approvals.stateOf(leadId, 'DEMO_CREATE'), ctx.enrichment.budget.status(ctx.now())]);
     const liveDemo = demos.find((x: any) => !x.revoked); const demoUrl = liveDemo ? `${r.app.baseUrl}/d/${liveDemo.token}` : undefined;
     const sender = settings.callerName || ctx.cfg.agency.callerName || ctx.cfg.agency.ownerName || 'Ihr Ansprechpartner';
     const contactPerson = (d.factsT.find((f: any) => f.key === 'contactPerson')?.value as string | undefined);
@@ -71,7 +72,7 @@ export const routes: Route[] = [
       ...((analysis?.manual_checks ?? []) as string[]).slice(0, 4).map((m) => `Manuell prüfen: ${m}`), ...d.factsT.filter((f: any) => f.key === 'websiteCandidate').map((f: any) => `Mögliche Website (ungeprüft): ${f.value} – ${f.note ?? ''}`),
       dupes.length ? `${dupes.length} mögliche Dublette(n) – bitte prüfen.` : ''].filter(Boolean) as string[];
     return render(r, { title: d.lead.company_name, nav: 'leads', body: html`
-      ${P.header(d, r.app.csrf)}${P.duplicatesCard(dupes, { csrf: r.app.csrf, leadId })}${P.profile(d)}${P.priorityCard(d, { csrf: r.app.csrf, leadId })}${P.analysisCard(d, analysis, { csrf: r.app.csrf, leadId, costs, demoLive: !!liveDemo })}${P.demoDecision(d, { csrf: r.app.csrf, leadId, hasDemo: !!liveDemo })}${P.modulesCard(d, { csrf: r.app.csrf, leadId, v: modView })}${P.phoneView(d, analysis, { sender, demoUrl, contactPerson, csrf: r.app.csrf, leadId })}
+      ${P.header(d, r.app.csrf)}${P.duplicatesCard(dupes, { csrf: r.app.csrf, leadId })}${P.profile(d)}${P.priorityCard(d, { csrf: r.app.csrf, leadId })}${P.enrichmentCard(d, { csrf: r.app.csrf, leadId, facts: d.factsT, budgetLeftCents: Math.min(bstat.monthLeftCents, bstat.todayLeftCents), available: ctx.enrichment.available })}${P.analysisCard(d, analysis, { csrf: r.app.csrf, leadId, costs, demoLive: !!liveDemo })}${P.demoDecision(d, { csrf: r.app.csrf, leadId, hasDemo: !!liveDemo, approval })}${P.modulesCard(d, { csrf: r.app.csrf, leadId, v: modView })}${P.phoneView(d, analysis, { sender, demoUrl, contactPerson, csrf: r.app.csrf, leadId })}
       ${P.contact(d, r.app.csrf, leadId, settings, r.app.mock)}${P.templatesCard(d, { sender: settings.callerName || ctx.cfg.agency.callerName || undefined, demoUrl, csrf: r.app.csrf, leadId, emailStatus: ctx.contact.effective(d.lead), hasEmail })}${P.notesCard(d, note, { csrf: r.app.csrf, leadId, hints })}${P.costsCard(costs)}
       ${P.why(d)}${P.sales(d, r.app.csrf, leadId)}${P.statusCard(d, r.app.csrf, leadId)}${P.docs(d, r.app.csrf, leadId, { demos, offer, order, templates: allTemplates().map((t) => ({ key: t.key, label: t.label })), recommended: rec, baseUrl: r.app.baseUrl })}
       ${P.dimensions(d)}${P.audit(d)}
@@ -85,7 +86,33 @@ export const routes: Route[] = [
     if (r.form.get('confirm') !== '1') throw new UserError('Bitte die endgültige Löschung bestätigen.');
     await r.ctx.gdpr.erase(r.params[0]); return redirect('/leads', okFlash('Lead gelöscht und auf die Sperrliste gesetzt (kommt nicht wieder).'));
   } },
-  { method: 'POST', path: new RegExp(`^/leads/${id}/demo/skip$`), h: async (r) => { const undo = r.form.get('undo') === '1'; await r.ctx.leads.setDemoDecision(r.params[0], undo ? null : 'skipped'); return back(r.params[0], undo ? 'Entscheidung zurückgenommen.' : 'Demo übersprungen.'); } },
+  { method: 'POST', path: new RegExp(`^/leads/${id}/demo/skip$`), h: async (r) => {
+    const leadId = r.params[0]; const undo = r.form.get('undo') === '1';
+    if (undo) await r.ctx.pipeline.approvals.reopen(leadId, 'DEMO_CREATE'); else await r.ctx.pipeline.approvals.reject(leadId, 'DEMO_CREATE', 'user', 'Vom Nutzer übersprungen');
+    await r.ctx.pipeline.recomputePriority(leadId);
+    return back(leadId, undo ? 'Entscheidung zurückgenommen.' : 'Demo übersprungen.');
+  } },
+  { method: 'POST', path: new RegExp(`^/leads/${id}/demo/request$`), h: async (r) => {
+    const leadId = r.params[0]; if (!(await r.ctx.leads.rowToEntry(leadId))) throw new UserError('Lead nicht gefunden.');
+    await r.ctx.pipeline.approvals.request(leadId, 'DEMO_CREATE');
+    return redirect(`/leads/${leadId}/demo/confirm?template=${encodeURIComponent(r.form.get('template') || 'auto')}`);
+  } },
+  { method: 'POST', path: new RegExp(`^/leads/${id}/demo/cancel$`), h: async (r) => { await r.ctx.pipeline.approvals.cancel(r.params[0], 'DEMO_CREATE'); return back(r.params[0], 'Abgebrochen – es wurde keine Demo erstellt.'); } },
+  { method: 'GET', path: new RegExp(`^/leads/${id}/demo/confirm$`), h: async (r) => {
+    const { ctx } = r; const leadId = r.params[0]; const d: any = await ctx.leads.get(leadId);
+    if (!d) return render(r, { title: 'Nicht gefunden', nav: 'leads', status: 404, body: html`<p>Lead nicht gefunden.</p>` });
+    if ((await ctx.pipeline.approvals.stateOf(leadId, 'DEMO_CREATE')) !== 'AWAITING_APPROVAL') return redirect(`/leads/${leadId}`, { kind: 'err', text: 'Keine offene Anforderung – bitte „Demo erstellen“ erneut wählen.' });
+    const fam = (d.lead.demo_family as string | null) ?? familyFor(ctx.cfg, { subIndustry: d.lead.sub_industry, industry: d.lead.industry });
+    const rec: string[] = (d.lead.modules_recommended as string[])?.length ? d.lead.modules_recommended : recommendModules(ctx.cfg, { family: fam as Family, subIndustry: d.lead.sub_industry });
+    const mods = effectiveModules(ctx.cfg, { recommended: rec, selected: d.lead.modules_selected as string[] | null });
+    const defs = moduleDefs(ctx.cfg);
+    return render(r, { title: 'Demo bestätigen', nav: 'leads', body: P.demoConfirm(d, { csrf: r.app.csrf, leadId, template: r.url.searchParams.get('template') || 'auto', family: ctx.cfg.pipeline.demo.families[fam]?.label ?? fam, modules: mods.map((m) => ({ key: m, label: defs[m].label, recommended: rec.includes(m) })), reason: d.lead.demo_recommendation_reason ?? '' }) });
+  } },
+  { method: 'POST', path: new RegExp(`^/leads/${id}/enrich$`), h: async (r) => {
+    const leadId = r.params[0];
+    const o = await r.ctx.enrichment.enrichLead(leadId, { force: true, ignoreCache: r.form.get('ignoreCache') === '1' });
+    return redirect(`/leads/${leadId}#enrichment`, o.status === 'budget_blocked' || o.status === 'provider_unavailable' ? { kind: 'err', text: `Enrichment: ${o.note}` } : okFlash(`Enrichment: ${o.note} Anfragen: ${o.requests}, Kosten ${(o.costCents / 100).toFixed(4).replace('.', ',')} €.`));
+  } },
   { method: 'POST', path: new RegExp(`^/leads/${id}/analysis$`), h: async (r) => {
     const tier = r.form.get('tier'); if (tier !== 'MASS' && tier !== 'DEEP' && tier !== 'PREMIUM') throw new UserError('Bitte eine KI-Stufe wählen.');
     const out = await r.ctx.analysis.run(r.params[0], tier, { force: r.form.get('force') === '1' });
@@ -155,7 +182,13 @@ export const routes: Route[] = [
     const out = await r.ctx.contact.attemptSend(r.params[0], ch, { subject: 'Nachricht', text: r.form.get('text') ?? '' });
     return redirect(`/leads/${r.params[0]}#kontakt`, out.sent ? okFlash(`Gesendet (${r.ctx.registry.providers[ch === 'EMAIL' ? 'email' : 'whatsapp'].isMock ? 'Mock – nur protokolliert' : 'echt'}).`) : { kind: 'err', text: `Nicht gesendet: ${out.decision.allowed ? '' : out.decision.reason} ${out.decision.allowed ? '' : out.decision.action}` });
   } },
-  { method: 'POST', path: new RegExp(`^/leads/${id}/demo$`), h: async (r) => { const d = await r.ctx.docs.demoFor(r.params[0], r.form.get('template') || 'auto'); return back(r.params[0], `Demo erstellt (${d.template}). Link: ${d.url}`, '#dokumente'); } },
+  { method: 'POST', path: new RegExp(`^/leads/${id}/demo$`), h: async (r) => {
+    // Nur nach ausdrücklicher Bestätigung (Bestätigungsseite): Freigabe-Zustand AWAITING_APPROVAL → APPROVED → Demo bauen → COMPLETED
+    const leadId = r.params[0];
+    if (r.form.get('confirm') !== '1') throw new UserError('Bitte die Demo-Erstellung bestätigen („Demo erstellen“ wählen und bestätigen).');
+    const ap = r.ctx.pipeline.approvals; await ap.request(leadId, 'DEMO_CREATE'); await ap.approve(leadId, 'DEMO_CREATE', 'user');
+    const d = await r.ctx.docs.demoFor(leadId, r.form.get('template') || 'auto'); return back(leadId, `Demo erstellt (${d.template}). Link: ${d.url}`, '#dokumente');
+  } },
   { method: 'POST', path: new RegExp(`^/leads/${id}/offer$`), h: async (r) => { const o = await r.ctx.docs.offerFor(r.params[0]); return redirect(`/leads/${r.params[0]}#dokumente`, o.warnings.length ? { kind: 'err', text: `Angebot als Entwurf angelegt. ${o.warnings[0]}` } : okFlash('Angebot erstellt.')); } },
   { method: 'POST', path: new RegExp(`^/leads/${id}/accept$`), h: async (r) => { const orderId = await r.ctx.orders.acceptOffer(r.params[0]); return redirect(`/orders/${orderId}`, okFlash('Angebot angenommen – Bestellung angelegt. Jetzt Anzahlungs-Link erstellen.')); } },
   { method: 'POST', path: new RegExp(`^/demos/${id}/revoke$`), h: async (r) => { const leadId = await r.ctx.sales.revokeDemo(r.params[0]); return back(leadId, 'Demo-Link widerrufen.', '#dokumente'); } },

@@ -6,6 +6,9 @@ import { FACT_LABELS, FACT_ORDER, findConflicts, type Fact, type FactKey } from 
 import { DIM_LABELS, DIM_ORDER } from '../../scoring/intelligence.ts';
 import { STATUSES, nextStatuses, type Status } from '../../core/status.ts';
 import { CALL_LABEL, CALL_RESULTS } from '../../calls/service.ts';
+import { CONTACTABILITY_LABEL, WORK_STATUS_LABEL } from '../../contact/contactability.ts';
+import { ENRICH_LABEL, VERIFY_LABEL } from '../../enrich/service.ts';
+import { APPROVAL_LABEL } from '../../workflow/approvals.ts';
 import { STATUS_ICON, type CheckCategory } from '../../audit/types.ts';
 
 const CAT_LABEL: Record<string, string> = { technical: 'Technik', mobile: 'Mobil & responsiv', design: 'Design & Struktur', content: 'Inhalt', conversion: 'Kontakt & Conversion', seo: 'SEO-Grundlagen', social: 'Social Links', trust: 'Vertrauen & Rechtliches' };
@@ -155,8 +158,8 @@ export function docs(d: any, csrf: string, id: string, o: { demos: any[]; offer:
   const off = offer?.content;
   const live = demos.filter((x) => !x.revoked && new Date(x.expires_at) > new Date());
   return fold('Demo, Angebot, Auftrag', html`
-    <h3>Demo-Website</h3>
-    ${postForm(csrf, `/leads/${id}/demo`, html`<div class="row"><select name="template"><option value="auto">Automatisch (${o.templates.find((t) => t.key === o.recommended)?.label ?? o.recommended})</option>${o.templates.map((t) => html`<option value="${t.key}">${t.label}</option>`)}</select><button class="primary">DEMO ERSTELLEN</button></div>`, { style: 'display:block' })}
+    <h3>Demo-Website</h3><p class="mute">„Demo erstellen“ führt zu einer Bestätigung – erst danach wird die Demo gebaut.</p>
+    ${postForm(csrf, `/leads/${id}/demo/request`, html`<div class="row"><select name="template"><option value="auto">Automatisch (${o.templates.find((t) => t.key === o.recommended)?.label ?? o.recommended})</option>${o.templates.map((t) => html`<option value="${t.key}">${t.label}</option>`)}</select><button class="primary">DEMO ERSTELLEN</button></div>`, { style: 'display:block' })}
     ${demos.length ? html`<ul class="items">${demos.map((x) => { const dead = x.revoked || new Date(x.expires_at) < new Date(); return html`<li>${dead ? html`<s>${x.template}</s> <small>(${x.revoked ? 'widerrufen' : 'abgelaufen'})</small>` : html`<a href="/d/${x.token}" target="_blank" rel="noopener noreferrer">${x.template} ansehen</a> <small>bis ${fmtDate(x.expires_at)} · ${x.view_count}× gesehen</small><br><small class="mute">Link: <code>${o.baseUrl}/d/${x.token}</code></small> ${postBtn(csrf, `/demos/${x.id}/revoke`, 'Widerrufen')}`}</li>`; })}</ul>` : ''}
     <p class="mute">Die Demo ist als „Unverbindliche Demo / Beispiel“ gekennzeichnet, nutzt nur Daten aus dem Lead und keine fremden Bilder.</p>
     <h3>Angebot</h3>
@@ -200,6 +203,7 @@ export function nextActionText(l: any, now = new Date()): string {
   if (l.callback_at && new Date(l.callback_at) <= new Date(now.getTime() + 86400000)) return 'Rückruf fällig';
   if (l.demo_ready_call) return l.phone ? 'Demo fertig – anrufen' : 'Demo fertig – Telefonnummer fehlt';
   if (l.email_send_status === 'sent' && l.email_sent_at && now.getTime() - new Date(l.email_sent_at).getTime() >= 4 * 86400000) return 'Follow-up fällig';
+  if (l.work_status === 'DATA_NEEDED' && !l.demo_ready_call) return l.enrichment_status === 'budget_blocked' ? 'Daten beschaffen (Budget erreicht)' : l.enrichment_status === 'provider_unavailable' ? 'Daten beschaffen (Websuche nicht verfügbar)' : 'Daten beschaffen (Enrichment)';
   if (l.website_url && !l.has_demo && !l.demo_decision) return 'Entscheiden: Demo erstellen oder überspringen';
   if (!l.website_url && !l.has_demo && l.website_state === 'none') return l.demo_decision === 'recommended' ? 'Demo empfohlen – erstellen' : 'Demo erstellen';
   if (l.status === 'QUALIFIED' && !l.call_count) return l.phone ? 'Anrufen' : 'Telefonnummer ergänzen';
@@ -255,11 +259,37 @@ export function phoneView(d: any, a: any, o: { sender: string; demoUrl?: string;
 }
 
 /** Demo-Entscheidung bei Firmen mit Website: erst ansehen, dann selbst entscheiden. */
-export function demoDecision(d: any, o: { csrf: string; leadId: string; hasDemo: boolean }): Safe {
+export function demoDecision(d: any, o: { csrf: string; leadId: string; hasDemo: boolean; approval?: string }): Safe {
   const l = d.lead;
-  if (!l.website_url || o.hasDemo) return html``;
-  return html`<div class="card"><h2>Demo für diese Firma?</h2>${l.demo_decision === 'skipped' ? html`<p>Du hast <b>Überspringen</b> gewählt.</p>${postBtn(o.csrf, `/leads/${o.leadId}/demo/skip`, 'Entscheidung zurücknehmen', { hidden: { undo: '1' } })}`
-    : html`<p class="mute">Diese Firma hat eine Website – es wird nichts automatisch erstellt. Prüfe die Analyse und entscheide.</p><div class="row">${postBtn(o.csrf, `/leads/${o.leadId}/demo`, 'Demo erstellen', { cls: 'primary', hidden: { template: 'auto' } })}${postBtn(o.csrf, `/leads/${o.leadId}/demo/skip`, 'Überspringen')}</div>`}</div>`;
+  if (o.hasDemo) return html``;
+  const rec = l.demo_recommendation === 'DEMO_RECOMMENDED';
+  const state = o.approval ?? 'NOT_REQUIRED';
+  return html`<div class="card" id="demo-freigabe"><div class="row"><h2 class="grow" style="margin:0">Demo für diese Firma?</h2>${rec ? html`<span class="badge b-ok">Demo empfohlen</span>` : html`<span class="badge">Demo nicht empfohlen</span>`}<span class="badge b-info">${APPROVAL_LABEL[state as keyof typeof APPROVAL_LABEL] ?? state}</span></div>
+    <p>${l.demo_recommendation_reason ?? 'Noch keine Bewertung.'}</p>
+    ${state === 'REJECTED' ? html`<p>Du hast <b>Überspringen</b> gewählt – das System schlägt keine Demo mehr vor.</p>${postBtn(o.csrf, `/leads/${o.leadId}/demo/skip`, 'Entscheidung zurücknehmen', { hidden: { undo: '1' } })}`
+      : html`<p class="mute">Das System erstellt nie selbst eine Demo – du bestätigst. Prüfe vorher Layout und Funktionen weiter unten.</p><div class="row">${postBtn(o.csrf, `/leads/${o.leadId}/demo/request`, 'Demo erstellen', { cls: 'primary', hidden: { template: 'auto' } })}${postBtn(o.csrf, `/leads/${o.leadId}/demo/skip`, 'Überspringen')}</div>`}</div>`;
+}
+
+export function demoConfirm(d: any, o: { csrf: string; leadId: string; template: string; family: string; modules: { key: string; label: string; recommended: boolean }[]; reason: string }): Safe {
+  return html`<div class="card"><h2>Demo für ${d.lead.company_name} erstellen?</h2><p>${o.reason}</p>
+    <p><b>Layout:</b> ${o.family}</p><p><b>Enthaltene Funktionen:</b></p><ul>${o.modules.length ? o.modules.map((m) => html`<li>${m.label}${m.recommended ? html` <span class="badge b-info">empfohlen</span>` : html` <span class="badge">von dir gewählt</span>`}</li>`) : html`<li class="mute">keine</li>`}</ul>
+    <p class="mute">Die Demo ist eine unverbindliche Vorschau mit öffentlich bekannten Daten. Es wird nichts gesendet.</p>
+    <div class="row">${postForm(o.csrf, `/leads/${o.leadId}/demo`, html`<input type="hidden" name="template" value="${o.template}"><input type="hidden" name="confirm" value="1"><button class="primary">Ja, Demo erstellen</button>`)}${postBtn(o.csrf, `/leads/${o.leadId}/demo/cancel`, 'Abbrechen')}
+    <a class="btn" href="/leads/${o.leadId}#module">Funktionen ändern</a></div></div>`;
+}
+
+export function enrichmentCard(d: any, o: { csrf: string; leadId: string; facts: any[]; budgetLeftCents: number; available: boolean }): Safe {
+  const l = d.lead; const web = o.facts.find((f) => f.key === 'website' && f.source === 'web-search'); const cand = o.facts.find((f) => f.key === 'websiteCandidate');
+  const missing = [!l.phone ? 'Telefonnummer' : '', !(l.email || o.facts.some((f) => f.key === 'email')) ? 'geschäftliche E-Mail' : '', !l.website_url ? 'Website' : ''].filter(Boolean);
+  const verified = l.official_website_verified as keyof typeof VERIFY_LABEL | null;
+  return html`<div class="card" id="enrichment"><div class="row"><h2 class="grow" style="margin:0">Daten und Kontaktierbarkeit</h2>${l.work_status === 'DATA_NEEDED' ? html`<span class="badge b-warn">DATA_NEEDED – Daten beschaffen</span>` : html`<span class="badge b-ok">kontaktierbar</span>`}</div>
+    <dl class="facts"><dt>Kontaktierbarkeit</dt><dd><b>${l.contactability ? CONTACTABILITY_LABEL[l.contactability as keyof typeof CONTACTABILITY_LABEL] : NA}</b> <small class="mute">(${l.contactability ?? '–'})</small></dd><dt>Bevorzugter Kanal</dt><dd>${l.preferred_contact_channel ?? NA}</dd>
+      <dt>Arbeitsstatus</dt><dd>${WORK_STATUS_LABEL[l.work_status as keyof typeof WORK_STATUS_LABEL] ?? NA}</dd><dt>Fehlt</dt><dd>${missing.length ? missing.join(', ') : 'nichts Wesentliches'}</dd>
+      <dt>Enrichment</dt><dd>${l.enrichment_status ? ENRICH_LABEL[l.enrichment_status] ?? l.enrichment_status : 'noch nicht geprüft'}${l.last_enrichment_at ? html` · zuletzt ${fmt(l.last_enrichment_at)}` : ''}</dd></dl>
+    ${l.official_website_candidate ? html`<div class="${verified === 'VERIFIED' ? 'note' : 'warnbox'}"><b>Offizielle Website (Kandidat):</b> <code>${l.official_website_candidate}</code><br>Verifikation: <b>${verified ? VERIFY_LABEL[verified] : '–'}</b>${l.official_website_confidence !== null ? ` · ${l.official_website_confidence}/100` : ''}
+      ${verified === 'UNCERTAIN' ? html`<br><b>Manuell prüfen</b> – wurde nicht als Website übernommen.` : verified === 'LIKELY' ? html`<br>Übernommen, aber bitte kurz prüfen.` : ''}${(web ?? cand)?.note ? html`<br><small>${(web ?? cand).note}</small>` : ''}</div>` : ''}
+    ${o.available ? '' : html`<p class="mute">Websuche nicht verfügbar (BRAVE_SEARCH_API_KEY fehlt) – Enrichment: provider_unavailable.</p>`}
+    ${postForm(o.csrf, `/leads/${o.leadId}/enrich`, html`<div class="row"><button>Enrichment erneut starten</button><label class="inline" style="display:flex;gap:6px;align-items:center;min-height:44px"><input type="checkbox" name="ignoreCache" value="1"> Zwischenspeicher ignorieren</label></div><small class="mute">Websuche kostet etwas: Budget diesen Monat übrig ${(o.budgetLeftCents / 100).toFixed(2).replace('.', ',')} €. Es wird nichts gesendet.</small>`, { style: 'display:block' })}</div>`;
 }
 
 // ---------- Priorität, Demo-Module, Notizen, Dubletten ----------
@@ -279,14 +309,14 @@ export type ModuleView = { family: string; autoFamily: string; families: { key: 
 export function modulesCard(d: any, o: { csrf: string; leadId: string; v: ModuleView }): Safe {
   const { v } = o, l = d.lead; const active = new Set(v.selected ?? v.recommended);
   return html`<div class="card" id="module"><h2>Layout und Website-Funktionen</h2>
-    ${l.demo_decision === 'recommended' && !v.hasDemo ? html`<div class="note"><b>Demo empfohlen</b> – diese Firma hat keine Website und genug Daten. Es wurde keine Demo automatisch erstellt (Obergrenze je Suchlauf erreicht).</div>` : ''}
+    ${l.demo_decision === 'recommended' && !v.hasDemo ? html`<div class="note"><b>Demo empfohlen</b> – ${l.demo_recommendation_reason ?? ''} Es wurde nichts automatisch erstellt; du bestätigst.</div>` : ''}
     ${postForm(o.csrf, `/leads/${o.leadId}/modules`, html`
       <label>Layout-Familie<select name="family">${v.families.map((f) => html`<option value="${f.key}" ${v.family === f.key ? raw('selected') : ''}>${f.label}${f.key === v.autoFamily ? ' (empfohlen)' : ''}</option>`)}</select></label>
       <fieldset><legend>Funktionen der möglichen Website</legend>
         ${v.modules.map((m) => html`<label class="inline" style="display:flex;gap:8px;align-items:center;min-height:44px"><input type="checkbox" name="mod" value="${m.key}" ${active.has(m.key) ? raw('checked') : ''}> <span>${m.label}${v.recommended.includes(m.key) ? html` <span class="badge b-info">empfohlen</span>` : ''}</span></label>`)}</fieldset>
       <p class="mute">${v.selected ? 'Deine Auswahl ist gespeichert.' : 'Noch keine eigene Auswahl – es gilt die Empfehlung.'} Empfehlung und Auswahl werden getrennt gespeichert.</p>
       <div class="row"><button class="primary">${v.hasDemo ? 'Speichern und Demo aktualisieren' : 'Speichern'}</button>${v.selected ? html`<button name="reset" value="1">Auf Empfehlung zurücksetzen</button>` : ''}</div>`, { style: 'display:block' })}
-    <div class="row">${v.hasDemo && v.demoUrl ? html`<a class="btn" href="${v.demoUrl}" target="_blank" rel="noopener noreferrer">Demo ansehen</a>` : ''}${postBtn(o.csrf, `/leads/${o.leadId}/demo`, v.hasDemo ? 'Neue Demo erstellen' : 'Demo erstellen', { cls: v.hasDemo ? '' : 'primary', hidden: { template: 'auto' } })}</div>
+    <div class="row">${v.hasDemo && v.demoUrl ? html`<a class="btn" href="${v.demoUrl}" target="_blank" rel="noopener noreferrer">Demo ansehen</a>` : ''}${postBtn(o.csrf, `/leads/${o.leadId}/demo/request`, v.hasDemo ? 'Neue Demo erstellen' : 'Demo erstellen', { cls: v.hasDemo ? '' : 'primary', hidden: { template: 'auto' } })}</div>
     <small class="mute">Funktionen in der Demo sind nur Darstellungen (als „Demo-Funktion“ markiert) – sie verbinden sich mit keinem Anbieter und senden nichts.</small></div>`;
 }
 

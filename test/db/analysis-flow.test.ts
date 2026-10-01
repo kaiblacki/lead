@@ -25,19 +25,25 @@ test('Strukturierte Analyse je Lead: ohne Website kein Website-Score aber Chance
   assert.ok(!rows.some((r) => JSON.stringify(r.weaknesses.concat(r.sales_reasons)).match(/verlier|garantier|Umsatz/i)));
 });
 
-test('Auto-Demo NUR für Firmen ohne Website (mit Daten); Firmen mit Website bekommen nie automatisch eine Demo', { skip }, async () => {
-  const withSiteDemos = await q("select count(*)::int n from demos d join leads l on l.id = d.lead_id where l.owner_id = $1 and l.website_url is not null");
-  assert.equal(withSiteDemos[0].n, 0);
-  const noSite = await q("select l.id, l.phone, l.address, o.score, (select count(*) from demos d where d.lead_id = l.id)::int demos from leads l left join lateral (select score from opportunities where lead_id = l.id order by created_at desc limit 1) o on true where l.owner_id = $1 and l.website_url is null");
-  const eligible = noSite.filter((l) => (l.phone || l.address) && l.score >= 45);
-  assert.ok(eligible.length >= 3);
-  // Obergrenze je Suchlauf (config/pipeline.json → autoDemo.maxPerSearch): höchstens so viele Auto-Demos, der Rest ist „Demo empfohlen“
-  const max = Number(app.ctx.cfg.sales.autoDemo.maxPerSearch ?? 5), withDemo = eligible.filter((l) => l.demos === 1).length;
-  assert.equal(withDemo, Math.min(max, eligible.length)); assert.ok(eligible.every((l) => l.demos <= 1));
-  assert.ok(noSite.filter((l) => l.score < 45).every((l) => l.demos === 0), 'zu geringe Chance → keine Auto-Demo');
+test('Demo wird nur EMPFOHLEN, nie automatisch erstellt: Firmen ohne Website mit Daten → Empfehlung + Freigabe-Eintrag; ohne Bestätigung keine Demo', { skip }, async () => {
+  assert.equal((await q("select count(*)::int n from demos d join leads l on l.id = d.lead_id where l.owner_id = $1"))[0].n, 0, 'nach dem Suchlauf existiert keine Demo');
+  const rec = await q("select l.id, l.website_url, l.phone, l.demo_recommendation, l.demo_recommendation_reason, a.state from leads l left join approvals a on a.lead_id = l.id and a.action = 'DEMO_CREATE' where l.owner_id = $1 and l.demo_recommendation = 'DEMO_RECOMMENDED'");
+  assert.ok(rec.length >= 3, `${rec.length} empfohlene Leads`); assert.ok(rec.every((l) => l.state === 'RECOMMENDED' && l.demo_recommendation_reason), 'Empfehlung mit Begründung und Freigabe-Eintrag');
+  assert.ok(rec.every((l) => l.phone || l.website_url === null), 'erreichbar');
+  const withSite = await q("select count(*)::int n from leads where owner_id = $1 and website_url is not null and demo_recommendation = 'DEMO_RECOMMENDED' and website_state <> 'none'"); void withSite;
+  // direkter Aufruf ohne Bestätigung wird abgelehnt
+  const id = rec[0].id as string; assert.match(await flash(await app.post(`/leads/${id}/demo`, { template: 'auto' })), /bestätigen/); assert.equal((await q('select count(*)::int n from demos where lead_id = $2', [id]))[0].n, 0);
+  // Anfordern → wartet auf Bestätigung → erst die Bestätigung baut die Demo
+  await app.post(`/leads/${id}/demo/request`, { template: 'auto' }); assert.equal((await q("select state from approvals where lead_id=$2 and action='DEMO_CREATE' order by requested_at desc limit 1", [id]))[0].state, 'AWAITING_APPROVAL');
+  assert.equal((await q('select count(*)::int n from demos where lead_id = $2', [id]))[0].n, 0, 'angefordert ≠ erstellt');
+  assert.match(await text(`/leads/${id}/demo/confirm`), /Demo für .* erstellen\?/);
+  assert.match(await flash(await app.post(`/leads/${id}/demo`, { template: 'auto', confirm: '1' })), /Demo erstellt/);
+  assert.equal((await q('select count(*)::int n from demos where lead_id = $2', [id]))[0].n, 1); assert.equal((await q("select state from approvals where lead_id=$2 and action='DEMO_CREATE' order by requested_at desc limit 1", [id]))[0].state, 'COMPLETED');
 });
 
 test('Erinnerung „Demo fertig – anrufen“: Aufgabe entsteht mit Demo + Telefon, steht oben in „Heute anrufen“, erledigt sich mit dem Anruf-Ergebnis', { skip }, async () => {
+  // weitere Demos auf ausdrückliche Bestätigung (Kai klickt „Demo erstellen“ und bestätigt)
+  for (const l of await q("select id from leads where owner_id = $1 and demo_decision = 'recommended' and phone is not null limit 3")) { await app.post(`/leads/${l.id}/demo/request`, { template: 'auto' }); await app.post(`/leads/${l.id}/demo`, { template: 'auto', confirm: '1' }); }
   const tasks = await q("select t.lead_id, l.phone from lead_tasks t join leads l on l.id = t.lead_id where t.owner_id = $1 and t.kind = 'CALL_DEMO_READY' and t.status = 'OPEN'");
   assert.ok(tasks.length >= 3); assert.ok(tasks.every((t) => t.phone), 'ohne Telefonnummer keine Anruf-Aufgabe');
   const queue = await app.ctx.calls.queue();
@@ -73,7 +79,7 @@ test('Firmen mit Website: Entscheidung „Demo erstellen“ oder „Überspringe
   assert.match(await flash(await app.post(`/leads/${l.id}/demo/skip`)), /Demo übersprungen/);
   assert.equal((await q('select demo_decision d from leads where id=$2', [l.id]))[0].d, 'skipped'); assert.match(await text(`/leads/${l.id}`), /Überspringen<\/b> gewählt|Überspringen gewählt/);
   assert.match(await flash(await app.post(`/leads/${l.id}/demo/skip`, { undo: '1' })), /zurückgenommen/);
-  assert.match(await flash(await app.post(`/leads/${l.id}/demo`, { template: 'auto' })), /Demo erstellt/);
+  assert.match(await flash(await app.post(`/leads/${l.id}/demo`, { template: 'auto', confirm: '1' })), /Demo erstellt/);
   assert.equal((await q('select count(*)::int n from demos where lead_id=$2', [l.id]))[0].n, 1);
 });
 

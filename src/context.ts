@@ -23,7 +23,8 @@ import { AnalysisService } from './analysis/service.ts';
 import { TaskStore } from './db/tasks.ts';
 import { Automation } from './workflow/automation.ts';
 import { PipelineStore } from './db/pipeline.ts';
-import { Enricher } from './sources/enrich.ts';
+import { EnrichmentService } from './enrich/service.ts';
+import { reanalyzeLead } from './search/reanalyze.ts';
 import { createSources, type Sources } from './sources/registry.ts';
 import { loadConfig, type AppConfig } from './core/config.ts';
 import { createProviders, type Registry } from './providers/registry.ts';
@@ -31,7 +32,7 @@ import { createProviders, type Registry } from './providers/registry.ts';
 export type Context = {
   repo: Repo; cfg: AppConfig; registry: Registry; baseUrl: string; now: () => Date;
   leads: LeadStore; runs: RunStore; sales: SalesStore; social: SocialStore; analytics: AnalyticsStore; learning: LearningStore;
-  pipeline: PipelineStore; sources: Sources; runner: SearchRunner; orders: OrderService; delivery: DeliveryService; maintenance: MaintenanceService; docs: SalesDocs; calls: CallService; contact: ContactService; retention: Retention; notifier: Notifier; invoices: InvoiceService; gdpr: Gdpr; aiUsage: AiUsageStore; analysis: AnalysisService; tasks: TaskStore; automation: Automation;
+  pipeline: PipelineStore; sources: Sources; enrichment: EnrichmentService; runner: SearchRunner; orders: OrderService; delivery: DeliveryService; maintenance: MaintenanceService; docs: SalesDocs; calls: CallService; contact: ContactService; retention: Retention; notifier: Notifier; invoices: InvoiceService; gdpr: Gdpr; aiUsage: AiUsageStore; analysis: AnalysisService; tasks: TaskStore; automation: Automation;
   /** KI-Aufruf mit Stufe, Budget-Prüfung und Kostenprotokoll (für Dashboard-Aktionen außerhalb eines Suchlaufs). */
   aiComplete: (leadId: string | null, req: Parameters<AiGateway['complete']>[1]) => ReturnType<AiGateway['complete']>;
 };
@@ -49,9 +50,8 @@ export function buildContext(repo: Repo, o: ContextOptions): Context {
   const pipeline = new PipelineStore({ repo, cfg, now });
   leads.afterSave = (leadId, c) => pipeline.recomputePriority(leadId, c).then(() => undefined);
   const sources = createSources(env, cfg, P, { now: o.providerNow ?? now });
-  const wsCfg = cfg.pipeline.sources.WEB_SEARCH;
-  const enricher = new Enricher({ sources, providers: P, genericWords: cfg.pipeline.dedupe.genericWords, cfg: wsCfg });
-  const runner = new SearchRunner({ repo, leads, runs, providers: P, cfg, now, pipeline, enricher: wsCfg.enabled ? enricher : undefined });
+  const enrichment = new EnrichmentService({ repo, leads, pipeline, cfg, now, sources, providers: P, reanalyze: async (id) => { await reanalyzeLead(ctx, id); await automation.afterAnalysis(id, { matched: true, noWebsite: false, opportunity: null, blocked: false }); } });
+  const runner = new SearchRunner({ repo, leads, runs, providers: P, cfg, now, pipeline, enrichment: cfg.pipeline.sources.WEB_SEARCH.enabled ? enrichment : undefined });
   const orders = new OrderService(repo, cfg, now);
   const delivery = new DeliveryService(orders);
   const maintenance = new MaintenanceService(repo, P.crawler, now);
@@ -75,6 +75,7 @@ export function buildContext(repo: Repo, o: ContextOptions): Context {
   const analysis = new AnalysisService({ repo, leads, usage: aiUsage, cfg, complete: aiComplete as never, now, aiIsMock: () => P.ai.isMock });
   const automation = new Automation({ repo, docs, cfg, analysis, pipeline });
   runner.afterSave = (leadId, info) => automation.afterAnalysis(leadId, info);
-  runner.afterRun = (runId, ids, opts) => automation.afterRun(runId, ids, opts);
-  return { repo, cfg, registry, pipeline, sources, notifier, invoices, gdpr, aiUsage, aiComplete, analysis, tasks, automation, baseUrl: o.baseUrl, now, leads, runs, sales, social, analytics, learning, runner, orders, delivery, maintenance, docs, calls, contact, retention };
+  runner.afterRun = (runId, ids) => automation.afterRun(runId, ids);
+  const ctx: Context = { repo, cfg, registry, pipeline, sources, enrichment, notifier, invoices, gdpr, aiUsage, aiComplete, analysis, tasks, automation, baseUrl: o.baseUrl, now, leads, runs, sales, social, analytics, learning, runner, orders, delivery, maintenance, docs, calls, contact, retention };
+  return ctx;
 }

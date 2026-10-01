@@ -41,7 +41,7 @@ test('Suchgrößen SMALL 50 / MEDIUM 200 / LARGE 500: je Lauf gespeichert (Grö�
     assert.equal(r.search_term, 'nagelstudio'); assert.equal(r.region, 'Völklingen'); assert.equal(Number(r.radius_km), 30); assert.deepEqual(r.errors, []);
     assert.ok((r.sources as any[]).some((s) => s.id === 'OSM' && s.requests === 1), JSON.stringify(r.sources)); assert.ok(typeof r.costs.total === 'number' && r.costs.osm === 0 && r.costs.web_search === 0 && r.costs.ai >= 0 && r.costs.demo >= 0, JSON.stringify(r.costs));
     assert.equal(places.searches - s0, 1, 'eine Ortssuche je Lauf'); assert.ok(crawler.calls - crawlBefore <= n + 1, 'höchstens ein Website-Abruf je Firma mit Website');
-    assert.ok((ws.calls ?? 0) - wsBefore <= app.ctx.cfg.pipeline.sources.WEB_SEARCH.maxPerRun, 'Websuche nur begrenzt, nicht für jeden Lead');
+    assert.ok((ws.calls ?? 0) - wsBefore <= app.ctx.cfg.pipeline.enrichment.maxQueriesPerLead * app.ctx.cfg.pipeline.enrichment.maxLeadsPerBatch, 'Websuche nur begrenzt (Leads je Lauf × Anfragen je Lead), nicht für jeden Lead');
   }
   assert.equal((await q(app, 'select count(*)::int n from leads where owner_id=$1'))[0].n, 750);
   assert.equal(places.geocodes, 3);
@@ -55,7 +55,7 @@ test('Lauf-Protokoll im Dashboard: Suche-ID, Größe, Roh-Treffer → Dedupe →
   const app = await fresh(2); useSynthetic(app, { n: 30, dupEvery: 5, noSiteEvery: 2 });
   const r = await run(app, { size: 'SMALL' });
   const p = await page(app, `/search/run/${r.id}`);
-  for (const w of ['Lauf-Protokoll', 'Suche-ID', r.id, 'SMALL', 'gewünscht 50', 'Roh-Treffer', 'nach Dedupe', 'zusammengeführt', 'Quellen', 'OSM', 'Kosten', 'OSM 0,00 €', 'Websuche', 'KI', 'Demo', 'Gesamt', 'Fehler', 'complete – abgeschlossen', 'Automatische Demos']) assert.ok(p.includes(w), w);
+  for (const w of ['Lauf-Protokoll', 'Suche-ID', r.id, 'SMALL', 'gewünscht 50', 'Roh-Treffer', 'nach Dedupe', 'zusammengeführt', 'Quellen', 'OSM', 'Kosten', 'OSM 0,00 €', 'Websuche', 'KI', 'Demo', 'Gesamt', 'Fehler', 'complete – abgeschlossen', 'Demo-Empfehlungen', 'Web-Enrichment']) assert.ok(p.includes(w), w);
   assert.equal(r.raw_count, 36); assert.equal(r.counters.found, 30); assert.equal(r.found_count, 30); assert.equal(r.summary.pipeline.dedupe.merged, 6);
   const s = await page(app, '/search'); for (const w of ['Quellen', 'OSM', 'WEB_SEARCH', 'DIRECT_WEBSITE', 'GOOGLE_PLACES', 'Letzte Läufe', 'complete – abgeschlossen']) assert.ok(s.includes(w), w);
   assert.match(s, /GOOGLE_PLACES[\s\S]*standardmäßig aus/);
@@ -121,33 +121,6 @@ test('Priorität A–D: automatisch gesetzt und begründet; Überschreibung durc
   const none = (await app.ctx.leads.list({ priority: 'D', limit: 100 })).rows; assert.ok(none.every((r: any) => r.effective_priority === 'D'));
 });
 
-test('Demo-Limit: 20 Firmen ohne Website → genau 5 automatische Demos (höchste Priorität zuerst), Rest „Demo empfohlen“; Obergrenze einstellbar; Firmen mit Website nie automatisch', { skip }, async () => {
-  const app = await fresh(5); useSynthetic(app, { n: 26, noSiteEvery: 1 });
-  const ws = new SyntheticPlaces({ n: 0 }); void ws;
-  // 20 ohne Website + 6 mit Website
-  const items = new SyntheticPlaces({ n: 26, noSiteEvery: 1 }).items().map((x, i) => (i >= 20 ? { ...x, website: `https://www.${word(i).toLowerCase()}-nails.example` } : x));
-  Object.assign(app.ctx.registry.providers, { crawler: new StubCrawler(), places: { name: 'osm', isMock: false, geocode: async () => ({ query: 'x', name: 'x', point: { lat: 49.25, lng: 6.85 }, source: 'osm' }), search: async () => ({ items, requests: 1 }), details: async () => null } });
-  assert.equal(app.ctx.cfg.sales.autoDemo.maxPerSearch, 5);
-  const r = await run(app, { maxLeads: '50' });
-  const demos = await q(app, 'select l.id, l.website_state, l.effective_priority, d.id did from leads l join demos d on d.lead_id = l.id where l.owner_id=$1');
-  assert.equal(demos.length, 5); assert.ok(demos.every((d) => d.website_state === 'none'), 'nie für Firmen mit Website');
-  const rec = await q(app, "select id, effective_priority from leads where owner_id=$1 and demo_decision='recommended'"); assert.equal(rec.length, 15, 'Rest der geeigneten Firmen: Demo empfohlen');
-  assert.equal(r.summary.pipeline.autoDemos, 5); assert.equal(r.summary.pipeline.demoRecommended, 15);
-  const rank = (p: string) => 'ABCD'.indexOf(p); const worstDemo = Math.max(...demos.map((d) => rank(d.effective_priority))), bestRec = Math.min(...rec.map((d) => rank(d.effective_priority)));
-  assert.ok(worstDemo <= bestRec, `Auto-Demos nur für die höchste Priorität (${worstDemo} ≤ ${bestRec})`);
-  assert.equal((await q(app, "select count(*)::int n from leads where owner_id=$1 and website_state <> 'none' and demo_decision is not null"))[0].n, 0, 'Firmen mit Website: keine Empfehlung, keine Auto-Demo');
-  // Anzeige: Demo empfohlen + manuell erstellen
-  assert.match(await page(app, '/leads?quick=demo_recommended'), /Demo empfohlen/); assert.match(await page(app, '/today'), /Demo empfohlen/);
-  const one = rec[0].id as string; const pg = await page(app, `/leads/${one}`); assert.match(pg, /Demo empfohlen/); assert.match(pg, /Demo erstellen/);
-  assert.match(await flash(app, await app.post(`/leads/${one}/demo`, { template: 'auto' })), /Demo erstellt/); assert.equal((await q(app, 'select count(*)::int n from demos where lead_id=$2', [one]))[0].n, 1);
-  assert.equal((await q(app, "select count(*)::int n from leads where owner_id=$1 and demo_decision='recommended'"))[0].n, 15, 'Empfehlung bleibt als Entscheidung stehen, bis Kai überspringt');
-  // Obergrenze ist Konfiguration
-  const app2 = await fresh(6); app2.ctx.cfg.sales.autoDemo.maxPerSearch = 2; useProvidersOf(app2, app);
-  await run(app2, { maxLeads: '50' }); assert.equal((await q(app2, 'select count(*)::int n from demos where owner_id=$1'))[0].n, 2);
-  const app3 = await fresh(7, { autoDemo: false }); useProvidersOf(app3, app);
-  await run(app3, { maxLeads: '50' }); assert.equal((await q(app3, 'select count(*)::int n from demos where owner_id=$1'))[0].n, 0, 'Auto-Demo ausgeschaltet → keine Demo'); assert.equal((await q(app3, "select count(*)::int n from leads where owner_id=$1 and demo_decision='recommended'"))[0].n, 20);
-});
-
 test('Website-Module je Lead: Restaurant, Nagelstudio, Handwerker mit unterschiedlichen Empfehlungen; empfohlen ≠ ausgewählt; Demo passt sich an (gleicher Link); Layout-Familie überschreibbar', { skip }, async () => {
   const app = await fresh(8, { autoDemo: false });
   await quickSearch(app, 'Völklingen + 30 km + Nagelstudios + 10 Leads'); await quickSearch(app, 'Völklingen + 30 km + Restaurants + 10 Leads'); await quickSearch(app, 'Völklingen + 30 km + Elektriker + 10 Leads');
@@ -156,7 +129,7 @@ test('Website-Module je Lead: Restaurant, Nagelstudio, Handwerker mit unterschie
   assert.deepEqual([nail.demo_family, rest.demo_family, hw.demo_family], ['APPOINTMENT', 'GASTRO_RETAIL', 'SERVICE']);
   for (const m of ['booking', 'gallery', 'whatsapp']) assert.ok(nail.rec.includes(m), m); for (const m of ['menu', 'reservation']) assert.ok(rest.rec.includes(m), m); for (const m of ['quote', 'services', 'callback']) assert.ok(hw.rec.includes(m), m);
   assert.ok(!hw.rec.includes('menu') && !rest.rec.includes('quote')); assert.ok([nail, rest, hw].every((l) => l.sel === null), 'noch keine eigene Auswahl');
-  const demoOf = async (id: string) => { await app.post(`/leads/${id}/demo`, { template: 'auto' }); const d = (await q(app, 'select token, html from demos where lead_id=$2 and not revoked order by created_at desc limit 1', [id]))[0]; return d as { token: string; html: string }; };
+  const demoOf = async (id: string) => { await app.post(`/leads/${id}/demo`, { template: 'auto', confirm: '1' }); const d = (await q(app, 'select token, html from demos where lead_id=$2 and not revoked order by created_at desc limit 1', [id]))[0]; return d as { token: string; html: string }; };
   const dn = await demoOf(nail.id), dr = await demoOf(rest.id), dh = await demoOf(hw.id);
   assert.match(dn.html, /id="termin"/); assert.match(dr.html, /id="reservierung"/); assert.match(dr.html, /id="speisekarte"/); assert.match(dh.html, /id="angebot"/); assert.match(dh.html, /id="rueckruf"/);
   assert.doesNotMatch(dr.html, /id="termin"/); assert.doesNotMatch(dh.html, /id="speisekarte"|id="termin"/);
@@ -172,41 +145,6 @@ test('Website-Module je Lead: Restaurant, Nagelstudio, Handwerker mit unterschie
   const st2 = (await q(app, 'select demo_family f, modules_recommended rec, modules_selected sel from leads where id=$2', [nail.id]))[0]; assert.equal(st2.f, 'SERVICE'); assert.equal(st2.sel, null); assert.ok(st2.rec.includes('quote'));
   const after2 = (await q(app, 'select html from demos where lead_id=$2 and not revoked order by created_at desc limit 1', [nail.id]))[0]; assert.match(after2.html, /id="angebot"/);
   assert.match(await flash(app, await app.post(`/leads/${nail.id}/modules`, { family: 'BOGUS' })), /Unbekannte Layout-Familie/); assert.match(await flash(app, await app.post(`/leads/${nail.id}/modules`, { family: 'SERVICE', mod: ['nope'] })), /Unbekannte Funktion/);
-});
-
-test('Anreicherung: OSM unvollständig → Websuche (nur bei Bedarf, begrenzt, Kosten protokolliert) → Website gefunden und geprüft → Kontaktseite analysiert → E-Mail/Telefon ergänzt, Quelle je Angabe gespeichert', { skip }, async () => {
-  const app = await fresh(9, { autoDemo: false }); const { crawler } = useSynthetic(app, { n: 12, noSiteEvery: 1, noPhoneEvery: 4 });
-  const items = new SyntheticPlaces({ n: 12, noSiteEvery: 1, noPhoneEvery: 4 }).items();
-  const target = items[11]; const host = `https://www.${word(11).toLowerCase()}-nails.example/`;   // die dem Suchzentrum nächsten Firmen werden zuerst bearbeitet
-  crawler.sites[host] = [
-    { path: '/', html: `<html lang="de"><head><title>${target.name}</title><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><h1>${target.name}</h1><p>${target.address}, 66333 Völklingen</p><a href="/kontakt">Kontakt</a><a href="/impressum">Impressum</a><a href="https://www.instagram.com/kovan_nails">IG</a></body></html>` },
-    { path: '/kontakt', html: '<html><body><h1>Kontakt</h1><a href="tel:+496898999000">Anrufen</a><a href="mailto:hallo@kovan-nails.example">Mail</a><form><input name="n"><textarea></textarea></form></body></html>' },
-    { path: '/impressum', html: '<html><body><h1>Impressum</h1><p>Inhaberin: Erika Musterfrau</p></body></html>' }];
-  // Eine Website passt NICHT zur Firma (anderer Inhalt) → nur Hinweis
-  const other = items[10]; const otherHost = `https://www.${word(10).toLowerCase()}-nails.example/`; crawler.sites[otherHost] = [{ path: '/', html: '<html><body><h1>Ganz anderer Laden</h1><p>Berlin</p></body></html>' }];
-  let wsCalls = 0; const fake = { name: 'brave-search', isMock: false, async search(qq: { query: string }) {
-    wsCalls++; const byName = (it: PlaceCandidate) => qq.query.includes(it.name); const hit = byName(target) ? host : byName(other) ? otherHost : null;
-    return { hits: [{ url: 'https://www.gelbeseiten.de/x', title: 'Verzeichnis', snippet: '', rank: 1 }, ...(hit ? [{ url: hit, title: 'Treffer', snippet: '', rank: 2 }] : [])], requests: 1, source: 'brave-search', retrievedAt: '2026-06-01T10:00:00.000Z', costCents: 0.5 }; } };
-  app.ctx.sources.webSearch = fake as never; app.ctx.cfg.pipeline.sources.WEB_SEARCH.maxPerRun = 6;
-  const r = await run(app, { maxLeads: '20' });
-  assert.equal(wsCalls, 6, 'Websuche begrenzt auf maxPerRun (nicht für jeden der 12 Leads)'); assert.equal(r.summary.usage.websearch, 6);
-  const ws = (r.sources as any[]).find((s) => s.id === 'WEB_SEARCH'); assert.equal(ws.requests, 6); assert.equal(ws.costCents, 3); assert.equal(r.costs.web_search, 3); assert.ok(r.costs.total >= 3);
-  assert.ok(!crawler.seen.some((u) => u.includes('gelbeseiten')), 'Verzeichnisse werden nicht als Unternehmenswebsite abgerufen');
-  const lead = (await q(app, "select id, website_url, website_state, phone from leads where owner_id=$1 and company_name=$2", [target.name]))[0];
-  assert.equal(lead.website_url, host); assert.notEqual(lead.website_state, 'none');
-  const facts = await q(app, 'select key, value, source, source_url, note, quality from lead_facts where lead_id=$2', [lead.id]); const f = (k: string) => facts.filter((x) => x.key === k);
-  assert.equal(f('website')[0].source, 'web-search'); assert.match(f('website')[0].note, /Per Websuche gefunden und geprüft/); assert.equal(f('website')[0].source_url, host);
-  assert.equal(f('email')[0].value, 'hallo@kovan-nails.example'); assert.equal(f('email')[0].source, 'website-crawl'); assert.equal(f('email')[0].source_url, host + 'kontakt');
-  assert.ok(f('phone').some((x) => x.source === 'website-crawl' && x.source_url === host + 'kontakt') || lead.phone, 'Telefon ergänzt bzw. vorhanden');
-  assert.equal(f('contactForm')[0].source_url, host + 'kontakt'); assert.equal(f('contactPerson')[0].value, 'Erika Musterfrau'); assert.match(f('contactPerson')[0].note, /bitte prüfen/); assert.ok(f('social').some((x) => x.value.platform === 'instagram' && x.source === 'website-crawl'));
-  assert.ok(facts.every((x) => x.source && x.quality), 'jede Angabe hat Quelle und Qualität');
-  const oth = (await q(app, "select id, website_url from leads where owner_id=$1 and company_name=$2", [other.name]))[0]; assert.equal(oth.website_url, null, 'nicht eindeutig zuzuordnen → nicht übernommen');
-  const cand = await q(app, "select value, note from lead_facts where lead_id=$2 and key='websiteCandidate'", [oth.id]); assert.equal(cand.length, 1); assert.match(cand[0].note, /manuell prüfen/);
-  assert.match(await page(app, `/leads/${oth.id}`), /Mögliche Website \(ungeprüft\)/);
-  // Lauf-Protokoll nennt WEB_SEARCH + DIRECT_WEBSITE
-  const pg = await page(app, `/search/run/${r.id}`); assert.match(pg, /WEB_SEARCH: brave-search · 6 Anfragen/); assert.match(pg, /DIRECT_WEBSITE/);
-  // ohne Bedarf keine Websuche: zweiter Lauf auf bekannten Leads (alle haben Website oder wurden gesucht) ruft nicht erneut für Leads mit Website
-  wsCalls = 0; await run(app, { maxLeads: '20', excludeExisting: '0' }); assert.ok(wsCalls <= 6);
 });
 
 test('Notizen: System-/KI-Hinweise (automatisch, nicht bearbeitbar) getrennt von „Meine Notizen“ (persistent, mit Zeitstempeln)', { skip }, async () => {

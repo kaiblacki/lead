@@ -7,6 +7,7 @@ import { html, esc, Safe } from './html.ts';
 import { UserError, type AppInfo, type Req, type Res, type Route } from './types.ts';
 import { routes as homeRoutes } from './pages/home.ts';
 import { routes as todayRoutes } from './pages/today.ts';
+import { routes as enrichmentRoutes } from './pages/enrichment.ts';
 import { routes as searchRoutes } from './pages/search.ts';
 import { routes as leadRoutes } from './pages/leads.ts';
 import { routes as callRoutes } from './pages/calls.ts';
@@ -36,7 +37,7 @@ export function createApp(ctx: Context, opts: AppOptions): http.Server {
   const flashes = new FlashStore();
   const publicLimit = new RateLimiter(120, 60_000), postLimit = new RateLimiter(240, 60_000), authFails = new RateLimiter(10, 15 * 60_000);
   const hsts: Record<string, string> = app.baseUrl.startsWith('https://') ? { 'strict-transport-security': 'max-age=31536000' } : {};
-  const all: Route[] = [...publicRoutes, ...homeRoutes, ...todayRoutes, ...searchRoutes, ...leadRoutes, ...callRoutes, ...pipelineRoutes, ...orderRoutes, ...maintenanceRoutes, ...analyticsRoutes, ...settingsRoutes, ...socialRoutes];
+  const all: Route[] = [...publicRoutes, ...homeRoutes, ...todayRoutes, ...enrichmentRoutes, ...searchRoutes, ...leadRoutes, ...callRoutes, ...pipelineRoutes, ...orderRoutes, ...maintenanceRoutes, ...analyticsRoutes, ...settingsRoutes, ...socialRoutes];
 
   const clientIp = (req: http.IncomingMessage) => (opts.trustProxy ? String(req.headers['x-forwarded-for'] ?? '').split(',').pop()?.trim() : '') || req.socket.remoteAddress || 'unknown';
   const authOk = (req: http.IncomingMessage) => {

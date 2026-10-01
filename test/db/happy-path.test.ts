@@ -41,7 +41,7 @@ test('2 CALL → INTERESTED: Anruf-Ergebnis bewegt den Lead; ohne Ergebnis keine
 });
 
 test('3 DEMO: individuelle Demo mit privatem Link, Seite enthält Firmendaten, keine Fantasie-Inhalte, Kennzeichnung „Demo“', { skip }, async () => {
-  await app.post(`/leads/${S.leadId}/demo`, { template: 'auto' });
+  await app.post(`/leads/${S.leadId}/demo`, { template: 'auto', confirm: '1' });
   assert.equal(await leadStatus(), 'DEMO_CREATED');
   const d = (await app.pool.query('select token, template from demos where lead_id=$1 and not revoked order by created_at desc', [S.leadId])).rows[0];
   const res = await app.get(`/d/${d.token}`, false);
@@ -57,7 +57,7 @@ test('3 DEMO: individuelle Demo mit privatem Link, Seite enthält Firmendaten, k
   await app.post(`/demos/${demoId}/revoke`);
   assert.equal((await app.get(`/d/${d.token}`, false)).status, 404);
   // neue Demo erzeugen, damit die nächsten Schritte eine gültige haben
-  await app.post(`/leads/${S.leadId}/demo`, { template: 'auto' });
+  await app.post(`/leads/${S.leadId}/demo`, { template: 'auto', confirm: '1' });
   const again = (await app.pool.query('select token from demos where lead_id=$1 and not revoked', [S.leadId])).rows;
   assert.equal(again.length, 1); assert.equal((await app.get(`/d/${again[0].token}`, false)).status, 200);
 });

@@ -35,7 +35,7 @@ before(async () => {
   const slug = /\/hosted\/([a-z0-9-]+)/.exec(c1.url!)![1];
   const runId = (await app.pool.query('select id from lead_runs where owner_id=$1 order by created_at desc limit 1', [OWNER])).rows[0].id;
   const add = (name: string, path: string, auth = true) => pages.push({ name, path, auth });
-  add('start', '/'); add('suche', '/search'); add('suchlauf', `/search/run/${runId}`); add('leads', '/leads'); add('leads-gefiltert', '/leads?status=QUALIFIED&category=HOT&sort=distance');
+  add('start', '/'); add('heute', '/today'); add('daten-beschaffen', '/enrichment'); add('suche', '/search'); add('suchlauf', `/search/run/${runId}`); add('leads', '/leads'); add('leads-gefiltert', '/leads?status=QUALIFIED&category=HOT&sort=distance');
   add('lead-ohne-website', `/leads/${nosite.id}`); if (audited) add('lead-mit-audit', `/leads/${audited.id}`); add('lead-kunde', `/leads/${full.id}`); add('lead-demo', `/leads/${demo.id}`);
   add('calls', '/calls'); add('pipeline', '/pipeline'); add('auftraege', '/orders'); add('auftrag-zahlung', `/orders/${call.orderId}`); add('auftrag-freigabe', `/orders/${c2.orderId}`); add('auftrag-wartung', `/orders/${c1.orderId}`);
   add('wartung', '/maintenance'); add('wartung-detail', `/maintenance/${c1.orderId}`); add('analytics', '/analytics'); add('einstellungen', '/settings'); add('postausgang', '/outbox'); add('audit-log', '/audit'); add('social', `/social/${social.id}`);

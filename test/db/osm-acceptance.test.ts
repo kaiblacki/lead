@@ -114,7 +114,7 @@ test('Kreislauf im Browser-Stil: Lead öffnen → Demo erstellen → Demo ansehe
   const lead = (await app.pool.query("select id from leads where company_name='Nagelstudio Sonja' and owner_id=$1", [OWNER])).rows[0].id;
   const before = app.text(await (await app.get(`/leads/${lead}`)).text());
   assert.match(before, /Kontaktvorlagen \(Entwürfe\)/); assert.match(before, /Erst „Demo erstellen“/);
-  assert.match(await app.follow(await app.post(`/leads/${lead}/demo`, { template: 'auto' })), /Demo erstellt/);
+  assert.match(await app.follow(await app.post(`/leads/${lead}/demo`, { template: 'auto', confirm: '1' })), /Demo erstellt/);
   const tok = (await app.pool.query('select token from demos where lead_id=$1 and not revoked', [lead])).rows[0].token;
   const demo = await app.get(`/d/${tok}`, false); const html = app.text(await demo.text());
   assert.equal(demo.status, 200); assert.match(html, /Nagelstudio Sonja/); assert.match(html, /Hauptstraße 9/); assert.match(html, /06898 222222/);

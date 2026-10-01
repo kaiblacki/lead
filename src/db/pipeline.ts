@@ -3,16 +3,20 @@ import type { Repo } from './repo.ts';
 import type { AppConfig } from '../core/config.ts';
 import { computePriority, PRIORITIES, type Priority, type PriorityInput } from '../scoring/priority.ts';
 import type { MatchRecord } from '../dedupe/match.ts';
+import { assessContactability } from '../contact/contactability.ts';
+import { recommendDemo } from '../workflow/recommend.ts';
+import { ApprovalStore } from '../workflow/approvals.ts';
 
 export type ExistingLead = MatchRecord & { id: string; source: string; ref: string; status: string };
 
 /** Priorität A–D, Notizen, Website-Module und Dubletten-Verwaltung. Alles pro Besitzer (owner_id) getrennt. */
 export class PipelineStore {
-  repo: Repo; cfg: AppConfig; now: () => Date;
-  constructor(d: { repo: Repo; cfg: AppConfig; now?: () => Date }) { this.repo = d.repo; this.cfg = d.cfg; this.now = d.now ?? (() => new Date()); }
+  repo: Repo; cfg: AppConfig; now: () => Date; approvals: ApprovalStore;
+  constructor(d: { repo: Repo; cfg: AppConfig; now?: () => Date }) { this.repo = d.repo; this.cfg = d.cfg; this.now = d.now ?? (() => new Date()); this.approvals = new ApprovalStore(d.repo); }
   private get pool() { return this.repo.pool; }
   private get owner() { return this.repo.ownerId; }
 
+  private lastAssess: { hasWebForm: boolean; hasWhatsapp: boolean; hasSocial: boolean; subLabel?: string; hasDemo: boolean; demoRejected: boolean } = { hasWebForm: false, hasWhatsapp: false, hasSocial: false, hasDemo: false, demoRejected: false };
   // ---------- Priorität ----------
   async priorityInput(leadId: string, c: pg.Pool | pg.PoolClient = this.pool): Promise<PriorityInput | null> {
     const l = (await c.query('select * from leads where id=$1 and owner_id=$2', [leadId, this.owner])).rows[0]; if (!l) return null;
@@ -20,7 +24,7 @@ export class PipelineStore {
       c.query('select score, dimensions from opportunities where lead_id=$1 and owner_id=$2 order by created_at desc, id desc limit 1', [leadId, this.owner]),
       c.query('select id, status, overall_quality from audits where lead_id=$1 and owner_id=$2 order by created_at desc, id desc limit 1', [leadId, this.owner]),
       c.query('select 1 from demos where lead_id=$1 and owner_id=$2 and not revoked limit 1', [leadId, this.owner]),
-      c.query("select key, value from lead_facts where lead_id=$1 and owner_id=$2 and key in ('email','businessStatus','social')", [leadId, this.owner]),
+      c.query("select key, value from lead_facts where lead_id=$1 and owner_id=$2 and key in ('email','businessStatus','social','contactForm','whatsapp')", [leadId, this.owner]),
     ]);
     const fails = a.rows[0] ? Number((await c.query("select count(*)::int n from findings where audit_id=$1 and owner_id=$2 and status='fail'", [a.rows[0].id, this.owner])).rows[0].n) : 0;
     const dq = o.rows[0]?.dimensions?.dataQuality?.value;
@@ -28,18 +32,39 @@ export class PipelineStore {
     const closed = f.rows.some((x) => x.key === 'businessStatus' && /CLOSED_PERMANENTLY/.test(JSON.stringify(x.value)));
     const recentSocial = f.rows.some((x) => x.key === 'social' && x.value?.lastPostAt && Date.parse(x.value.lastPostAt) > this.now().getTime() - 180 * 86400000);
     const operational = f.rows.some((x) => x.key === 'businessStatus' && /OPERATIONAL/.test(JSON.stringify(x.value)));
+    this.lastAssess = { hasWebForm: f.rows.some((x) => x.key === 'contactForm'), hasWhatsapp: f.rows.some((x) => x.key === 'whatsapp'), hasSocial: f.rows.some((x) => x.key === 'social'), subLabel: sub?.label, hasDemo: d.rowCount! > 0, demoRejected: false };
     return {
       websiteState: l.website_state, auditStatus: a.rows[0]?.status ?? null, websiteScore: l.website_state === 'none' ? null : a.rows[0]?.overall_quality ?? null, salesOpportunity: o.rows[0]?.score ?? null,
       hasPhone: !!l.phone, hasEmail: !!l.email || f.rows.some((x) => x.key === 'email'), closed, active: operational || Number(l.review_count ?? 0) > 0 || recentSocial, localIndustry: !!sub,
       clearWeaknesses: fails, hasDemo: d.rowCount! > 0, dataQuality: typeof dq === 'number' ? dq : null, blocked: !!l.contact_blocked,
     };
   }
-  /** Setzt die automatische Priorität neu. Eine manuelle Priorität bleibt maßgeblich (effective_priority). */
+  /**
+   * Bewertet einen Lead neu: Priorität A–D, Arbeitsstatus (DATA_NEEDED), Kontaktierbarkeit, Demo-Empfehlung (inkl. Freigabe-Eintrag „empfohlen“).
+   * Eine manuelle Priorität bleibt maßgeblich (effective_priority). Es wird nichts erstellt oder gesendet.
+   */
   async recomputePriority(leadId: string, c: pg.Pool | pg.PoolClient = this.pool): Promise<{ auto: Priority; effective: Priority; reason: string } | null> {
     const inp = await this.priorityInput(leadId, c); if (!inp) return null;
+    const x = this.lastAssess;
     const r = computePriority(inp, this.cfg.pipeline.priority);
-    const row = (await c.query('update leads set auto_priority=$3, effective_priority=coalesce(manual_priority, $3), priority_reason=$4, priority_updated_at=now() where id=$1 and owner_id=$2 returning manual_priority, effective_priority', [leadId, this.owner, r.priority, r.reason])).rows[0];
+    const ct = assessContactability({ phone: inp.hasPhone, email: inp.hasEmail, webForm: x.hasWebForm, whatsapp: x.hasWhatsapp, social: x.hasSocial });
+    const rec = recommendDemo({ websiteState: inp.websiteState, websiteScore: inp.websiteScore, salesOpportunity: inp.salesOpportunity, contactable: ct.workStatus === 'CONTACTABLE', dataQuality: inp.dataQuality, localIndustry: inp.localIndustry, industryLabel: x.subLabel,
+      closed: inp.closed, blocked: inp.blocked, hasPhone: inp.hasPhone, hasEmail: inp.hasEmail, auditStatus: inp.auditStatus }, this.cfg.pipeline.recommendation);
+    const row = (await c.query(`update leads set auto_priority=$3, effective_priority=coalesce(manual_priority, $3), priority_reason=$4, priority_updated_at=now(),
+        work_status=$5, contactability=$6, preferred_contact_channel=$7, demo_recommendation=$8, demo_recommendation_reason=$9 where id=$1 and owner_id=$2 returning manual_priority, effective_priority`,
+      [leadId, this.owner, r.priority, r.reason, ct.workStatus, ct.contactability, ct.preferred, rec.recommended ? 'DEMO_RECOMMENDED' : 'DEMO_NOT_RECOMMENDED', rec.reason])).rows[0];
+    await this.syncDemoApproval(leadId, rec, x.hasDemo, c);
     return { auto: r.priority, effective: row.effective_priority, reason: r.reason };
+  }
+
+  /** Empfehlung → Freigabe-Eintrag „RECOMMENDED“ (nie eine Demo). Ablehnungen bleiben erhalten; vorhandene Demos werden nicht angetastet. */
+  private async syncDemoApproval(leadId: string, rec: { recommended: boolean; reason: string }, hasDemo: boolean, c: pg.Pool | pg.PoolClient) {
+    let state = await this.approvals.stateOf(leadId, 'DEMO_CREATE', c);
+    if (!hasDemo && rec.recommended && state !== 'REJECTED' && state !== 'COMPLETED') state = await this.approvals.recommend(leadId, 'DEMO_CREATE', rec.reason, {}, c);
+    else if (!rec.recommended && state === 'RECOMMENDED') { await this.approvals.withdraw(leadId, 'DEMO_CREATE', c); state = 'NOT_REQUIRED'; }
+    // Spalte demo_decision (Anzeige/Filter) spiegelt den Freigabe-Stand (frühere „skipped“-Entscheidungen wurden in der Migration zu abgelehnten Freigaben)
+    const dec = state === 'RECOMMENDED' || state === 'AWAITING_APPROVAL' || state === 'APPROVED' ? 'recommended' : state === 'REJECTED' ? 'skipped' : null;
+    await c.query('update leads set demo_decision = $3 where id=$1 and owner_id=$2', [leadId, this.owner, dec]);
   }
   async setManualPriority(leadId: string, p: Priority | null) {
     if (p !== null && !PRIORITIES.includes(p)) throw new Error('Priorität muss A, B, C oder D sein.');

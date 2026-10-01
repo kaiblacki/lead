@@ -46,6 +46,7 @@ export class SalesDocs {
     const d = await this.leads.get(leadId);
     // Erinnerung: Demo fertig → anrufen (nur mit Telefonnummer, nicht bei gesperrten Leads)
     if (this.tasks && d?.lead.phone && !d.lead.contact_blocked) await this.tasks.ensure(leadId, 'CALL_DEMO_READY', 'Demo fertig – anrufen');
+    await this.pipeline?.approvals.complete(leadId, 'DEMO_CREATE', { demoId: created.id, actor });
     await this.pipeline?.recomputePriority(leadId);
     return { ...created, url: `${this.baseUrl}/d/${created.token}`, template };
   }

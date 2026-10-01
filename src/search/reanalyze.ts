@@ -16,9 +16,10 @@ export async function reanalyzeLead(ctx: Context, leadId: string, opts: { deep?:
   const now = ctx.now();
   let place = null, directory = null, csv: Lead | null = null;
   if (row.source === P.places.name) place = await P.places.details(row.source_ref);
-  if (!place) csv = leadFromFacts(facts.filter((f) => f.source !== 'computed' && f.source !== 'website-crawl'), { id: row.source_ref, source: row.source });
+  if (!place) csv = leadFromFacts(facts.filter((f) => f.source !== 'computed' && f.source !== 'website-crawl' && f.source !== 'web-search'), { id: row.source_ref, source: row.source });
+  const extraFacts = facts.filter((f) => f.source === 'web-search');   // per Websuche gefundene Angaben (mit Quelle) bleiben bei jeder Neuanalyse erhalten
   const known = Number(row.distance_km);
-  const res = await analyzeCandidate(P, ctx.cfg, { place, directory, csv, distanceKm: Number.isFinite(known) ? known : undefined, searchIndustry: row.industry ?? undefined, searchSub: row.sub_industry ?? undefined, now, deep: opts.deep });
+  const res = await analyzeCandidate(P, ctx.cfg, { place, directory, csv, distanceKm: Number.isFinite(known) ? known : undefined, searchIndustry: row.industry ?? undefined, searchSub: row.sub_industry ?? undefined, now, deep: opts.deep, extraFacts });
   if (!place && csv) { res.source = row.source; res.externalId = row.source_ref; }
   const settings = await ctx.repo.getSettings();
   const hits = await ctx.repo.findSuppression(suppressionKeys(res.facts, res.lead.companyName));

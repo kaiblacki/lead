@@ -104,7 +104,8 @@ export const routes: Route[] = [
           <dt>Start / Ende</dt><dd>${fmt(run.started_at ?? run.created_at)} / ${run.finished_at ? fmt(run.finished_at) : 'läuft noch'}</dd>
           <dt>Quellen</dt><dd>${(run.sources ?? []).length ? (run.sources as any[]).map((x) => html`<span class="badge">${x.id}: ${x.provider} · ${x.requests} Anfragen · ${cents(x.costCents)}</span> `) : '–'}</dd>
           <dt>Kosten</dt><dd>OSM ${cents(run.costs?.osm)} · Websuche ${cents(run.costs?.web_search)} · KI ${cents(run.costs?.ai)} · Demo ${cents(run.costs?.demo)} · <b>Gesamt ${cents(run.costs?.total)}</b></dd>
-          <dt>Automatische Demos</dt><dd>${s.pipeline ? `${s.pipeline.autoDemos} erstellt · ${s.pipeline.demoRecommended} empfohlen` : '–'}</dd>
+          <dt>Demo-Empfehlungen</dt><dd>${s.pipeline ? `${s.pipeline.demoRecommended} empfohlen – erstellt wird nichts automatisch (du bestätigst je Lead)` : '–'}</dd>
+          <dt>Web-Enrichment</dt><dd>${s.pipeline?.enrichment?.attempted !== undefined ? `${s.pipeline.enrichment.attempted} Leads abgefragt · ${s.pipeline.enrichment.requests ?? 0} Anfragen${s.pipeline.enrichment.counts ? ' · ' + Object.entries(s.pipeline.enrichment.counts).map(([k, v]) => `${k}: ${v}`).join(', ') : ''}` : '–'}</dd>
           <dt>Fehler</dt><dd>${(run.errors ?? []).length ? html`<ul>${(run.errors as string[]).map((e) => html`<li>${e}</li>`)}</ul>` : 'keine'}</dd></dl></details>
         ${run.error ? html`<div class="errbox">${run.error}</div>` : ''}${s.stoppedReason ? html`<div class="warnbox">Lauf gestoppt: ${s.stoppedReason}. Bereits analysierte Leads sind gespeichert.</div>` : ''}
         ${(s.warnings ?? []).map((w: string) => html`<div class="warnbox">${w}</div>`)}${c.errors ? html`<div class="errbox">${c.errors} Fehler: ${(s.errorSamples ?? []).join(' | ')}</div>` : ''}

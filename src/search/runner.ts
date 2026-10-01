@@ -15,7 +15,7 @@ import { socialPlatformOf } from '../core/text.ts';
 import { dedupeCandidates, type Merged } from '../dedupe/merge.ts';
 import { compareRecords, type MatchRecord } from '../dedupe/match.ts';
 import { PipelineStore } from '../db/pipeline.ts';
-import { Enricher } from '../sources/enrich.ts';
+import type { EnrichmentService } from '../enrich/service.ts';
 import type { ScoringConfig } from '../scoring/intelligence.ts';
 import type { Lead } from '../core/types.ts';
 
@@ -26,7 +26,7 @@ export type { Merged };
 
 export type RunSummary = { found: number; prefiltered: number; analyzed: number; matched: number; errors: number; warnings: string[]; skipped: Record<string, number>; usage: Record<string, number>; stoppedReason?: string; errorSamples?: string[] };
 
-export type RunnerDeps = { repo: Repo; leads: LeadStore; runs: RunStore; providers: Providers; cfg: AppConfig; now: () => Date; pipeline?: PipelineStore; enricher?: Enricher };
+export type RunnerDeps = { repo: Repo; leads: LeadStore; runs: RunStore; providers: Providers; cfg: AppConfig; now: () => Date; pipeline?: PipelineStore; enrichment?: EnrichmentService };
 
 export class SearchRunner {
   d: RunnerDeps;
@@ -35,7 +35,7 @@ export class SearchRunner {
   afterSave?: (leadId: string, info: { matched: boolean; noWebsite: boolean; opportunity: number | null; blocked: boolean }) => Promise<void>;
   pipeline: PipelineStore;
   /** Nach dem Lauf: Auto-Demos für die besten Leads ohne Website, Empfehlung für den Rest. Wird vom Kontext gesetzt. */
-  afterRun?: (runId: string, leadIds: string[], opts: { maxAutoDemos: number }) => Promise<{ autoDemos: number; recommended: number }>;
+  afterRun?: (runId: string, leadIds: string[]) => Promise<{ recommended: number }>;
   constructor(d: RunnerDeps) { this.d = d; this.pipeline = d.pipeline ?? new PipelineStore({ repo: d.repo, cfg: d.cfg, now: d.now }); }
 
   /** Startet einen Lauf im Hintergrund und gibt sofort die Lauf-ID zurück. */
@@ -166,7 +166,6 @@ export class SearchRunner {
       await save();
       await runs.phase(runId, 'analyzing');
 
-      const enricher = this.d.enricher; let webCalls = 0;
       for (const m of merged) {
         if (sum.matched >= c.maxLeads) break;
         const pr = primary(m);
@@ -190,23 +189,9 @@ export class SearchRunner {
           budget.takeLead();
           if (view.hasWebsite) budget.takeAudit();
           const base = { place: m.place, directory: m.directory, center: geo.point, searchIndustry: c.industry, searchSub, now, identity } as const;
-          let res = await analyzeCandidate(P, cfg, base);
+          const res = await analyzeCandidate(P, cfg, base);
           budget.takeCrawl(res.usage.crawlRequests);
           for (const [k, v] of [['crawl', res.usage.crawlRequests], ['directory', res.usage.directoryRequests], ['social', res.usage.socialRequests], ['render', res.usage.renderRuns]] as const) sum.usage[k] += v;
-          // Anreicherung nur wenn nötig: Website/Kontaktdaten fehlen UND der Lead ist interessant genug
-          const need = enricher?.wants({ hasWebsite: !!res.lead.websiteUrl, hasPhone: !!res.lead.phone, hasEmail: !!res.lead.email, closed: view.closed, opportunity: res.analysis.salesOpportunity.value, callsUsed: webCalls });
-          if (enricher && need && need.website) {
-            await runs.phase(runId, 'enriching'); webCalls++;
-            try {
-              const f = await enricher.findWebsite({ name: res.lead.companyName, city: res.lead.city, phone: res.lead.phone, postalCode: res.lead.postalCode }, now.toISOString());
-              sum.usage.websearch += f.requests; webCents += f.costCents;
-              if (f.facts.length) {
-                res = await analyzeCandidate(P, cfg, { ...base, extraFacts: f.facts });
-                budget.takeCrawl(res.usage.crawlRequests); sum.usage.crawl += res.usage.crawlRequests;
-              }
-            } catch (e) { const msg = `Websuche ${res.lead.companyName}: ${e instanceof Error ? e.message : String(e)}`; if (errorsList.length < 20) errorsList.push(msg); }
-            await runs.phase(runId, 'analyzing');
-          }
           sum.analyzed++;
 
           const hits = await repo.findSuppression(suppressionKeys(res.facts, res.lead.companyName));
@@ -246,14 +231,27 @@ export class SearchRunner {
     if (sum.matched < c.minLeads) sum.warnings.push(`Nur ${sum.matched} von mindestens ${c.minLeads} Leads gefunden. Radius erweitern oder Filter lockern${sum.stoppedReason ? ` (Lauf gestoppt: ${sum.stoppedReason})` : ''}.`);
     if (!sum.found) sum.warnings.push('Die Datenquellen haben für diese Suche keine Treffer geliefert.');
     if (sum.stoppedReason && /MAX LEADS/.test(sum.stoppedReason) && c.maxLeads > limits.maxLeadsPerRun) sum.warnings.push(`Die Suchgröße (${c.maxLeads}) übersteigt das Limit „Max. Leads pro Lauf“ (${limits.maxLeadsPerRun}) – in den Einstellungen erhöhen.`);
+    // Web-Enrichment (nur wenn Daten fehlen, in Prioritätsreihenfolge, im Budget) – danach wird neu bewertet
+    let enr: Record<string, unknown> = { attempted: 0 };
+    if (this.d.enrichment && savedIds.length && status === 'DONE') {
+      await runs.phase(runId, 'enriching');
+      try {
+        const r = await this.d.enrichment.enrichBatch(savedIds, { runId });
+        enr = { attempted: r.attempted, counts: r.counts, requests: r.requests, costCents: r.costCents }; sum.usage.websearch += r.requests; webCents += r.costCents;
+        errorsList.push(...r.outcomes.filter((o) => /^Fehler/.test(o.note)).slice(0, 5).map((o) => o.note));
+        if (r.counts.provider_unavailable) sum.warnings.push('Web-Enrichment übersprungen: Websuche nicht verfügbar (BRAVE_SEARCH_API_KEY fehlt).');
+        if (r.counts.budget_blocked) sum.warnings.push(`Enrichment-Budget erreicht – ${r.counts.budget_blocked} Lead(s) bleiben ohne Anreicherung (budget_blocked).`);
+      } catch (e) { sum.warnings.push(`Enrichment: ${e instanceof Error ? e.message : String(e)}`); }
+      await runs.phase(runId, 'analyzing');
+    }
     await repo.usage(runId, P.crawler.name, 'crawl', sum.usage.crawl); await repo.usage(runId, P.social.name, 'lookup', sum.usage.social);
-    if (this.d.enricher) { await repo.usage(runId, this.d.enricher.ws.name, 'search', sum.usage.websearch); if (sum.usage.websearch) sourcesUsed.push({ id: 'WEB_SEARCH', provider: this.d.enricher.ws.name, requests: sum.usage.websearch, costCents: webCents }); }
+    if (this.d.enrichment) { await repo.usage(runId, this.d.enrichment.provider.name, 'search', sum.usage.websearch); if (sum.usage.websearch) sourcesUsed.push({ id: 'WEB_SEARCH', provider: this.d.enrichment.provider.name, requests: sum.usage.websearch, costCents: webCents }); }
     if (sum.usage.crawl) sourcesUsed.push({ id: 'DIRECT_WEBSITE', provider: P.crawler.name, requests: sum.usage.crawl, costCents: sum.usage.crawl * Number(S.DIRECT_WEBSITE?.centsPerRequest ?? 0) });
-    // Auto-Demos für die höchst priorisierten Leads ohne Website, Rest = „Demo empfohlen“
-    let demoInfo = { autoDemos: 0, recommended: 0 };
-    try { if (this.afterRun) demoInfo = await this.afterRun(runId, savedIds, { maxAutoDemos: Number(cfg.sales?.autoDemo?.maxPerSearch ?? PC.autoDemo?.maxPerSearch ?? 5) }); }
-    catch (e) { sum.warnings.push(`Auto-Demo: ${e instanceof Error ? e.message : String(e)}`); }
-    (sum as RunSummary & Record<string, unknown>).pipeline = { dedupe: dedupeStats, autoDemos: demoInfo.autoDemos, demoRecommended: demoInfo.recommended, webSearchCalls: sum.usage.websearch };
+    // Demo-Empfehlungen entstehen bei der Bewertung jedes Leads; hier nur die Zählung (es wird nie automatisch eine Demo erstellt)
+    let demoInfo = { recommended: 0 };
+    try { if (this.afterRun) demoInfo = await this.afterRun(runId, savedIds); }
+    catch (e) { sum.warnings.push(`Empfehlungen: ${e instanceof Error ? e.message : String(e)}`); }
+    (sum as RunSummary & Record<string, unknown>).pipeline = { dedupe: dedupeStats, demoRecommended: demoInfo.recommended, enrichment: enr, webSearchCalls: sum.usage.websearch };
     const ai = await new AiUsageStore(repo).forRun(runId, startedAt);
     const osmCents = sourcesUsed.filter((s) => s.id === 'OSM' || s.id === 'GOOGLE_PLACES').reduce((n, s) => n + s.costCents, 0);
     const costs = { osm: osmCents, web_search: webCents, ai: ai.analysisCents + ai.otherCents, demo: ai.demoCents, total: osmCents + webCents + ai.totalCents };
