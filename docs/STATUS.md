@@ -7,8 +7,8 @@ Stand: Ende der Mock-Ausbaustufe. Zahlen stammen aus dem letzten vollständigen 
 | Kennzahl | Wert |
 |---|---|
 | **Lokaler MVP mit Mock-Diensten** (alles aus dem Auftrag, ohne externe Konten) | **≈ 95 %** gebaut und automatisch getestet |
-| **Bereit für den Betrieb mit echten Diensten** | **≈ 60 %** – 7 von 10 echten Adaptern sind gebaut, **aber noch kein einziger gegen den echten Dienst gelaufen**; 3 Adapter fehlen; Rechtstexte/Preise fehlen |
-| Automatische Tests | **175** (104 Unit + 71 Datenbank/HTTP/Ende-zu-Ende/Browser), alle grün; Typprüfung `tsc --strict` sauber |
+| **Bereit für den Betrieb mit echten Diensten** | **≈ 60 %** – 9 von 10 echten Adaptern sind gebaut, **aber noch kein einziger gegen den echten Dienst gelaufen**; 1 Adapter fehlt (Social-Daten; Verzeichnis nur über OSM); Rechtstexte/Preise fehlen |
+| Automatische Tests | **182** (108 Unit + 74 Datenbank/HTTP/Ende-zu-Ende/Browser), alle grün; Typprüfung `tsc --strict` sauber |
 | Code | ca. 6.300 Zeilen Anwendung, ca. 2.700 Zeilen Tests, 7 Migrationen, 11 Branchenvorlagen |
 
 Begründung der Prozentzahlen: Der lokale Umfang ist vollständig; die restlichen ~5 % sind bekannte Lücken ohne Schlüsselbedarf (siehe „Noch nicht gebaut“, z. B. Mehrbenutzer-Verwaltung, Benachrichtigungen). „Bereit für echten Betrieb“ wird vor allem dadurch begrenzt, dass die echten Adapter nur mit nachgestellten HTTP-Antworten getestet sind und die rechtlichen Angaben (Preise, AGB, Impressum) bewusst leer sind.
@@ -40,6 +40,8 @@ Begründung der Prozentzahlen: Der lokale Umfang ist vollständig; die restliche
 | 21 | **Sicherheit/Compliance** | Audit-Log (nur anfügbar, CSV), Opt-out/Sperrliste, Kontakt-Historie, Quellenangaben, Datenaufbewahrung mit Löschplan, Kill-Switch, Rate-Limits, Login-Sperre, CSRF, CSP, Budget-Limits (Leads, Analysen, KI-Kosten, Places, Crawler), Mandantentrennung (RLS + `owner_id`), keine Geheimnisse im Code (Scan-Test) | Unit + DB + Browser |
 | 22 | **Mobile Dashboard** | alle 26 Seiten (21 Dashboard-Ansichten + 5 Kundenseiten) bei 375/390/430 px im echten Browser: kein seitliches Scrollen, Tap-Ziele ≥ 44 px, keine Fehler; Touch-Klickstrecken für Suche, Calls, Kundenfreigabe, Mock-Zahlung | Browser-Tests |
 | 24 | **E-Mail** | SMTP-Adapter (STARTTLS/TLS, Schutz gegen Header-Einschleusung), Postausgang-Seite (auch im Mock sichtbar, als „nur aufgezeichnet“ gekennzeichnet), Test-Mail, Betreiber-Benachrichtigungen (Zahlung, Freigabe, Änderungswunsch, Wartungsproblem), Kunden-Mails aus dem Auftrag per Knopfdruck (Zahlungs-/Freigabe-Link, „online“), Sperrliste wird beachtet. Tagesübersicht (ab 7 Uhr, einmal täglich, auch per Knopf/CLI). Kein automatischer Versand an Interessenten | Unit (Fake-SMTP-Server) + DB |
+| 25 | **Rechnungen** | fortlaufende Nummer (RE-Jahr-0001), Netto-/Brutto-/Kleinunternehmer-Berechnung, nur für bezahlte Zahlungen, unveränderlicher Schnappschuss, druckbar/als PDF speichern; blockiert, solange Agenturdaten (`config/agency.json → invoice`) Platzhalter sind. **Steuerlich prüfen lassen** | Unit + DB |
+| 26 | **DSGVO-Werkzeuge** | je Lead Auskunft (JSON mit allen Daten) und Löschung inkl. Sperrliste; Kunden mit Auftrag geschützt (Aufbewahrungspflichten) | DB |
 | 23 | **Demo-Start** | `npm run demo:db` + `npm run demo`: komplettes System mit Beispieldaten ohne Konten | von Hand geprüft |
 
 ## NUR MIT API-KEY / ECHTEM DIENST TESTBAR (Code vorhanden, aber nie gegen den echten Dienst gelaufen)
@@ -51,6 +53,8 @@ Begründung der Prozentzahlen: Der lokale Umfang ist vollständig; die restliche
 | Playwright-Render / Tiefenprüfung | Chromium + echte Websites | gebaut; der gleiche Browser läuft bereits in der QA eigener Seiten |
 | Anthropic (Gesprächseinstieg, Änderungswünsche) | `ANTHROPIC_API_KEY` | gebaut mit gleichen Prüfregeln wie der Mock; Antwortqualität und Kosten ungeprüft |
 | Stripe (Checkout, Webhooks, Abo) | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, Stripe CLI | gebaut, mit signierten Testereignissen geprüft; Abo-Verlängerung/Zahlungsausfall/Kündigung werden verarbeitet, aber nur simuliert getestet |
+| OpenStreetMap-Quelle (Nominatim/Overpass, **ohne Schlüssel**, wird bei `APP_MODE=live` ohne Google-Key genutzt) | Internet | gebaut, mit nachgestellten Antworten getestet; echte Server nie abgefragt. Telefon/Website fehlen in OSM oft (→ „nicht verfügbar“) |
+| WhatsApp Business Cloud API | `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID` | gebaut, mit nachgestellten Antworten getestet; Meta erlaubt Neukontakten nur freigegebene Vorlagen, Freitext-Versand ist dort nicht möglich; Versand nur über die Kontaktregeln |
 | SMTP-E-Mail | SMTP-Zugangsdaten | gebaut, gegen einen lokalen Fake-SMTP-Server getestet (inkl. Anmeldung, Fehler); nie gegen einen echten Mail-Anbieter |
 | Vercel-/Ordner-Hosting | `VERCEL_TOKEN` | Ordner-Variante lokal geprüft; Vercel nicht |
 | Docker-Image | Docker | Dockerfile, Healthcheck, Produktionsbefehl, Variablen dokumentiert und statisch geprüft; **nie gebaut oder gestartet** |
@@ -60,7 +64,7 @@ Begründung der Prozentzahlen: Der lokale Umfang ist vollständig; die restliche
 
 | Was | Warum / Hinweis |
 |---|---|
-| Echte Adapter für **Verzeichnisse** (z. B. Gelbe Seiten), **Social-Daten** (Instagram/Facebook), **WhatsApp** | Schnittstelle + Mock stehen; Nutzungsbedingungen der Quellen und rechtliche Klärung (UWG § 7) vorab nötig. Bis dahin nichts Automatisches |
+| Echte Adapter für **Verzeichnisse** (z. B. Gelbe Seiten) und **Social-Daten** (Instagram/Facebook) | Schnittstelle + Mock stehen; Nutzungsbedingungen der Quellen (kein Scraping gegen deren Regeln) müssen vorab geklärt sein; Instagram/Facebook brauchen Meta-Zugriff |
 | Automatisches Posten in sozialen Netzwerken | Engine erzeugt nur Entwürfe |
 | Antwort-Klassifizierung, KI-Sales-Agent, Chat | bewusst später |
 | Lernen aus den Daten (Gewichte automatisch anpassen) | Datenstruktur und Export sind da; Auswertung/Anpassung erst mit echten Ergebnissen sinnvoll |

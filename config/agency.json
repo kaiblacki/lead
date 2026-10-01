@@ -2,5 +2,18 @@
   "name": "[Name deiner Agentur]",
   "contactEmail": "[E-Mail für Rückfragen]",
   "demoValidDays": 30,
-  "callerName": "[Dein Name]"
+  "callerName": "[Dein Name]",
+  "invoice": {
+    "legalName": "[Vollständiger Name / Firma laut Handelsregister bzw. Gewerbeanmeldung]",
+    "street": "[Straße und Hausnummer]",
+    "postalCode": "[PLZ]",
+    "city": "[Ort]",
+    "vatId": "[USt-IdNr. – oder Steuernummer unten eintragen]",
+    "taxNumber": "",
+    "vatRatePercent": 19,
+    "smallBusiness": false,
+    "amountsAreGross": false,
+    "iban": "",
+    "paymentNote": "Der Betrag wurde per Online-Zahlung beglichen."
+  }
 }

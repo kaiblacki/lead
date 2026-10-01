@@ -297,12 +297,14 @@ test('Registry: Standard = Mock, live ohne Keys = Mock mit Begründung, live mit
   assert.ok(Object.values(m.providers).every((p) => p.isMock));
   assert.equal(m.status.length, 10);
   const liveNoKeys = createProviders({ APP_MODE: 'live' }, base);
-  assert.ok(liveNoKeys.providers.places.isMock && liveNoKeys.providers.ai.isMock && liveNoKeys.providers.payments.isMock);
-  assert.match(liveNoKeys.status.find((s) => s.kind === 'places')!.note, /GOOGLE_PLACES_API_KEY fehlt/);
-  assert.match(liveNoKeys.status.find((s) => s.kind === 'directory')!.note, /nicht gebaut/);
+  assert.ok(liveNoKeys.providers.ai.isMock && liveNoKeys.providers.payments.isMock);
+  assert.equal(liveNoKeys.providers.places.name, 'osm', 'ohne Google-Key die keyfreie OpenStreetMap-Quelle'); assert.match(liveNoKeys.status.find((s) => s.kind === 'places')!.note, /OpenStreetMap/);
+  assert.equal(createProviders({ APP_MODE: 'live', PLACES_SOURCE: 'google' }, base).providers.places.name, 'google-places');
+  assert.match(liveNoKeys.status.find((s) => s.kind === 'directory')!.note, /nicht gebaut/); assert.ok(liveNoKeys.providers.whatsapp.isMock);
   const live = createProviders({ APP_MODE: 'live', GOOGLE_PLACES_API_KEY: 'k', ANTHROPIC_API_KEY: 'k', STRIPE_SECRET_KEY: 'sk_test_abc', STRIPE_WEBHOOK_SECRET: 'whsec_x', VERCEL_TOKEN: 't' }, base);
   assert.deepEqual([live.providers.places.name, live.providers.ai.name, live.providers.payments.name, live.providers.hosting.name, live.providers.crawler.name], ['google-places', 'anthropic', 'stripe', 'vercel', 'http-crawler']);
   assert.ok(live.providers.directory.isMock && live.providers.social.isMock && live.providers.email.isMock && live.providers.whatsapp.isMock);
+  assert.equal(createProviders({ APP_MODE: 'live', WHATSAPP_TOKEN: 't', WHATSAPP_PHONE_ID: '123456789' }, base).providers.whatsapp.name, 'whatsapp-cloud');
   const mixed = createProviders({ PROVIDER_PAYMENTS: 'real', STRIPE_SECRET_KEY: 'sk_test_abc', STRIPE_WEBHOOK_SECRET: 'w' }, base);
   assert.equal(mixed.providers.payments.name, 'stripe'); assert.ok(mixed.providers.places.isMock);
   assert.equal(mixed.status.find((s) => s.kind === 'payments')!.mode, 'real');

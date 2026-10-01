@@ -2,5 +2,18 @@
   "name": "Demo Agentur (Mock)",
   "contactEmail": "demo@agentur.example",
   "demoValidDays": 30,
-  "callerName": "Alex Demo"
+  "callerName": "Alex Demo",
+  "invoice": {
+    "legalName": "Demo Agentur (Mock) GmbH",
+    "street": "Musterstraße 1",
+    "postalCode": "66333",
+    "city": "Völklingen",
+    "vatId": "DE000000000",
+    "taxNumber": "",
+    "vatRatePercent": 19,
+    "smallBusiness": false,
+    "amountsAreGross": false,
+    "iban": "",
+    "paymentNote": "Mock-Rechnung – keine echte Zahlung."
+  }
 }

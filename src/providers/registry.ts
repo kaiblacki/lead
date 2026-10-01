@@ -12,6 +12,8 @@ import { PlaywrightRenderProvider, findChromium } from './real/render.ts';
 import { AnthropicProvider } from './real/ai.ts';
 import { StripeProvider } from './real/stripe.ts';
 import { SmtpEmailProvider } from './real/smtp.ts';
+import { OsmPlacesProvider } from './real/osm.ts';
+import { WhatsAppCloudProvider } from './real/whatsapp.ts';
 import { FolderHostingProvider, VercelHostingProvider } from './real/hosting.ts';
 
 type Env = Record<string, string | undefined>;
@@ -43,7 +45,9 @@ export function createProviders(env: Env, o: RegistryOptions): Registry {
     const m = mock(); note(kind, (m as any).name, 'mock', 'Mock (lokal, keine echten Daten)'); return m;
   };
 
-  const places = pick<PlacesProvider>('places', { ok: !!env.GOOGLE_PLACES_API_KEY, why: 'GOOGLE_PLACES_API_KEY fehlt', make: () => new GooglePlacesProvider(env.GOOGLE_PLACES_API_KEY, now) }, () => new MockGooglePlacesProvider({ now }), 'Google Places API');
+  // Google Places, wenn ein Key da ist; sonst (oder mit PLACES_SOURCE=osm) die keyfreie OpenStreetMap-Quelle
+  const useOsm = env.PLACES_SOURCE === 'osm' || (!env.GOOGLE_PLACES_API_KEY && env.PLACES_SOURCE !== 'google');
+  const places = pick<PlacesProvider>('places', { ok: true, why: '', make: () => (useOsm ? new OsmPlacesProvider(env.OSM_CONTACT, now) : new GooglePlacesProvider(env.GOOGLE_PLACES_API_KEY, now)) }, () => new MockGooglePlacesProvider({ now }), useOsm ? 'OpenStreetMap (Nominatim/Overpass, ohne Key)' : 'Google Places API');
   const directory = pick<DirectoryProvider>('directory', null, () => new MockDirectoryProvider({ now }), '');
   const placesReal = !places.isMock;
   // Der echte Crawler macht nur Sinn, wenn echte Unternehmensdaten kommen; bei Mock-Daten gibt es die Websites nicht.
@@ -54,7 +58,7 @@ export function createProviders(env: Env, o: RegistryOptions): Registry {
   const ai = pick<AIProvider>('ai', { ok: !!env.ANTHROPIC_API_KEY, why: 'ANTHROPIC_API_KEY fehlt', make: () => new AnthropicProvider(env.ANTHROPIC_MODEL, env.ANTHROPIC_API_KEY) }, () => new MockAIProvider(), 'Anthropic Messages API');
   const payments = pick<PaymentProvider>('payments', { ok: !!env.STRIPE_SECRET_KEY && !!env.STRIPE_WEBHOOK_SECRET, why: 'STRIPE_SECRET_KEY/STRIPE_WEBHOOK_SECRET fehlen', make: () => new StripeProvider(env.STRIPE_SECRET_KEY, env.STRIPE_WEBHOOK_SECRET) }, () => new MockStripeProvider(o.baseUrl), 'Stripe Checkout');
   const email = pick<EmailProvider>('email', { ok: !!env.SMTP_HOST && !!env.SMTP_FROM, why: 'SMTP_HOST/SMTP_FROM fehlen', make: () => new SmtpEmailProvider({ host: env.SMTP_HOST!, port: Number(env.SMTP_PORT || 587), secure: env.SMTP_SECURE === '1' || env.SMTP_PORT === '465', user: env.SMTP_USER || undefined, pass: env.SMTP_PASS || undefined, from: env.SMTP_FROM! }) }, () => new MockEmailProvider(), 'SMTP');
-  const whatsapp = pick<WhatsAppProvider>('whatsapp', null, () => new MockWhatsAppProvider(), '');
+  const whatsapp = pick<WhatsAppProvider>('whatsapp', { ok: !!env.WHATSAPP_TOKEN && !!env.WHATSAPP_PHONE_ID, why: 'WHATSAPP_TOKEN/WHATSAPP_PHONE_ID fehlen', make: () => new WhatsAppCloudProvider(env.WHATSAPP_TOKEN!, env.WHATSAPP_PHONE_ID!) }, () => new MockWhatsAppProvider(), 'WhatsApp Cloud API');
   const hosting = pick<HostingProvider>('hosting', { ok: true, why: '', make: () => (env.VERCEL_TOKEN ? new VercelHostingProvider(env.VERCEL_TOKEN, env.VERCEL_TEAM_ID) : new FolderHostingProvider(env.HOSTING_DIR || 'out/sites')) },
     () => mockHosting, env.VERCEL_TOKEN ? 'Vercel' : 'Ordner out/sites');
 

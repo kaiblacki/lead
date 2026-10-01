@@ -7,6 +7,7 @@ import { STAGE_LABEL, type Status } from '../../core/status.ts';
 import type { Kind } from '../../orders/service.ts';
 import type { ProjectContent } from '../../orders/service.ts';
 import { loadConfig } from '../../core/config.ts';
+import { esc } from '../html.ts';
 
 const id = uuid.source;
 const FLOW: Status[] = ['OFFER_ACCEPTED', 'DEPOSIT_PENDING', 'DEPOSIT_PAID', 'PRODUCTION', 'QA', 'CUSTOMER_REVIEW', 'APPROVED', 'FINAL_PAYMENT', 'DEPLOYED', 'MAINTENANCE'];
@@ -45,7 +46,7 @@ export const routes: Route[] = [
 
       <div class="card"><h2>Zahlungen</h2>
         ${pays.length ? html`<table>${pays.map((p: any) => html`<tr><td>${PAY_LABEL[p.kind]}</td><td>${eur(p.amount_cents)}</td><td><span class="badge ${p.status === 'paid' ? 'b-ok' : p.status === 'pending' ? 'b-warn' : 'b-bad'}">${PAY_STATE_LABEL[p.status] ?? p.status}</span></td>
-          <td>${p.status === 'pending' && p.checkout_url ? html`<a href="${p.checkout_url}" target="_blank" rel="noopener noreferrer">Zahlungslink</a>` : ''}${p.status === 'pending' && isMockPay ? postBtn(r.app.csrf, `/payments/${p.id}/simulate`, `${PAY_LABEL[p.kind]} bezahlt (Simulation)`, { cls: 'warn' }) : ''}</td></tr>`)}</table>` : html`<p class="mute">Noch keine Zahlungslinks.</p>`}
+          <td>${p.status === 'paid' ? html`<a href="/payments/${p.id}/invoice" target="_blank" rel="noopener noreferrer">Rechnung</a>` : ''}${p.status === 'pending' && p.checkout_url ? html`<a href="${p.checkout_url}" target="_blank" rel="noopener noreferrer">Zahlungslink</a>` : ''}${p.status === 'pending' && isMockPay ? postBtn(r.app.csrf, `/payments/${p.id}/simulate`, `${PAY_LABEL[p.kind]} bezahlt (Simulation)`, { cls: 'warn' }) : ''}</td></tr>`)}</table>` : html`<p class="mute">Noch keine Zahlungslinks.</p>`}
         <div class="row">${payBtn('deposit', 'Anzahlungs-Link erstellen', 'PAYMENT_PENDING')}${payBtn('final', 'Restzahlungs-Link erstellen', 'FINAL_PAYMENT_PENDING')}${payBtn('maintenance', 'Wartungs-Abo-Link erstellen', 'DEPLOYED')}</div>
         <small class="mute">${isMockPay ? 'Mock-Zahlung: Der Link führt auf eine lokale Testseite. „Bezahlt (Simulation)“ löst denselben Ablauf aus wie ein echter Stripe-Webhook.' : 'Zahlungen laufen über Stripe; Bestätigung per Webhook.'} Reihenfolge ist erzwungen: keine Produktion ohne Anzahlung, keine Veröffentlichung ohne Restzahlung.</small></div>
 
@@ -88,6 +89,24 @@ export const routes: Route[] = [
     const project = await r.ctx.delivery.getProject(r.params[0]);
     const res = await r.ctx.orders.startCheckout(r.params[0], r.params[1] as Kind, r.ctx.registry.providers.payments, r.app.baseUrl, project?.content?.email);
     return redirect(`/orders/${r.params[0]}`, okFlash(`${PAY_LABEL[r.params[1]]}-Link ${res.reused ? 'wiederverwendet' : 'erstellt'}: ${res.url}`));
+  } },
+  { method: 'GET', path: new RegExp(`^/payments/${id}/invoice$`), h: async (r) => {
+    try {
+      const inv = await r.ctx.invoices.forPayment(r.params[0]); const d = inv.data;
+      const e = (c: number) => eur(c); const de = (iso: string) => new Date(iso).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' });
+      const body = `<!doctype html><html lang="de"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Rechnung ${esc(inv.number)}</title>
+<style>body{font:15px/1.5 system-ui,sans-serif;max-width:760px;margin:0 auto;padding:24px;color:#111}table{width:100%;border-collapse:collapse}th,td{padding:8px 6px;border-bottom:1px solid #ddd;text-align:left}td.r,th.r{text-align:right}.s{color:#555;font-size:13px}.tot td{font-weight:700;border-top:2px solid #111}@media print{.np{display:none}body{padding:0}}</style>
+<p class="np"><button onclick="window.print()">Drucken / als PDF speichern</button></p>
+<p class="s">${esc(d.seller.legalName)} · ${esc(d.seller.street)} · ${esc(d.seller.postalCode)} ${esc(d.seller.city)}</p>
+<p><b>${esc(d.customer.name)}</b><br>${esc(d.customer.address ?? '')}<br>${esc([d.customer.postalCode, d.customer.city].filter(Boolean).join(' '))}</p>
+<h1>Rechnung ${esc(inv.number)}</h1><p>Rechnungsdatum: ${de(new Date(inv.issuedAt).toISOString())} · Leistungsdatum: ${de(d.serviceDate)}</p>
+<table><tr><th>Leistung</th><th class="r">Netto</th></tr><tr><td>${esc(d.description)}</td><td class="r">${e(d.netCents)}</td></tr>
+${d.smallBusiness ? '' : `<tr><td>Umsatzsteuer ${d.vatRatePercent} %</td><td class="r">${e(d.vatCents)}</td></tr>`}<tr class="tot"><td>Rechnungsbetrag</td><td class="r">${e(d.grossCents)}</td></tr>
+<tr><td>Bereits bezahlt am ${de(d.paidAt)}</td><td class="r">− ${e(d.paidCents)}</td></tr><tr class="tot"><td>Offener Betrag</td><td class="r">${e(d.openCents)}</td></tr></table>
+${d.smallBusiness ? '<p class="s">Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.</p>' : ''}${d.paymentNote ? `<p class="s">${esc(d.paymentNote)}</p>` : ''}
+<p class="s">${d.seller.vatId ? `USt-IdNr.: ${esc(d.seller.vatId)}` : ''}${d.seller.taxNumber ? ` Steuernummer: ${esc(d.seller.taxNumber)}` : ''}${d.seller.email ? ` · ${esc(d.seller.email)}` : ''}${d.seller.iban ? ` · IBAN: ${esc(d.seller.iban)}` : ''}</p></html>`;
+      return { body: body as never, type: 'text/html; charset=utf-8', headers: { 'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'", 'x-robots-tag': 'noindex' } } as never;
+    } catch (e) { const p = (await r.ctx.repo.pool.query('select order_id from payments where id=$1 and owner_id=$2', [r.params[0], r.ctx.repo.ownerId])).rows[0]; return redirect(p ? `/orders/${p.order_id}` : '/orders', { kind: 'err', text: e instanceof Error ? e.message : String(e) }); }
   } },
   { method: 'POST', path: new RegExp(`^/payments/${id}/simulate$`), h: async (r) => {
     const p = (await r.ctx.repo.pool.query('select order_id, kind from payments where id=$1 and owner_id=$2', [r.params[0], r.ctx.repo.ownerId])).rows[0];

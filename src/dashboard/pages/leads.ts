@@ -1,6 +1,6 @@
 import type { Route } from '../types.ts';
 import { UserError } from '../types.ts';
-import { html, raw, categoryBadge, mockBadge, prioBadge, readinessBadge, statusBadge } from '../ui.ts';
+import { html, raw, categoryBadge, mockBadge, prioBadge, readinessBadge, statusBadge, postForm } from '../ui.ts';
 import { render, redirect, okFlash, uuid } from './_page.ts';
 import * as P from './lead-parts.ts';
 import { STATUSES, type Status } from '../../core/status.ts';
@@ -49,9 +49,16 @@ export const routes: Route[] = [
       ${P.header(d, r.app.csrf)}${P.why(d)}${P.sales(d, r.app.csrf, leadId)}
       ${P.contact(d, r.app.csrf, leadId, settings, r.app.mock)}${P.statusCard(d, r.app.csrf, leadId)}${P.docs(d, r.app.csrf, leadId, { demos, offer, order, templates: allTemplates().map((t) => ({ key: t.key, label: t.label })), recommended: rec, baseUrl: r.app.baseUrl })}
       ${P.dimensions(d)}${P.profile(d)}${P.audit(d)}
+      <details class="card"><summary>Datenschutz (DSGVO)</summary><p class="mute">Auskunft: alle zu diesem Unternehmen gespeicherten Daten. Löschung: entfernt den Lead und setzt ihn auf die Sperrliste. Kunden mit Auftrag können nicht gelöscht werden (Aufbewahrungspflichten).</p>
+        <p><a class="btn" href="/leads/${leadId}/export.json">Auskunft herunterladen (JSON)</a></p>${postForm(r.app.csrf, `/leads/${leadId}/erase`, html`<label class="inline"><input type="checkbox" name="confirm" value="1"> Endgültig löschen</label> <button class="danger">Lead löschen</button>`, { style: 'display:block' })}</details>
       <div class="card row"><b class="grow">Social Media</b><a class="btn" href="/social/${leadId}">Content-Kalender öffnen</a></div>${P.history(d)}` });
   } },
 
+  { method: 'GET', path: new RegExp(`^/leads/${id}/export\\.json$`), h: async (r) => ({ body: JSON.stringify(await r.ctx.gdpr.export(r.params[0]), null, 1), type: 'application/json; charset=utf-8', headers: { 'content-disposition': 'attachment; filename="auskunft.json"' } }) },
+  { method: 'POST', path: new RegExp(`^/leads/${id}/erase$`), h: async (r) => {
+    if (r.form.get('confirm') !== '1') throw new UserError('Bitte die endgültige Löschung bestätigen.');
+    await r.ctx.gdpr.erase(r.params[0]); return redirect('/leads', okFlash('Lead gelöscht und auf die Sperrliste gesetzt (kommt nicht wieder).'));
+  } },
   { method: 'POST', path: new RegExp(`^/leads/${id}/pause$`), h: async (r) => { await r.ctx.leads.setPaused(r.params[0], true); return back(r.params[0], 'Lead pausiert.'); } },
   { method: 'POST', path: new RegExp(`^/leads/${id}/resume$`), h: async (r) => { await r.ctx.leads.setPaused(r.params[0], false); return back(r.params[0], 'Lead fortgesetzt.'); } },
   { method: 'POST', path: new RegExp(`^/leads/${id}/reject$`), h: async (r) => {
