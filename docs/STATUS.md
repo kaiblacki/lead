@@ -15,7 +15,7 @@ Begründung der Prozentzahlen: Der lokale Umfang ist vollständig; die restliche
 
 ## Kern-Abnahmetest „Völklingen + 30 km + Nagelstudios“ (Stand)
 - **Vorbereitet und offline getestet:** echter OSM-Provider gegen nachgestellte OSM-Antworten → Zusammenführen → Website vorhanden/fehlt → Analyse → Digital Need → Sales Opportunity → sortierte Anrufliste („Heute anrufen“); Lücken bleiben als Leads mit `DATA ENRICHMENT NEEDED` erhalten, fehlende Angaben stehen als „nicht verfügbar“, OSM-Attribution im Dashboard (`test/db/osm-acceptance.test.ts`).
-- **Live-Lauf gegen die echten OSM-Server: noch NICHT erfolgt** – die Netzwerkrichtlinie der Entwicklungsumgebung sperrt `nominatim.openstreetmap.org` und `overpass-api.de` (HTTP 403 am Proxy). Start nach Freigabe: `npm run acceptance` (Bericht mit allen geforderten Zahlen).
+- **Live-Lauf gegen die echten OSM-Server: erfolgt** (Nominatim + Overpass, ohne Schlüssel, nichts gesendet). Ergebnis „Völklingen + 30 km + Nagelstudios“: 201 Unternehmen, davon 74 laut OSM-Kategorie/Name eindeutig Nagelstudios; 39 mit Website, 161 ohne (OSM hat oft keinen Website-Eintrag → Anreicherung nötig); 78 mit Telefon; 187 mit Datenlücken; 15 Websites analysiert, 24 Websites lieferten dem Crawler HTTP 403/503 (Bot-Schutz) und stehen auf „Erneut prüfen“; 176 Scores, 46 TOP-Leads. Hinweis: 201 entspricht der Obergrenze des Laufs – es kann mehr geben.
 - Anthropic und Google Places sind noch nicht angeschlossen (Reihenfolge laut Plan: erst OSM live, dann Anthropic, dann Google Places als Anreicherung).
 
 ## BEREITS VOLLSTÄNDIG (lokal gebaut, automatisch getestet, ohne Schlüssel lauffähig)
