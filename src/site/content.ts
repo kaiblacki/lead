@@ -1,3 +1,4 @@
+import { humanizeHours } from '../core/hours.ts';
 import type { Fact } from '../core/profile.ts';
 import { bestFact, factValue } from '../core/profile.ts';
 import type { Taxonomy } from '../core/industries.ts';
@@ -24,7 +25,7 @@ export function contentFromFacts(facts: Fact[], tpl: Template, tax: Taxonomy, op
   for (const k of ['name', 'phone', 'address', 'openingHours', 'services', 'email', 'description'] as const) { const f = bestFact(facts, k); if (f) used.add(f.source); }
   const content: SiteContent = {
     companyName: name, industryLabel: sub?.label, address: street, postalCode: postal, city, phone: v<string>('phone'), email: v<string>('email'),
-    openingHours: hours?.length ? hours.join('\n') : undefined, about: v<string>('description'), services, legal: {},
+    openingHours: hours?.length ? hours.map(humanizeHours).join('\n') : undefined, about: v<string>('description'), services, legal: {},
   };
   const dimsNote = (k: string) => facts.find((f) => f.key === (k as never));
   void dimsNote;

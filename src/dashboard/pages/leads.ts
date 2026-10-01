@@ -52,7 +52,7 @@ export const routes: Route[] = [
     const [settings, demos, offer, order] = await Promise.all([ctx.repo.getSettings(), ctx.sales.listDemos(leadId), ctx.sales.latestOffer(leadId), ctx.orders.orderForLead(leadId)]);
     const rec = pickTemplate({ subIndustry: d.lead.sub_industry, industryText: d.lead.industry, name: d.lead.company_name }, ctx.cfg.taxonomy).key;
     return render(r, { title: d.lead.company_name, nav: 'leads', body: html`
-      ${P.header(d, r.app.csrf)}${P.why(d)}${P.sales(d, r.app.csrf, leadId)}
+      ${P.header(d, r.app.csrf)}${P.why(d)}${P.sales(d, r.app.csrf, leadId)}${P.templatesCard(d, { sender: settings.callerName ?? undefined, demoUrl: demos.find((x: any) => !x.revoked)?.token ? `${r.app.baseUrl}/d/${demos.find((x: any) => !x.revoked).token}` : undefined })}
       ${P.contact(d, r.app.csrf, leadId, settings, r.app.mock)}${P.statusCard(d, r.app.csrf, leadId)}${P.docs(d, r.app.csrf, leadId, { demos, offer, order, templates: allTemplates().map((t) => ({ key: t.key, label: t.label })), recommended: rec, baseUrl: r.app.baseUrl })}
       ${P.dimensions(d)}${P.profile(d)}${P.audit(d)}
       <details class="card"><summary>Datenschutz (DSGVO)</summary><p class="mute">Auskunft: alle zu diesem Unternehmen gespeicherten Daten. Löschung: entfernt den Lead und setzt ihn auf die Sperrliste. Kunden mit Auftrag können nicht gelöscht werden (Aufbewahrungspflichten).</p>

@@ -106,7 +106,7 @@ export function renderDemo(c: SiteContent, t: Template, agency: AgencyInfo, h: D
 ${heroHtml(c, t, 'demo', h)}
 <main>${sections}
 <section><div class="wrap"><div class="notes"><b>Was dieser Entwurf zeigt</b><ul>${covers.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
-${h.sources?.length ? `<small>Angaben zum Unternehmen stammen aus öffentlichen Quellen (${esc(h.sources.join(', '))}) und wurden nicht geprüft.</small>` : ''}</div></div></section></main>
+${h.sources?.length ? `<small>Angaben zum Unternehmen stammen aus öffentlichen Quellen (${esc(h.sources.map((x: string) => (x === 'osm' ? 'OpenStreetMap-Mitwirkende, ODbL' : x)).join(', '))}) und wurden nicht geprüft.</small>` : ''}</div></div></section></main>
 <footer><div class="wrap">Diese Demo dient nur der Ansicht und wurde ohne Beauftragung erstellt. Texte sind Platzhalter, Bilder sind nicht enthalten. Rückfragen: ${esc(agency.contactEmail)}</div></footer>
 ${stickyBar(c, t)}`;
   return page(t, `Demo: ${c.companyName}`, fill(t.seo.descriptionFormat, V), body, true);

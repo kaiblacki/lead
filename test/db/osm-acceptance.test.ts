@@ -15,7 +15,7 @@ let app: App; let origFetch: typeof fetch; let runId = '';
 const T = (id: number, tags: Record<string, string>, extra: object = {}) => ({ type: 'node', id, lat: 49.25 + id / 1000, lon: 6.85 + id / 1000, tags, ...extra });
 const OVERPASS = { elements: [
   T(1, { name: 'Nail Atelier Völklingen', shop: 'beauty', beauty: 'nails', phone: '+49 6898 111111', website: 'https://nail-atelier-voelklingen.example', 'addr:street': 'Rathausstraße', 'addr:housenumber': '3', 'addr:postcode': '66333', 'addr:city': 'Völklingen' }),
-  T(2, { name: 'Nagelstudio Sonja', shop: 'beauty', beauty: 'nails', phone: '06898 222222', 'addr:street': 'Hauptstraße', 'addr:housenumber': '9', 'addr:city': 'Völklingen' }),
+  T(2, { name: 'Nagelstudio Sonja', shop: 'beauty', beauty: 'nails', phone: '06898 222222', opening_hours: 'Mo-Fr 10:00-18:00; Sa 10:00-16:00; PH,Su off', 'addr:street': 'Hauptstraße', 'addr:housenumber': '9', 'addr:city': 'Völklingen' }),
   T(3, { name: 'Glamour Nails', shop: 'beauty', beauty: 'nails' }),                    // nur Name + Ort: weder Telefon noch Website noch Adresse
   T(4, { name: 'Kosmetik Müller', shop: 'beauty', phone: '06898 444444', 'addr:street': 'Bahnhofstraße', 'addr:city': 'Großrosseln' }),
   { type: 'way', id: 5, center: { lat: 49.3, lon: 6.9 }, tags: { name: 'Beauty & Nails Lounge', shop: 'beauty', 'contact:phone': '+49 6898 555555', 'contact:website': 'https://lounge.example', 'addr:city': 'Püttlingen' } },
@@ -107,4 +107,20 @@ test('Abnahme-Bericht: Zahlen stimmen mit der Datenbank überein; es wurde nicht
   assert.equal((app.ctx.registry.providers.email as any).sent.length, 0); assert.equal((app.ctx.registry.providers.whatsapp as any).sent.length, 0);
   assert.equal((await app.pool.query('select count(*)::int n from outbox where owner_id=$1', [OWNER])).rows[0].n, 0);
   assert.equal((await app.pool.query('select count(*)::int n from payments where owner_id=$1', [OWNER])).rows[0].n, 0);
+});
+
+test('Kreislauf im Browser-Stil: Lead öffnen → Demo erstellen → Demo ansehen → Kontaktvorlage → Status ändern', { skip }, async () => {
+  const lead = (await app.pool.query("select id from leads where company_name='Nagelstudio Sonja' and owner_id=$1", [OWNER])).rows[0].id;
+  const before = app.text(await (await app.get(`/leads/${lead}`)).text());
+  assert.match(before, /Kontaktvorlagen \(Entwürfe\)/); assert.match(before, /Erst „Demo erstellen“/);
+  assert.match(await app.follow(await app.post(`/leads/${lead}/demo`, { template: 'auto' })), /Demo erstellt/);
+  const tok = (await app.pool.query('select token from demos where lead_id=$1 and not revoked', [lead])).rows[0].token;
+  const demo = await app.get(`/d/${tok}`, false); const html = app.text(await demo.text());
+  assert.equal(demo.status, 200); assert.match(html, /Nagelstudio Sonja/); assert.match(html, /Hauptstraße 9/); assert.match(html, /06898 222222/);
+  assert.match(html, /Mo–Fr: 10:00–18:00 Uhr/); assert.match(html, /Feiertage, So: geschlossen/); assert.match(html, /OpenStreetMap-Mitwirkende, ODbL/); assert.doesNotMatch(html, /\(osm\)|PH,Su/);
+  assert.match(html, /Unverbindliche Demo/);
+  const after = await (await app.get(`/leads/${lead}`)).text();
+  assert.ok(after.includes(`/d/${tok}`), 'Demo-Link steht in der E-Mail-Vorlage'); assert.match(app.text(after), /Follow-up nach 4 Tagen/);
+  assert.match(await app.follow(await app.post(`/leads/${lead}/status`, { to: 'CONTACTED', reason: 'Erstkontakt per Telefon' })), /Status: CONTACTED/);
+  assert.equal((await app.pool.query('select status from leads where id=$1', [lead])).rows[0].status, 'CONTACTED');
 });

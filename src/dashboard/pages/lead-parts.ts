@@ -1,3 +1,4 @@
+import { buildContactTemplates } from '../../sales/templates.ts';
 import { enrichment, orNA, NA, sourceLabel } from '../../core/enrichment.ts';
 import { html, raw, type Safe, categoryBadge, eur, fmt, fmtDate, mockBadge, postBtn, postForm, prioBadge, readinessBadge, scoreBar, statusBadge, STATE_TEXT } from '../ui.ts';
 import { FACT_LABELS, FACT_ORDER, findConflicts, type Fact, type FactKey } from '../../core/profile.ts';
@@ -71,6 +72,16 @@ export function sales(d: any, csrf: string, id: string): Safe {
     ${s.approved_at ? '' : postBtn(csrf, `/leads/${id}/brief/approve`, 'Einstieg freigeben', { cls: 'ok' })}
     <h3>Mögliche Einwände</h3><ul>${b.objections.map((o: any) => html`<li><b>${o.objection}</b><br>${o.response}</li>`)}</ul>
     <h3>Passende nächste Aktion</h3><p>${b.nextAction.text}</p></div>`;
+}
+
+/** Kontaktvorlagen: E-Mail-Entwurf, Follow-up, Telefon-Einstieg – nur Entwürfe zum Kopieren, es wird nichts gesendet. */
+export function templatesCard(d: any, o: { sender?: string; demoUrl?: string }): Safe {
+  const b = d.sales?.brief; if (!b) return html``;
+  const t = buildContactTemplates({ company: d.lead.company_name, reasons: b.reasons.map((r: any) => r.text), service: b.service.name, sender: o.sender, demoUrl: o.demoUrl, opener: d.sales.opener });
+  const box = (label: string, text: string, rows: number) => html`<label>${label}<textarea readonly rows="${rows}">${text}</textarea></label>`;
+  return html`<details class="card" id="vorlagen"><summary><b>Kontaktvorlagen (Entwürfe)</b></summary>
+    <p class="mute">Nur zum Kopieren – das System sendet nichts. E-Mail an Unternehmen nur mit Einwilligung (UWG § 7).${o.demoUrl ? '' : ' Erst „Demo erstellen“, dann steht der Demo-Link in der E-Mail.'}${o.sender ? '' : ' Deinen Namen unter Einstellungen → Telefonakquise eintragen, dann erscheint er als Absender.'}</p>
+    ${box('Telefon-Einstieg', t.phoneOpener, 4)}${box(`E-Mail – Betreff: ${t.email.subject}`, t.email.text, 11)}${box(`Follow-up nach ${t.followUp.afterDays} Tagen – Betreff: ${t.followUp.subject}`, t.followUp.text, 8)}</details>`;
 }
 
 export function contact(d: any, csrf: string, id: string, settings: { phoneEnabled: boolean }, mockMode: boolean): Safe {
