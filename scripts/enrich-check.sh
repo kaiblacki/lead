@@ -8,6 +8,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 DRY=0; for a in "$@"; do case "$a" in --dry-run) DRY=1 ;; --help|-h) exec node src/enrich/check-cli.ts --help ;; esac; done
+[ -d node_modules/pg ] || { echo "Abhängigkeiten fehlen – npm install …" >&2; npm install --no-audit --no-fund >&2; }
 # Ohne Schlüssel (und ohne --dry-run) erklärt das Prüfskript, wo er hingehört – ohne Datenbank oder Netz anzufassen.
 if [ "$DRY" = 0 ] && [ -z "${BRAVE_SEARCH_API_KEY:-}" ]; then exec node src/enrich/check-cli.ts "$@"; fi
 if [ -z "${DATABASE_URL:-}" ]; then
