@@ -40,8 +40,10 @@ export class OsmPlacesProvider implements PlacesProvider {
   private async call(url: string, init: RequestInit, name: string): Promise<Response> {
     let res: Response;
     for (let attempt = 0; ; attempt++) {
-      await this.throttle(); res = await fetch(url, init);
-      if (![429, 502, 503, 504].includes(res.status) || attempt >= 2) return res;
+      await this.throttle();
+      try { res = await fetch(url, init); }
+      catch (e) { if (attempt >= 3) throw e; await new Promise((r) => setTimeout(r, 5000 * (attempt + 1))); continue; }   // Verbindungsabbruch/Zeitüberschreitung: später erneut
+      if (![429, 502, 503, 504].includes(res.status) || attempt >= 3) return res;
       const ra = Number(res.headers.get('retry-after')); await new Promise((r) => setTimeout(r, Math.min(60_000, (Number.isFinite(ra) && ra > 0 ? ra : 5 * 3 ** attempt) * 1000)));
     }
     void name;
