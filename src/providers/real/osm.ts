@@ -103,7 +103,7 @@ export class OsmPlacesProvider implements PlacesProvider {
   }
 
   /** Overpass-Server (öffentlich, geteilt): bei Überlastung/Zeitüberschreitung der Reihe nach probieren. Ein Fehler wird gemeldet – nie als „0 Treffer“ ausgegeben. */
-  static ENDPOINTS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
+  static ENDPOINTS = ['https://overpass-api.de/api/interpreter', 'https://overpass.openstreetmap.fr/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
   private async overpass(data: string): Promise<El[]> {
     const cached = this.cacheGet<El[]>(data); if (cached) return cached;
     const errors: string[] = [];

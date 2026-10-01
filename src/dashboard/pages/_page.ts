@@ -6,7 +6,7 @@ import { OSM_ATTRIBUTION } from '../../core/enrichment.ts';
 import { findPlaceholders } from '../../core/text.ts';
 
 export function render(r: Req, o: { title: string; nav: NavKey; body: Safe; status?: number }): Res {
-  return { status: o.status, body: layout({ title: o.title, nav: o.nav, body: o.body, csrf: r.app.csrf, killSwitch: r.killSwitch, mock: r.app.mock, flash: r.flash, attribution: r.ctx.registry.providers.places.name === 'osm' ? OSM_ATTRIBUTION : undefined }) };
+  return { status: o.status, body: layout({ title: o.title, nav: o.nav, body: o.body, csrf: r.app.csrf, killSwitch: r.killSwitch, mock: r.app.mock, flash: r.flash, liveData: !r.ctx.registry.providers.places.isMock, attribution: r.ctx.registry.providers.places.name === 'osm' ? OSM_ATTRIBUTION : undefined }) };
 }
 export const redirect = (path: string, flash?: Flash): Res => ({ redirect: path, flash: flash ?? undefined });
 export const okFlash = (text: string): Flash => ({ kind: 'ok', text });

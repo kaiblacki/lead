@@ -53,13 +53,13 @@ const NAV: [NavKey, string, string][] = [['home', '/', 'Start'], ['today', '/tod
 
 export type Flash = { kind: 'ok' | 'err'; text: string } | null;
 
-export function layout(o: { title: string; nav: NavKey; body: Safe; csrf: string; killSwitch: boolean; mock: boolean; flash?: Flash; hostingMock?: boolean; attribution?: string }): Safe {
+export function layout(o: { title: string; nav: NavKey; body: Safe; csrf: string; killSwitch: boolean; mock: boolean; flash?: Flash; hostingMock?: boolean; attribution?: string; liveData?: boolean }): Safe {
   return html`<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>${o.title} – Agency OS</title><style>${raw(CSS)}</style></head><body>
 <header class="top"><div class="bar"><span class="brand">Agency OS</span>
 <nav aria-label="Hauptnavigation">${NAV.map(([k, href, label]) => html`<a href="${href}" class="${o.nav === k ? 'on' : ''}">${label}</a>`)}</nav>
 <form method="post" action="/killswitch"><input type="hidden" name="csrf" value="${o.csrf}"><input type="hidden" name="on" value="${o.killSwitch ? '0' : '1'}"><button class="${o.killSwitch ? 'ok' : 'danger'}" title="${o.killSwitch ? 'Automatisierung wieder erlauben' : 'Alle automatischen Läufe stoppen'}">${o.killSwitch ? 'Fortsetzen' : 'STOP'}</button></form></div>
 ${o.killSwitch ? html`<div class="banner kill">KILL SWITCH AKTIV – keine Suchläufe, Analysen oder Wartungsprüfungen</div>` : ''}
-${o.mock ? html`<div class="banner mock">MOCK-MODUS – Testdaten, keine echten Unternehmen, Zahlungen oder Nachrichten</div>` : ''}</header>
+${o.mock ? (o.liveData ? html`<div class="banner mock">ECHTE FIRMENDATEN – KI, Zahlung, E-Mail und WhatsApp sind Mock: es wird nichts gesendet oder bezahlt</div>` : html`<div class="banner mock">MOCK-MODUS – Testdaten, keine echten Unternehmen, Zahlungen oder Nachrichten</div>`) : ''}</header>
 <main>${o.flash ? html`<div class="flash ${o.flash.kind}" role="status">${o.flash.text}</div>` : ''}<h1>${o.title}</h1>${o.body}</main>${o.attribution ? html`<footer class="attrib">${o.attribution} · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">openstreetmap.org/copyright</a></footer>` : ''}</body></html>`;
 }
 
