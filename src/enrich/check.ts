@@ -1,6 +1,7 @@
 import type { Context } from '../context.ts';
 import { WebSearchError, type Money, type WebSearchProvider, type WebSearchResult } from '../sources/types.ts';
-import { ENRICH_LABEL, VERIFY_LABEL, toEurCents, type EnrichOutcome, type EnrichTrace } from './service.ts';
+import { ENRICH_LABEL, NOT_OWN_SITE, VERIFY_LABEL, toEurCents, type EnrichOutcome, type EnrichTrace } from './service.ts';
+import { hostOf } from '../core/text.ts';
 import type { BudgetStatus } from './budget.ts';
 import { normalizeCriteria } from '../search/criteria.ts';
 import { CONTACTABILITY_LABEL } from '../contact/contactability.ts';
@@ -37,17 +38,23 @@ export type LeadSnap = {
   phone: string | null; email: string | null; demoRecommendation: string | null; demoReason: string | null; demoApproval: string; demoCount: number;
   enrichmentStatus: string | null; candidate: string | null; candidateConfidence: number | null; candidateVerdict: string | null; facts: FactRow[];
 };
-export type Safety = { demos: number; outbox: number; approvalsOther: number; approvalsAdvanced: number; stages: Record<string, string> };
+export type Safety = { demos: number; outbox: number; contacts: number; approvalsOther: number; approvalsAdvanced: number; stages: Record<string, string>; emailStates: Record<string, string> };
 /** Stufen, die eine Handlung bedeuten (Demo, Kontakt, Angebot …) – die Anreicherung darf keinen Lead dorthin bewegen. NEW/ANALYZING/QUALIFIED/IGNORED/RECHECK sind reine Systemzustände der Analyse. */
 const SYSTEM_STAGES = ['NEW', 'ANALYZING', 'QUALIFIED', 'IGNORED', 'RECHECK'];
 export type LeadReport = {
   leadId: string; name: string; picked: string; skipped?: string; before: LeadSnap; after: LeadSnap | null; newFacts: FactRow[];
   outcome: { status: string; label: string; note: string; requests: number; providerCost: Money; costEurCents: number; verification?: string; confidence?: number; candidate?: string; found: string[] } | null; trace?: EnrichTrace;
 };
+export type Check = { id: 'namesake' | 'directory' | 'demo' | 'sent' | 'limit' | 'cost'; title: string; ok: boolean; summary: string; details: string[] };
+export type Decision = { total: number; verified: number; likely: number; uncertain: number; rejected: number; notFound: number; usable: string[]; threshold: number; met: boolean; avgRequests: number | null };
+/** Mindestzahl „brauchbarer“ Leads (von 5), ab der die Pipeline für die übrigen Leads empfohlen werden kann. */
+export const CHECK_USABLE_MIN = 3;
 export type CheckReport = {
   startedAt: string; runId: string; dryRun: boolean; provider: string; pricing: string; eurPerUsd: number; capRequests: number; attempts: number; requests: number;
   providerCost: Money; costEurCents: number; budgetBefore: BudgetStatus; budgetAfter: BudgetStatus; leads: LeadReport[]; warnings: string[]; stoppedBy?: string;
   safety: { ok: boolean; before: Safety; after: Safety; violations: string[] };
+  /** Prüfliste (maschinell) und Entscheidungshilfe – nur beim echten Lauf. */
+  checks?: Check[]; decision?: Decision;
   extrapolation: { remaining: number; avgRequestsPerLead: number | null; expectedRequests: number | null; expectedUsd: number | null; expectedEurCents: number | null; worstRequests: number; worstUsd: number; worstEurCents: number; dailyRequestsFit: number };
 };
 
@@ -78,9 +85,10 @@ async function safety(ctx: Context, ids: string[]): Promise<Safety> {
   const pool = ctx.repo.pool, owner = ctx.repo.ownerId;
   const n = async (sql: string, a: unknown[] = []) => Number((await pool.query(sql, [owner, ...a])).rows[0].n);
   return {
-    demos: await n('select count(*)::int n from demos where owner_id=$1'), outbox: await n('select count(*)::int n from outbox where owner_id=$1'),
+    demos: await n('select count(*)::int n from demos where owner_id=$1'), outbox: await n('select count(*)::int n from outbox where owner_id=$1'), contacts: await n('select count(*)::int n from contact_history where owner_id=$1'),
     approvalsOther: await n("select count(*)::int n from approvals where owner_id=$1 and action <> 'DEMO_CREATE'"), approvalsAdvanced: await n("select count(*)::int n from approvals where owner_id=$1 and state in ('AWAITING_APPROVAL','APPROVED','COMPLETED')"),
     stages: Object.fromEntries((await pool.query('select id, status from leads where owner_id=$1 and id = any($2)', [owner, ids])).rows.map((r) => [r.id, r.status as string])),
+    emailStates: Object.fromEntries((await pool.query('select id, email_send_status s from leads where owner_id=$1 and id = any($2)', [owner, ids])).rows.map((r) => [r.id, r.s as string])),
   };
 }
 
@@ -116,6 +124,73 @@ export async function ensureRun(ctx: Context, o: { start: boolean }): Promise<{ 
   const run = await ctx.runs.get(id); const n = Number((await pool.query('select count(*)::int n from leads where run_id=$1', [id])).rows[0].n);
   if (!run || run.status !== 'DONE' || !n) throw new Error(`Der Suchlauf lieferte keine Leads (Status ${run?.status ?? '–'}${run?.error ? `: ${run.error}` : ''}). Meist ist der öffentliche OSM-Server (Overpass) gerade nicht erreichbar – später erneut versuchen.`);
   return { runId: id, created: true, leads: n };
+}
+
+const LOCATION_EVIDENCE = /Ort stimmt|PLZ stimmt|Straße und Hausnummer stimmen|am OSM-Standort|in der Nähe des OSM-Standorts|Telefonnummer stimmt überein/;
+const LOCATION_WARNING = /anderer Stadt|entfernt/;
+/** Angaben, die nur direkt von der geprüften Firmenwebsite stammen dürfen (nie aus Suchtreffern oder Verzeichnissen). */
+const SITE_ONLY_KEYS = ['phone', 'email', 'contactForm', 'whatsapp', 'contactPerson', 'address', 'postalCode', 'city', 'openingHours'];
+
+/**
+ * Die Prüfpunkte des Echttests, maschinell: Namensvetter, Verzeichnisdaten, Demo, Versand, Anfragen-Obergrenze, Kosten in USD – plus die Entscheidungshilfe
+ * („brauchbar“ = plausibel verifizierte Website UND mindestens ein neuer Kontaktweg – Telefon, E-Mail oder Kontaktformular – direkt von dieser Website).
+ * Rein (ohne Datenbank), damit sie getestet werden kann. Ob eine Seite wirklich zur Firma gehört, bleibt eine Gegenprobe an den URLs.
+ */
+export function buildChecks(i: { leads: LeadReport[]; requests: number; attempts: number; cap: number; usdPerRequest: number; log: { requests: number; amount: number; currencies: string[] }; safety: CheckReport['safety'] }): { checks: Check[]; decision: Decision } {
+  const accepted = (r: LeadReport) => (r.after?.website && r.newFacts.some((f) => f.key === 'website' && f.source === 'web-search') ? hostOf(r.after.website) : null);
+  // 1) Namensvetter
+  const nd: string[] = []; let nOk = true;
+  for (const r of i.leads) {
+    const host = accepted(r); const c = host ? r.trace?.candidates.find((x) => hostOf(x.url) === host) : undefined;
+    if (host) {
+      const ev = c?.why.filter((w) => LOCATION_EVIDENCE.test(w)) ?? [], bad = c?.warnings.filter((w) => LOCATION_WARNING.test(w)) ?? [];
+      if (!c || !ev.length || bad.length) { nOk = false; nd.push(`✘ ${r.name}: ${host} ohne ausreichenden Orts-/Standortbeleg${bad.length ? ` (${bad.join('; ')})` : ''}`); }
+      else nd.push(`✔ ${r.name}: ${host} (${VERIFY_LABEL[c.verification]}, ${c.confidence}/100) – ${ev.join('; ')}`);
+    }
+    for (const c of r.trace?.candidates ?? []) if (c.verification !== 'VERIFIED' && c.verification !== 'LIKELY' && c.warnings.some((w) => LOCATION_WARNING.test(w))) nd.push(`✔ ${r.name}: Namensvetter abgewiesen – ${c.host} (${c.warnings.filter((w) => LOCATION_WARNING.test(w)).join('; ')})`);
+  }
+  if (!nd.length) nd.push('Keine Website übernommen und kein Namensvetter aufgetaucht – es gab nichts falsch zuzuordnen.');
+  nd.push('Maschinell geprüft ist der Orts-/Standortbeleg jeder übernommenen Website; ob sie wirklich zur Firma gehört, bitte an den URLs gegenlesen.');
+  // 2) keine Verzeichnisdaten
+  const dd: string[] = []; let dOk = true; const bad = (m: string) => { dOk = false; dd.push(`✘ ${m}`); };
+  for (const r of i.leads) {
+    const host = accepted(r);
+    for (const f of r.newFacts) {
+      const h = f.sourceUrl ? hostOf(f.sourceUrl) : null;
+      if (SITE_ONLY_KEYS.includes(f.key) && f.source !== 'website-crawl') bad(`${r.name}: ${f.key} stammt aus „${f.source}“ statt direkt von der Website`);
+      else if (SITE_ONLY_KEYS.includes(f.key) && (!host || h !== host)) bad(`${r.name}: ${f.key} stammt von ${h ?? 'unbekannter Seite'}, nicht von der übernommenen Website`);
+      if ((f.key === 'website' || f.key === 'websiteCandidate') && h && NOT_OWN_SITE.test(`${h}.`)) bad(`${r.name}: ${f.key} zeigt auf Verzeichnis/Portal ${h}`);
+      if (f.key === 'social' && f.source === 'web-search' && f.quality !== 'low') bad(`${r.name}: Social-Profil aus der Suche nicht als „ungeprüft“ (low) gespeichert`);
+    }
+  }
+  const dirHosts = new Set<string>(); let dirHits = 0;
+  for (const r of i.leads) for (const q of r.trace?.queries ?? []) for (const h of q.hits) if (/Verzeichnis\/Portal/.test(h.note ?? '')) { dirHits++; dirHosts.add(hostOf(h.url) ?? h.url); }
+  if (dOk) dd.push(`Alle neuen Telefon-/E-Mail-/Kontaktformular-Angaben stammen direkt von der übernommenen Website (website-crawl); aus Suchtreffern wurden nur Website-Adresse und ungeprüfte Social-Profile gespeichert.`);
+  dd.push(`${dirHits} Verzeichnis-/Portal-Treffer in den Suchergebnissen${dirHosts.size ? ` (${[...dirHosts].slice(0, 6).join(', ')}${dirHosts.size > 6 ? ' …' : ''})` : ''} wurden nur gezählt – keine Daten daraus übernommen.`);
+  // 3) Demo / 4) Versand
+  const s = i.safety; const dv = s.violations;
+  const demoOk = s.after.demos === s.before.demos && s.after.approvalsAdvanced === s.before.approvalsAdvanced;
+  const sentOk = s.after.outbox === s.before.outbox && s.after.contacts === s.before.contacts && s.after.approvalsOther === s.before.approvalsOther && !dv.some((v) => /E-Mail-Status|Vertriebsstatus/.test(v));
+  // 5) Anfragen-Obergrenze / 6) Kosten in USD
+  const limitOk = i.requests <= i.cap && i.attempts <= i.cap; const expect = Math.round(i.requests * i.usdPerRequest * 1e6) / 1e6;
+  const costOk = i.log.requests === i.requests && Math.abs(i.log.amount - expect) < 1e-6 && i.log.currencies.every((c) => c === 'USD');
+  const checks: Check[] = [
+    { id: 'namesake', title: 'Wurde kein Namensvetter falsch zugeordnet?', ok: nOk, summary: nOk ? 'ja – jede übernommene Website hat einen Orts-/Standortbeleg, Namensvettern in anderer Stadt/Region wurden abgewiesen' : 'NEIN – siehe Details', details: nd },
+    { id: 'directory', title: 'Wurden keine Verzeichnisdaten ungeprüft übernommen?', ok: dOk, summary: dOk ? 'ja – nichts aus Verzeichnissen/Portalen übernommen' : 'NEIN – siehe Details', details: dd },
+    { id: 'demo', title: 'Wurde keine Demo erstellt?', ok: demoOk, summary: demoOk ? `ja – Demos ${s.before.demos} → ${s.after.demos}, keine Freigabe über „empfohlen“ hinaus` : `NEIN – Demos ${s.before.demos} → ${s.after.demos}`, details: [] },
+    { id: 'sent', title: 'Wurde nichts gesendet?', ok: sentOk, summary: sentOk ? `ja – Postausgang ${s.before.outbox} → ${s.after.outbox}, Kontaktprotokoll ${s.before.contacts} → ${s.after.contacts}, kein E-Mail-/Vertriebsstatus geändert` : 'NEIN – siehe Sicherheitsprüfung', details: sentOk ? [] : dv },
+    { id: 'limit', title: 'Wurde das Anfragen-Limit eingehalten?', ok: limitOk, summary: `${limitOk ? 'ja' : 'NEIN'} – ${i.requests} Anfragen verbraucht, ${i.attempts} Versuche, Obergrenze ${i.cap}`, details: [] },
+    { id: 'cost', title: 'Sind die Kosten korrekt in USD protokolliert?', ok: costOk, summary: costOk ? `ja – ${i.requests} × ${String(i.usdPerRequest).replace('.', ',')} USD = ${String(expect).replace('.', ',')} USD; Protokoll: ${i.log.requests} Anfragen, ${String(Math.round(i.log.amount * 1e6) / 1e6).replace('.', ',')} USD, Währung ${i.log.currencies.join('/') || '–'}` : `NEIN – erwartet ${expect} USD für ${i.requests} Anfragen, Protokoll: ${i.log.requests} Anfragen, ${i.log.amount} (${i.log.currencies.join('/') || '–'})`, details: [] },
+  ];
+  // Entscheidungshilfe
+  let verified = 0, likely = 0, uncertain = 0, rejected = 0, notFound = 0; const usable: string[] = [];
+  for (const r of i.leads) {
+    if (!r.outcome || !r.after) continue; const host = accepted(r);
+    if (host) { if (r.outcome.verification === 'VERIFIED') verified++; else likely++; if (r.newFacts.some((f) => ['phone', 'email', 'contactForm'].includes(f.key) && f.source === 'website-crawl')) usable.push(r.name); }
+    else if (r.after.candidateVerdict === 'UNCERTAIN') uncertain++; else if (r.after.candidateVerdict === 'REJECTED') rejected++; else notFound++;
+  }
+  const done = i.leads.filter((r) => r.outcome && r.outcome.requests > 0);
+  return { checks, decision: { total: i.leads.length, verified, likely, uncertain, rejected, notFound, usable, threshold: CHECK_USABLE_MIN, met: usable.length >= CHECK_USABLE_MIN, avgRequests: done.length ? i.requests / done.length : null } };
 }
 
 export type CheckOptions = { runId: string; names?: string[]; maxLeads?: number; maxRequests?: number; dryRun?: boolean; /** gleiche Suche trotz Zwischenspeicher wiederholen (kostet erneut Anfragen) */ ignoreCache?: boolean; /** Fortschrittsmeldungen (die Prüfung kann einige Minuten dauern) */ onProgress?: (msg: string) => void };
@@ -156,17 +231,24 @@ export async function runEnrichmentCheck(ctx: Context, o: CheckOptions): Promise
   const sAfter = await safety(ctx, ids); const violations: string[] = [];
   if (sAfter.demos !== sBefore.demos) violations.push(`Anzahl Demos geändert (${sBefore.demos} → ${sAfter.demos})`);
   if (sAfter.outbox !== sBefore.outbox) violations.push(`Postausgang geändert (${sBefore.outbox} → ${sAfter.outbox})`);
+  if (sAfter.contacts !== sBefore.contacts) violations.push(`Kontaktprotokoll geändert (${sBefore.contacts} → ${sAfter.contacts})`);
+  for (const id of ids) if (sAfter.emailStates[id] !== sBefore.emailStates[id]) violations.push(`E-Mail-Status von „${reports.find((r) => r.leadId === id)?.name}“ geändert (${sBefore.emailStates[id]} → ${sAfter.emailStates[id]})`);
   if (sAfter.approvalsOther !== sBefore.approvalsOther) violations.push(`Freigaben für E-Mail/Follow-up/Veröffentlichung/Premium entstanden (${sBefore.approvalsOther} → ${sAfter.approvalsOther})`);
   if (sAfter.approvalsAdvanced !== sBefore.approvalsAdvanced) violations.push(`Freigaben über „empfohlen“ hinaus (${sBefore.approvalsAdvanced} → ${sAfter.approvalsAdvanced})`);
   for (const id of ids) { const x = sBefore.stages[id], y = sAfter.stages[id]; if (x !== y && (!SYSTEM_STAGES.includes(x) || !SYSTEM_STAGES.includes(y))) violations.push(`Vertriebsstatus von „${reports.find((r) => r.leadId === id)?.name}“ geändert (${x} → ${y})`); }
   const budgetAfter = await svc.budget.status(ctx.now());
+  let checks: Check[] | undefined, decision: Decision | undefined;
+  if (!dryRun) {
+    const row = (await ctx.repo.pool.query('select coalesce(sum(requests),0)::int r, coalesce(sum(provider_cost_amount),0)::float a, coalesce(array_agg(distinct provider_cost_currency) filter (where requests > 0), \'{}\') c from enrichment_log where owner_id=$1 and lead_id = any($2) and created_at >= $3', [ctx.repo.ownerId, ids, startedAt])).rows[0];
+    ({ checks, decision } = buildChecks({ leads: reports, requests, attempts, cap, usdPerRequest: P.usdPerThousandRequests / 1000, log: { requests: row.r, amount: row.a, currencies: row.c }, safety: { ok: !violations.length, before: sBefore, after: sAfter, violations } }));
+  }
   const remaining = Number((await ctx.repo.pool.query("select count(*)::int n from leads where owner_id=$1 and run_id=$2 and work_status='DATA_NEEDED' and not (id = any($3))", [ctx.repo.ownerId, o.runId, ids])).rows[0].n);
   const done = reports.filter((r) => r.outcome && r.outcome.requests > 0); const avg = done.length ? requests / done.length : null; const usdPer = P.usdPerThousandRequests / 1000; const eurPer = toEurCents({ amount: usdPer, currency: P.currency }, svc.eurPerUsd);
   const worst = remaining * E.maxQueriesPerLead;
   return {
     startedAt, runId: o.runId, dryRun, provider: svc.provider.name, pricing: `${P.usdPerThousandRequests} ${P.currency} je 1.000 Anfragen = ${String(usdPer).replace('.', ',')} ${P.currency} je Anfrage`, eurPerUsd: svc.eurPerUsd, capRequests: cap, attempts, requests,
     providerCost: usd > 0 || !eur ? { amount: usd, currency: 'USD' } : { amount: eur, currency: 'EUR' }, costEurCents: eurCents, budgetBefore, budgetAfter, leads: reports, warnings, stoppedBy,
-    safety: { ok: !violations.length, before: sBefore, after: sAfter, violations },
+    safety: { ok: !violations.length, before: sBefore, after: sAfter, violations }, checks, decision,
     extrapolation: { remaining, avgRequestsPerLead: avg, expectedRequests: avg === null ? null : Math.round(avg * remaining), expectedUsd: avg === null ? null : Math.round(avg * remaining * usdPer * 1e4) / 1e4, expectedEurCents: avg === null ? null : Math.round(avg * remaining * eurPer * 100) / 100,
       worstRequests: worst, worstUsd: Math.round(worst * usdPer * 1e4) / 1e4, worstEurCents: Math.round(worst * eurPer * 100) / 100, dailyRequestsFit: eurPer > 0 ? Math.floor(budgetAfter.todayLeftCents / eurPer) : 0 },
   };
@@ -251,7 +333,24 @@ export function renderReport(r: CheckReport): string {
   L.push('', `**Anfragen:** ${r.requests} verbraucht (Obergrenze ${r.capRequests}, gesendete Versuche ${r.attempts}) · **Gesamtkosten:** ${money(r.providerCost)} ≈ ${fmtCents(r.costEurCents)} ≈ ${eur(r.costEurCents)}`, '',
     `**Budget (intern, EUR):** Monat ${eur(r.budgetBefore.monthSpentCents)} → ${eur(r.budgetAfter.monthSpentCents)} von ${eur(r.budgetAfter.monthlyLimitCents)} · heute ${eur(r.budgetBefore.todaySpentCents)} → ${eur(r.budgetAfter.todaySpentCents)} von ${eur(r.budgetAfter.dailyLimitCents)}`, '');
   const s = r.safety; L.push('## Sicherheitsprüfung', '', s.ok ? `Keine Demo erstellt (${s.before.demos} → ${s.after.demos}), keine Nachricht im Postausgang (${s.before.outbox} → ${s.after.outbox}), keine Freigabe für E-Mail/Follow-up/Veröffentlichung/Premium, keine Freigabe über „empfohlen“ hinaus, kein Lead in eine Handlungsstufe (Kontakt, Demo, Angebot …) bewegt. ✔` : `**ABWEICHUNG:** ${s.violations.join('; ')}`, '');
+  if (r.checks) {
+    L.push('## Prüfliste (automatisch)', '', '| # | Prüfung | Ergebnis |', '|---|---|---|');
+    r.checks.forEach((c, i) => L.push(`| ${i + 1} | ${c.title} | ${c.ok ? '✔' : '✘'} ${cell(c.summary)} |`));
+    L.push('');
+    for (const c of r.checks) if (c.details.length) L.push(`**${c.title}**`, '', ...c.details.map((d) => `- ${d}`), '');
+  }
   L.push('## Je Lead', ''); r.leads.forEach((x, i) => L.push(...leadSection(x, i)));
+  if (r.decision) {
+    const d = r.decision, all = !!r.checks?.every((c) => c.ok); const bad = (r.checks ?? []).filter((c) => !c.ok).map((c) => c.title);
+    L.push('## Entscheidungshilfe (maschinell – die Gegenprobe der gefundenen URLs bleibt nötig)', '',
+      `- Ergebnis je Lead: verifiziert ${d.verified} · wahrscheinlich ${d.likely} · unsicher ${d.uncertain} · abgelehnt ${d.rejected} · nichts gefunden ${d.notFound} (von ${d.total}).`,
+      `- **Brauchbar** (plausibel verifizierte Website + mindestens ein neuer Kontaktweg – Telefon, E-Mail oder Kontaktformular – direkt von dieser Website): **${d.usable.length} von ${d.total}**${d.usable.length ? ` (${d.usable.join(', ')})` : ''} → Kriterium „mindestens ${d.threshold}“: **${d.met ? 'erfüllt' : 'nicht erfüllt'}**.`,
+      `- Prüfliste: ${all ? 'alle sechs Punkte in Ordnung' : `Abweichung bei: ${bad.join('; ')}`}.`,
+      d.met && all ? '- Maschinelle Empfehlung: Die Datenqualität reicht für die **kontrollierte** Anreicherung der übrigen Leads – aber erst nach ausdrücklicher Bestätigung; vorher die gefundenen Websites kurz gegenlesen.'
+        : !all ? '- Maschinelle Empfehlung: **Erst die Abweichung der Prüfliste klären** – die übrigen Leads nicht anreichern.'
+        : '- Maschinelle Empfehlung: Brave liefert hier zu wenig brauchbare Kontaktdaten. Nicht dieselben Suchanfragen für die übrigen Leads wiederholen (verbrennt Geld), stattdessen zusätzliche Enrichment-Quellen einbauen.',
+      '- **Danach STOPP:** Die übrigen Leads werden nicht ohne ausdrückliche Bestätigung angereichert.', '');
+  }
   const x = r.extrapolation; const ok = r.leads.filter((l) => l.outcome && l.outcome.requests > 0);
   L.push('## Hochrechnung für die übrigen Leads (nur Zahlen – es wird nichts gestartet)', '',
     `- Übrige DATA_NEEDED-Leads im Lauf: **${x.remaining}** (werden NICHT ohne ausdrückliche Bestätigung angereichert).`,

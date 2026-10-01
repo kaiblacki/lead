@@ -82,8 +82,13 @@ test('Prüfskript: genannte Leads zuerst, höchstens 5, aufgefüllt nach Priorit
   // Sicherheitsprüfung: keine Demo, keine Nachricht, nichts über „empfohlen“ hinaus
   assert.equal(rep.safety.ok, true, rep.safety.violations.join('; ')); assert.equal((await q(app, 'select count(*)::int n from demos where owner_id=$1'))[0].n, before.demos); assert.equal((await q(app, 'select count(*)::int n from outbox where owner_id=$1'))[0].n, before.outbox);
   assert.equal((await q(app, "select count(*)::int n from approvals where owner_id=$1 and (action<>'DEMO_CREATE' or state in ('AWAITING_APPROVAL','APPROVED','COMPLETED'))"))[0].n, 0);
+  // Prüfliste (maschinell) und Entscheidungshilfe – inklusive Abgleich der Kosten mit dem Protokoll in der Datenbank (USD)
+  assert.deepEqual(rep.checks!.map((c) => c.id), ['namesake', 'directory', 'demo', 'sent', 'limit', 'cost']); assert.ok(rep.checks!.every((c) => c.ok), JSON.stringify(rep.checks!.filter((c) => !c.ok)));
+  assert.match(rep.checks!.find((c) => c.id === 'cost')!.summary, new RegExp(`^ja – ${rep.requests} × 0,005 USD = `)); assert.match(rep.checks!.find((c) => c.id === 'namesake')!.details.join('\n'), /✔ Salon Ohneort: ohneort-salon\.example/);
+  assert.equal(rep.decision!.usable.length, 2, JSON.stringify(rep.decision)); assert.equal(rep.decision!.met, false, 'nur 2 von 5 brauchbar'); assert.equal(rep.decision!.verified + rep.decision!.likely, 2);
   // Bericht: Vorher/Nachher, Quellen je Angabe, Kosten mit Währung, Hochrechnung; JSON-tauglich; kein Schlüssel
-  const md = renderReport(rep); for (const s of ['VORHER → NACHHER', 'direkt von der Website', 'USD', 'EUR-Cent', 'work_status', 'website_score', 'sales_opportunity', 'Demo-Empfehlung', 'Instagram', 'Facebook', 'WhatsApp', 'Hochrechnung', 'Sicherheitsprüfung', nameOf(0), 'Salon Ohneort']) assert.ok(md.includes(s), s);
+  const md = renderReport(rep); for (const s of ['VORHER → NACHHER', 'direkt von der Website', 'USD', 'EUR-Cent', 'work_status', 'website_score', 'sales_opportunity', 'Demo-Empfehlung', 'Instagram', 'Facebook', 'WhatsApp', 'Hochrechnung', 'Sicherheitsprüfung', 'Prüfliste (automatisch)', 'Entscheidungshilfe', 'Danach STOPP', nameOf(0), 'Salon Ohneort']) assert.ok(md.includes(s), s);
+  assert.match(md, /\*\*2 von 5\*\*/); assert.match(md, /Kriterium „mindestens 3“: \*\*nicht erfüllt\*\*/);
   if (process.env.DUMP_CHECK_REPORT) writeFileSync(process.env.DUMP_CHECK_REPORT, md);   // nur zum Ansehen des Berichts beim Entwickeln
   assert.match(md, /Keine Demo erstellt/); assert.deepEqual(JSON.parse(JSON.stringify(rep)).leads.length, 5);
   const stillNeeded = rep.leads.filter((x) => x.after?.workStatus === 'DATA_NEEDED').length; const allNeeded = (await q(app, "select count(*)::int n from leads where owner_id=$1 and work_status='DATA_NEEDED'"))[0].n;
