@@ -34,7 +34,7 @@ export function runAudit(input: AuditInput): AuditReport {
   if (!crawl || !crawl.ok || !home || !home.html) {
     const why = crawl?.robotsBlocked ? 'robots.txt verbietet den Abruf' : crawl?.error ?? 'keine Antwort';
     return { ...base, status: 'UNREACHABLE', pagesAnalyzed: 0, finalUrl: crawl?.finalUrl, checks: [{ code: 'REACHABLE', category: 'technical', status: 'unknown', severity: 'high', summary: 'Website bei der Prüfung nicht erreichbar oder nicht abrufbar.', evidence: why }], quality: emptyQ, overallQuality: null, coverage: 0,
-      notes: ['Nicht zuverlässig beurteilbar – Prüfung später wiederholen.'] };
+      notes: [/HTTP (401|403|429|503)\b/.test(why) ? `Website vorhanden, aber der Abruf wird blockiert (${why.replace(/^.*?(HTTP \d+).*$/, '$1')}, häufig Bot-Schutz) – nicht zuverlässig beurteilbar; später oder mit Browser-Tiefenprüfung wiederholen. Es wird nichts geraten.` : 'Nicht zuverlässig beurteilbar – Prüfung später wiederholen.'] };
   }
 
   const checks: AuditCheck[] = [];
