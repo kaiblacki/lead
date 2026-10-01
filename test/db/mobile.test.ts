@@ -38,7 +38,7 @@ before(async () => {
   add('start', '/'); add('suche', '/search'); add('suchlauf', `/search/run/${runId}`); add('leads', '/leads'); add('leads-gefiltert', '/leads?status=QUALIFIED&category=HOT&sort=distance');
   add('lead-ohne-website', `/leads/${nosite.id}`); if (audited) add('lead-mit-audit', `/leads/${audited.id}`); add('lead-kunde', `/leads/${full.id}`); add('lead-demo', `/leads/${demo.id}`);
   add('calls', '/calls'); add('pipeline', '/pipeline'); add('auftraege', '/orders'); add('auftrag-zahlung', `/orders/${call.orderId}`); add('auftrag-freigabe', `/orders/${c2.orderId}`); add('auftrag-wartung', `/orders/${c1.orderId}`);
-  add('wartung', '/maintenance'); add('wartung-detail', `/maintenance/${c1.orderId}`); add('analytics', '/analytics'); add('einstellungen', '/settings'); add('audit-log', '/audit'); add('social', `/social/${social.id}`);
+  add('wartung', '/maintenance'); add('wartung-detail', `/maintenance/${c1.orderId}`); add('analytics', '/analytics'); add('einstellungen', '/settings'); add('postausgang', '/outbox'); add('audit-log', '/audit'); add('social', `/social/${social.id}`);
   add('kunde-freigabe', `/r/${c2.token}`, false); add('kunde-mock-zahlung', `/mock-pay/${payRef}`, false); add('kunde-demo', `/d/${demoToken}`, false); add('kunde-danke', '/danke', false); add('kunde-website', `/hosted/${slug}/`, false);
   browser = await chromium.launch({ executablePath: findChromium(), args: ['--no-sandbox'] });
 });

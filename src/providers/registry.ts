@@ -11,6 +11,7 @@ import { HttpCrawlerProvider } from './real/crawler.ts';
 import { PlaywrightRenderProvider, findChromium } from './real/render.ts';
 import { AnthropicProvider } from './real/ai.ts';
 import { StripeProvider } from './real/stripe.ts';
+import { SmtpEmailProvider } from './real/smtp.ts';
 import { FolderHostingProvider, VercelHostingProvider } from './real/hosting.ts';
 
 type Env = Record<string, string | undefined>;
@@ -52,7 +53,7 @@ export function createProviders(env: Env, o: RegistryOptions): Registry {
   const social = pick<SocialDataProvider>('social', null, () => new MockSocialDataProvider({ now }), '');
   const ai = pick<AIProvider>('ai', { ok: !!env.ANTHROPIC_API_KEY, why: 'ANTHROPIC_API_KEY fehlt', make: () => new AnthropicProvider(env.ANTHROPIC_MODEL, env.ANTHROPIC_API_KEY) }, () => new MockAIProvider(), 'Anthropic Messages API');
   const payments = pick<PaymentProvider>('payments', { ok: !!env.STRIPE_SECRET_KEY && !!env.STRIPE_WEBHOOK_SECRET, why: 'STRIPE_SECRET_KEY/STRIPE_WEBHOOK_SECRET fehlen', make: () => new StripeProvider(env.STRIPE_SECRET_KEY, env.STRIPE_WEBHOOK_SECRET) }, () => new MockStripeProvider(o.baseUrl), 'Stripe Checkout');
-  const email = pick<EmailProvider>('email', null, () => new MockEmailProvider(), '');
+  const email = pick<EmailProvider>('email', { ok: !!env.SMTP_HOST && !!env.SMTP_FROM, why: 'SMTP_HOST/SMTP_FROM fehlen', make: () => new SmtpEmailProvider({ host: env.SMTP_HOST!, port: Number(env.SMTP_PORT || 587), secure: env.SMTP_SECURE === '1' || env.SMTP_PORT === '465', user: env.SMTP_USER || undefined, pass: env.SMTP_PASS || undefined, from: env.SMTP_FROM! }) }, () => new MockEmailProvider(), 'SMTP');
   const whatsapp = pick<WhatsAppProvider>('whatsapp', null, () => new MockWhatsAppProvider(), '');
   const hosting = pick<HostingProvider>('hosting', { ok: true, why: '', make: () => (env.VERCEL_TOKEN ? new VercelHostingProvider(env.VERCEL_TOKEN, env.VERCEL_TEAM_ID) : new FolderHostingProvider(env.HOSTING_DIR || 'out/sites')) },
     () => mockHosting, env.VERCEL_TOKEN ? 'Vercel' : 'Ordner out/sites');

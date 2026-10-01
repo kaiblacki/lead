@@ -72,6 +72,12 @@ export const routes: Route[] = [
           ${(x.change_unclear ?? []).length ? html`<small class="mute"> Unklar: ${(x.change_unclear as string[]).join(' | ')}</small>` : ''}
           ${x.change_status !== 'APPLIED' && st === 'IN_PRODUCTION' ? postBtn(r.app.csrf, `/reviews/${x.id}/process`, 'Automatisch umsetzen (KI)') : ''}</li>`)}</ul>` : ''}</div>
 
+      <div class="card"><h2>E-Mail an den Kunden</h2>
+        ${postForm(r.app.csrf, `/orders/${orderId}/mail`, html`<div class="row"><label>Was senden?<select name="what"><option value="deposit">Anzahlungs-Link</option><option value="final">Restzahlungs-Link</option><option value="maintenance">Wartungs-Abo-Link</option><option value="review">Freigabe-Link (Vorschau)</option><option value="deployed">Seite ist online</option></select></label>
+          <label class="grow">An<input type="email" name="to" value="${c?.email ?? ''}" maxlength="200" placeholder="kunde@beispiel.de" required></label></div>
+          <p class="row"><button class="primary">${isMockPay && ctx.registry.providers.email.isMock ? 'In Postausgang legen (Mock)' : 'E-Mail senden'}</button><a class="btn" href="/outbox">Postausgang</a></p>`, { style: 'display:block' })}
+        <small class="mute">Wird nur gesendet, wenn du auf den Knopf drückst. Adressen auf der Sperrliste werden abgelehnt.</small></div>
+
       <div class="card"><h2>Veröffentlichung und Wartung</h2>
         ${st === 'FULLY_PAID' ? postBtn(r.app.csrf, `/orders/${orderId}/deploy`, 'Veröffentlichen', { cls: 'ok' }) : html`<p class="mute">Veröffentlichung erst nach bestätigter Restzahlung.${r.app.autoDeploy ? ' (Auto-Deploy aktiv)' : ''}</p>`}
         ${deps.map((d: any) => html`<p>Veröffentlicht (${d.adapter}): ${/^https?:/.test(d.url) ? html`<a href="${d.url}" target="_blank" rel="noopener noreferrer">${d.url}</a>` : d.url} <small>${fmt(d.created_at)}</small></p>`)}
@@ -89,6 +95,12 @@ export const routes: Route[] = [
     const out = await r.ctx.orders.simulatePayment(r.params[0], r.ctx.registry.providers.payments);
     if (out.handled === 'paid' && out.kind === 'final' && r.app.autoDeploy) { try { await r.ctx.delivery.deploy(out.orderId!, r.ctx.registry.providers.hosting); } catch { /* manuell möglich */ } }
     return redirect(`/orders/${p.order_id}`, okFlash(`${PAY_LABEL[p.kind]} bezahlt (Simulation) – Ablauf läuft weiter.`));
+  } },
+  { method: 'POST', path: new RegExp(`^/orders/${id}/mail$`), h: async (r) => {
+    const what = r.form.get('what') as 'deposit' | 'final' | 'maintenance' | 'review' | 'deployed';
+    if (!['deposit', 'final', 'maintenance', 'review', 'deployed'].includes(what)) throw new UserError('Bitte auswählen, was gesendet werden soll.');
+    const res = await r.ctx.notifier.sendOrderMail(r.params[0], what, r.form.get('to') ?? '');
+    return redirect(`/orders/${r.params[0]}`, res.ok ? okFlash(res.status === 'sent' ? 'E-Mail wurde gesendet.' : 'Mock-Modus: E-Mail im Postausgang aufgezeichnet (nicht verschickt).') : { kind: 'err', text: `Senden fehlgeschlagen: ${res.error}` });
   } },
   { method: 'POST', path: new RegExp(`^/orders/${id}/project$`), h: async (r) => {
     const cur = (await r.ctx.delivery.getProject(r.params[0]))?.content as ProjectContent | undefined;

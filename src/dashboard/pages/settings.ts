@@ -38,6 +38,12 @@ export const routes: Route[] = [
       <div class="card" id="sperrliste"><h2>Sperrliste (Opt-out / Do-not-contact)</h2>${postForm(r.app.csrf, '/settings/suppression', html`<div class="row"><select name="kind"><option value="phone">Telefon</option><option value="email">E-Mail</option><option value="domain">Domain</option><option value="company">Firma</option></select><input name="value" required placeholder="Wert" class="grow" maxlength="200"><input name="reason" placeholder="Grund (optional)" maxlength="300"><button>Hinzufügen</button></div>`, { style: 'display:block' })}
         ${sup.length ? html`<div class="scroll"><table>${sup.map((s: any) => html`<tr><td>${s.kind}</td><td>${s.value}</td><td>${s.reason ?? ''}</td><td><small>${fmt(s.created_at)}</small></td><td>${postBtn(r.app.csrf, `/settings/suppression/${s.id}/delete`, 'Entfernen')}</td></tr>`)}</table></div>` : html`<p class="mute">Keine Einträge.</p>`}
         <small class="mute">Einträge werden bei jeder Analyse und vor jedem Kontakt geprüft und nie automatisch gelöscht.</small></div>
+      <div class="card" id="email"><h2>E-Mail und Benachrichtigungen</h2>
+        <p>${ctx.registry.providers.email.isMock ? html`<span class="badge b-mock">Mock</span> Mails werden <b>nicht verschickt</b>, sondern nur im Postausgang angezeigt. Für echten Versand SMTP einrichten (SMTP_HOST, SMTP_FROM, …, siehe SETUP.md).` : html`<span class="badge b-ok">SMTP aktiv</span> Mails werden über ${ctx.registry.providers.email.name} verschickt.`}</p>
+        ${postForm(r.app.csrf, '/settings/notify', html`<label>Deine E-Mail-Adresse für Benachrichtigungen<input type="email" name="notifyEmail" value="${settings.notifyEmail ?? ''}" maxlength="200" placeholder="du@beispiel.de"></label>
+          <label class="inline"><input type="checkbox" name="notifyEnabled" value="1" ${settings.notifyEnabled ? raw('checked') : ''}> Benachrichtigen bei: Anzahlung/Restzahlung eingegangen, Seite wartet auf Freigabe, Kunde hat freigegeben oder Änderung gewünscht, Wartungsproblem</label>
+          <p class="row"><button class="primary">Speichern</button><button name="test" value="1">Test-E-Mail senden</button><a class="btn" href="/outbox">Postausgang</a></p>`, { style: 'display:block' })}
+        <small class="mute">An Kunden geht nur, was du im Auftrag selbst auslöst (Zahlungslink, Freigabe-Link). Interessenten bekommen nichts automatisch.</small></div>
       <div class="card" id="provider"><h2>Provider</h2><div class="scroll"><table><tr><th>Dienst</th><th>Aktiv</th><th>Modus</th><th>Hinweis</th></tr>${ctx.registry.status.map((s) => html`<tr><td>${s.kind}</td><td>${s.name}</td><td><span class="badge ${s.mode === 'mock' ? 'b-mock' : 'b-ok'}">${s.mode}</span></td><td>${s.note}</td></tr>`)}</table></div>
         <p class="mute">Modus: APP_MODE=${ctx.registry.mode}. Einzeln umschaltbar über PROVIDER_PLACES, PROVIDER_AI, PROVIDER_PAYMENTS, … (mock|real). Echte Keys gehören nur in die Umgebungsvariablen.</p></div>
       <div class="card" id="aufbewahrung"><h2>Datenaufbewahrung</h2><div class="scroll"><table><tr><th>Regel</th><th>Frist</th><th>Jetzt fällig</th></tr>${plan.map((p) => html`<tr><td>${p.label}</td><td>${p.days} Tage</td><td><b>${p.count}</b></td></tr>`)}</table></div>
@@ -79,6 +85,27 @@ export const routes: Route[] = [
   { method: 'POST', path: /^\/settings\/retention$/, h: async (r) => {
     if (r.form.get('confirm') !== '1') throw new UserError('Bitte die Löschung bestätigen.');
     const out = await r.ctx.retention.execute(r.ctx.now()); return redirect('/settings#aufbewahrung', okFlash(`Bereinigt: ${out.map((o) => `${o.count} ${o.label}`).join(', ')}.`));
+  } },
+  { method: 'POST', path: /^\/settings\/notify$/, h: async (r) => {
+    const to = (r.form.get('notifyEmail') ?? '').trim();
+    await r.ctx.repo.saveSettings({ notifyEmail: to || null, notifyEnabled: r.form.get('notifyEnabled') === '1' });
+    if (r.form.get('test') === '1') {
+      if (!to) throw new UserError('Bitte zuerst eine Adresse eintragen.');
+      const res = await r.ctx.notifier.send('test', to, 'Test-E-Mail von AI Agency OS', 'Wenn du das liest, funktioniert der E-Mail-Versand.');
+      return redirect('/settings#email', res.ok ? okFlash(res.status === 'sent' ? `Test-E-Mail an ${to} gesendet.` : 'Mock-Modus: Test-Mail nur im Postausgang aufgezeichnet (nicht verschickt).') : { kind: 'err', text: `Senden fehlgeschlagen: ${res.error}` });
+    }
+    return redirect('/settings#email', okFlash('Benachrichtigungen gespeichert.'));
+  } },
+  { method: 'GET', path: /^\/outbox$/, h: async (r) => {
+    const offset = Math.max(0, Number(r.url.searchParams.get('offset') ?? 0) || 0);
+    const { rows, total } = await r.ctx.notifier.outbox(50, offset);
+    const mock = r.ctx.registry.providers.email.isMock;
+    return render(r, { title: 'Postausgang', nav: 'settings', body: html`
+      <p class="mute">${total} Nachrichten. ${mock ? 'Mock-Modus: nichts davon wurde wirklich verschickt.' : 'Versand über SMTP.'}</p>
+      ${rows.map((m: any) => html`<details class="card"><summary><span class="row"><b class="grow">${m.subject}</b><span class="badge ${m.status === 'sent' ? 'b-ok' : m.status === 'failed' ? 'b-bad' : 'b-mock'}">${m.status === 'sent' ? 'gesendet' : m.status === 'failed' ? 'fehlgeschlagen' : 'nur aufgezeichnet'}</span></span><small class="mute">${fmt(m.created_at)} · an ${m.to_addr} · ${m.kind}</small></summary>
+        <pre style="white-space:pre-wrap;overflow-wrap:anywhere">${m.body}</pre>${m.error ? html`<div class="errbox">${m.error}</div>` : ''}${m.order_id ? html`<a href="/orders/${m.order_id}">Auftrag öffnen</a>` : ''}</details>`)}
+      ${!rows.length ? html`<div class="card"><p class="mute">Noch keine Nachrichten.</p></div>` : ''}
+      <div class="row">${offset > 0 ? html`<a class="btn" href="/outbox?offset=${Math.max(0, offset - 50)}">← Neuer</a>` : ''}${offset + 50 < total ? html`<a class="btn" href="/outbox?offset=${offset + 50}">Älter →</a>` : ''}</div>` });
   } },
   { method: 'POST', path: /^\/killswitch$/, h: async (r) => {
     await r.ctx.repo.setKillSwitch(r.form.get('on') === '1');

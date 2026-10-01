@@ -13,13 +13,14 @@ import { CallService } from './calls/service.ts';
 import { SalesDocs } from './sales/docs.ts';
 import { ContactService } from './contact/service.ts';
 import { Retention } from './retention/run.ts';
+import { Notifier } from './notify/service.ts';
 import { loadConfig, type AppConfig } from './core/config.ts';
 import { createProviders, type Registry } from './providers/registry.ts';
 
 export type Context = {
   repo: Repo; cfg: AppConfig; registry: Registry; baseUrl: string; now: () => Date;
   leads: LeadStore; runs: RunStore; sales: SalesStore; social: SocialStore; analytics: AnalyticsStore; learning: LearningStore;
-  runner: SearchRunner; orders: OrderService; delivery: DeliveryService; maintenance: MaintenanceService; docs: SalesDocs; calls: CallService; contact: ContactService; retention: Retention;
+  runner: SearchRunner; orders: OrderService; delivery: DeliveryService; maintenance: MaintenanceService; docs: SalesDocs; calls: CallService; contact: ContactService; retention: Retention; notifier: Notifier;
 };
 
 export type ContextOptions = { env?: Record<string, string | undefined>; baseUrl: string; now?: () => Date; providerNow?: () => Date; cfg?: AppConfig; hostingRoot?: string };
@@ -40,5 +41,7 @@ export function buildContext(repo: Repo, o: ContextOptions): Context {
   const calls = new CallService({ repo, leads, sales, docs, orders, now });
   const contact = new ContactService({ repo, leads, providers: P, now });
   const retention = new Retention(repo, cfg.retention);
-  return { repo, cfg, registry, baseUrl: o.baseUrl, now, leads, runs, sales, social, analytics, learning, runner, orders, delivery, maintenance, docs, calls, contact, retention };
+  const notifier = new Notifier(repo, P.email, o.baseUrl);
+  repo.onEvent = (type, leadId, payload) => { void notifier.onEvent(type, leadId, payload); };
+  return { repo, cfg, registry, notifier, baseUrl: o.baseUrl, now, leads, runs, sales, social, analytics, learning, runner, orders, delivery, maintenance, docs, calls, contact, retention };
 }

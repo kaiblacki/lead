@@ -22,7 +22,7 @@ Tests: `npm run test:all` (Unit-Tests, danach lokale Test-Datenbank `dbtest` mit
 ## 2. Eigene Datenbank (Supabase) mit Mock-Diensten
 
 1. supabase.com → New project → Region **Central EU (Frankfurt)** → Datenbankpasswort speichern.
-2. SQL Editor → nacheinander den Inhalt von `supabase/migrations/0001_core.sql` bis `0007_changes_calls.sql` einfügen und jeweils **Run** (Reihenfolge einhalten).
+2. SQL Editor → nacheinander den Inhalt von `supabase/migrations/0001_core.sql` bis `0008_outbox_notify.sql` einfügen und jeweils **Run** (Reihenfolge einhalten).
 3. Authentication → Users → **Add user**. Die **User UID** ist `OWNER_ID`.
 4. Project Settings → Database → **Connection string** (URI) → `DATABASE_URL` (Passwort einsetzen).
 5. `.env` anlegen (`cp .env.example .env`), mindestens setzen: `DATABASE_URL`, `OWNER_ID`, `DASHBOARD_PASSWORD` (≥ 12 Zeichen, zufällig). `APP_MODE=mock` lassen.
@@ -42,7 +42,8 @@ Unter **Einstellungen → Provider** steht je Dienst, ob Mock oder echt aktiv is
 | KI (Gesprächseinstieg, Änderungswünsche) | `ANTHROPIC_API_KEY`, optional `ANTHROPIC_MODEL` | Ausgaben werden geprüft (nur belegte Gründe, keine Versprechen); Budget-Limits in den Einstellungen |
 | Zahlungen (Stripe) | `STRIPE_SECRET_KEY` (`sk_test_…` zuerst), `STRIPE_WEBHOOK_SECRET` | Stripe CLI: `stripe listen --forward-to http://127.0.0.1:3000/webhooks/stripe`; Testkarte `4242 4242 4242 4242`; ganzen Weg bis „Wartung aktiv“ durchspielen. Ereignisse: `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.expired`, `customer.subscription.deleted`, `invoice.payment_failed` |
 | Hosting der Kundenseiten | `VERCEL_TOKEN` (+ `VERCEL_TEAM_ID`) oder Ordner `HOSTING_DIR` | zuerst Ordner-Modus, dann Vercel mit einer Testseite |
-| Verzeichnisse, Social-Daten, E-Mail, WhatsApp | – | **noch nicht gebaut** (nur Mock); Schnittstellen stehen, siehe docs/STATUS.md |
+| E-Mail (Benachrichtigungen an dich, Zahlungs-/Freigabe-Links an Kunden) | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | Einstellungen → „E-Mail und Benachrichtigungen“: Adresse eintragen, **Test-E-Mail senden**; alles Gesendete steht im **Postausgang**. Zugangsdaten werden nur über verschlüsselte Verbindung gesendet |
+| Verzeichnisse, Social-Daten, WhatsApp | – | **noch nicht gebaut** (nur Mock); Schnittstellen stehen, siehe docs/STATUS.md |
 
 Reihenfolge-Empfehlung: Places → Crawler → KI → Stripe (Test) → Hosting → erst dann Stripe live. Nach jedem Schritt Dashboard → Einstellungen → Provider prüfen.
 

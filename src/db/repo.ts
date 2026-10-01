@@ -4,8 +4,8 @@ import { norm, normPhone } from '../core/text.ts';
 
 type Q = pg.Pool | pg.PoolClient;
 
-export type OwnerSettings = { phoneEnabled: boolean; phoneAckAt: string | null; dailyCallTarget: number; callerName: string | null; channels: Record<string, { autoSend: boolean; dailyLimit: number; platformConfirmed?: boolean; legalBasis?: string }> };
-export const DEFAULT_SETTINGS: OwnerSettings = { phoneEnabled: false, phoneAckAt: null, dailyCallTarget: 20, callerName: null, channels: {} };
+export type OwnerSettings = { notifyEmail: string | null; notifyEnabled: boolean; phoneEnabled: boolean; phoneAckAt: string | null; dailyCallTarget: number; callerName: string | null; channels: Record<string, { autoSend: boolean; dailyLimit: number; platformConfirmed?: boolean; legalBasis?: string }> };
+export const DEFAULT_SETTINGS: OwnerSettings = { notifyEmail: null, notifyEnabled: true, phoneEnabled: false, phoneAckAt: null, dailyCallTarget: 20, callerName: null, channels: {} };
 
 /** Kern-Zugriff auf Postgres (Supabase). Läuft nur serverseitig; jede Abfrage ist auf owner_id beschränkt. */
 export class Repo {
@@ -28,8 +28,11 @@ export class Repo {
   }
 
   /** Audit-Log-Eintrag (append-only). */
-  async event(q: Q, leadId: string | null, type: string, payload: object) {
+  onEvent?: (type: string, leadId: string | null, payload: Record<string, unknown>) => void;
+  async event(q: Q, leadId: string | null, type: string, payload: object, quiet = false) {
     await q.query('insert into events(owner_id, lead_id, type, payload) values ($1,$2,$3,$4)', [this.ownerId, leadId, type, JSON.stringify(payload)]);
+    // Hook für Benachrichtigungen: erst nach dem aktuellen Aufruf (die Transaktion ist dann i. d. R. abgeschlossen)
+    if (!quiet && this.onEvent) { const h = this.onEvent; setTimeout(() => { try { h(type, leadId, payload as Record<string, unknown>); } catch { /* egal */ } }, 250); }
   }
 
   // ---------- Limits / Kill Switch ----------
@@ -76,19 +79,20 @@ export class Repo {
   async getSettings(): Promise<OwnerSettings> {
     const r = (await this.pool.query('select * from owner_settings where owner_id=$1', [this.ownerId])).rows[0];
     if (!r) return DEFAULT_SETTINGS;
-    return { phoneEnabled: r.phone_enabled, phoneAckAt: r.phone_ack_at?.toISOString?.() ?? r.phone_ack_at, dailyCallTarget: r.daily_call_target, callerName: r.caller_name, channels: r.channels ?? {} };
+    return { phoneEnabled: r.phone_enabled, phoneAckAt: r.phone_ack_at?.toISOString?.() ?? r.phone_ack_at, dailyCallTarget: r.daily_call_target, callerName: r.caller_name, channels: r.channels ?? {}, notifyEmail: r.notify_email ?? null, notifyEnabled: r.notify_enabled ?? true };
   }
-  async saveSettings(patch: Partial<Pick<OwnerSettings, 'phoneEnabled' | 'dailyCallTarget' | 'callerName' | 'channels'>>) {
+  async saveSettings(patch: Partial<Pick<OwnerSettings, 'phoneEnabled' | 'dailyCallTarget' | 'callerName' | 'channels' | 'notifyEmail' | 'notifyEnabled'>>) {
     const cur = await this.getSettings();
     const next = { ...cur, ...patch };
     if (!Number.isInteger(next.dailyCallTarget) || next.dailyCallTarget < 1 || next.dailyCallTarget > 200) throw new Error('Tägliches Call-Ziel: 1 bis 200');
     if (next.callerName && next.callerName.length > 80) throw new Error('Name ist zu lang (max. 80 Zeichen)');
     for (const [ch, cfg] of Object.entries(next.channels)) if (!['email', 'whatsapp'].includes(ch) || !Number.isInteger(cfg.dailyLimit) || cfg.dailyLimit < 0 || cfg.dailyLimit > 1000) throw new Error('Ungültige Kanal-Einstellung');
+    if (next.notifyEmail && (next.notifyEmail.length > 200 || !/^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(next.notifyEmail))) throw new Error('Benachrichtigungs-Adresse ist ungültig');
     const enabling = next.phoneEnabled && !cur.phoneEnabled;
     await this.pool.query(
-      `insert into owner_settings(owner_id, phone_enabled, phone_ack_at, daily_call_target, caller_name, channels, updated_at) values ($1,$2,$3,$4,$5,$6, now())
-       on conflict (owner_id) do update set phone_enabled=$2, phone_ack_at=$3, daily_call_target=$4, caller_name=$5, channels=$6, updated_at=now()`,
-      [this.ownerId, next.phoneEnabled, enabling ? new Date() : next.phoneEnabled ? cur.phoneAckAt : null, next.dailyCallTarget, next.callerName || null, JSON.stringify(next.channels)]);
+      `insert into owner_settings(owner_id, phone_enabled, phone_ack_at, daily_call_target, caller_name, channels, notify_email, notify_enabled, updated_at) values ($1,$2,$3,$4,$5,$6,$7,$8, now())
+       on conflict (owner_id) do update set phone_enabled=$2, phone_ack_at=$3, daily_call_target=$4, caller_name=$5, channels=$6, notify_email=$7, notify_enabled=$8, updated_at=now()`,
+      [this.ownerId, next.phoneEnabled, enabling ? new Date() : next.phoneEnabled ? cur.phoneAckAt : null, next.dailyCallTarget, next.callerName || null, JSON.stringify(next.channels), next.notifyEmail || null, next.notifyEnabled]);
     await this.event(this.pool, null, 'settings_changed', { actor: 'user', phoneEnabled: next.phoneEnabled, dailyCallTarget: next.dailyCallTarget, channels: next.channels });
     return { changedPhone: next.phoneEnabled !== cur.phoneEnabled };
   }
