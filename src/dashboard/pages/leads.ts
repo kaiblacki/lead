@@ -57,7 +57,7 @@ export const routes: Route[] = [
     d.factsT = await ctx.leads.factsOf(leadId);
     d.assessment = await ctx.leads.assess(leadId);
     const [settings, demos, offer, order, analysis, costs, note, dupes] = await Promise.all([ctx.repo.getSettings(), ctx.sales.listDemos(leadId), ctx.sales.latestOffer(leadId), ctx.orders.orderForLead(leadId), ctx.analysis.best(leadId), ctx.aiUsage.forLead(leadId), ctx.pipeline.note(leadId), ctx.pipeline.candidatesOf(leadId)]);
-    const [approval, bstat] = await Promise.all([ctx.pipeline.approvals.stateOf(leadId, 'DEMO_CREATE'), ctx.enrichment.budget.status(ctx.now())]);
+    const [approval, bstat, elog] = await Promise.all([ctx.pipeline.approvals.stateOf(leadId, 'DEMO_CREATE'), ctx.enrichment.budget.status(ctx.now()), ctx.repo.pool.query('select requests, cost_cents, provider_cost_amount, provider_cost_currency, outcome, found, created_at from enrichment_log where lead_id=$1 and owner_id=$2 order by created_at desc, id desc limit 1', [leadId, ctx.repo.ownerId]).then((x) => x.rows[0])]);
     const liveDemo = demos.find((x: any) => !x.revoked); const demoUrl = liveDemo ? `${r.app.baseUrl}/d/${liveDemo.token}` : undefined;
     const sender = settings.callerName || ctx.cfg.agency.callerName || ctx.cfg.agency.ownerName || 'Ihr Ansprechpartner';
     const contactPerson = (d.factsT.find((f: any) => f.key === 'contactPerson')?.value as string | undefined);
@@ -72,7 +72,7 @@ export const routes: Route[] = [
       ...((analysis?.manual_checks ?? []) as string[]).slice(0, 4).map((m) => `Manuell prüfen: ${m}`), ...d.factsT.filter((f: any) => f.key === 'websiteCandidate').map((f: any) => `Mögliche Website (ungeprüft): ${f.value} – ${f.note ?? ''}`),
       dupes.length ? `${dupes.length} mögliche Dublette(n) – bitte prüfen.` : ''].filter(Boolean) as string[];
     return render(r, { title: d.lead.company_name, nav: 'leads', body: html`
-      ${P.header(d, r.app.csrf)}${P.duplicatesCard(dupes, { csrf: r.app.csrf, leadId })}${P.profile(d)}${P.priorityCard(d, { csrf: r.app.csrf, leadId })}${P.enrichmentCard(d, { csrf: r.app.csrf, leadId, facts: d.factsT, budgetLeftCents: Math.min(bstat.monthLeftCents, bstat.todayLeftCents), available: ctx.enrichment.available })}${P.analysisCard(d, analysis, { csrf: r.app.csrf, leadId, costs, demoLive: !!liveDemo })}${P.demoDecision(d, { csrf: r.app.csrf, leadId, hasDemo: !!liveDemo, approval })}${P.modulesCard(d, { csrf: r.app.csrf, leadId, v: modView })}${P.phoneView(d, analysis, { sender, demoUrl, contactPerson, csrf: r.app.csrf, leadId })}
+      ${P.header(d, r.app.csrf)}${P.duplicatesCard(dupes, { csrf: r.app.csrf, leadId })}${P.profile(d)}${P.priorityCard(d, { csrf: r.app.csrf, leadId })}${P.enrichmentCard(d, { csrf: r.app.csrf, leadId, facts: d.factsT, budgetLeftCents: Math.min(bstat.monthLeftCents, bstat.todayLeftCents), available: ctx.enrichment.available, log: elog })}${P.analysisCard(d, analysis, { csrf: r.app.csrf, leadId, costs, demoLive: !!liveDemo })}${P.demoDecision(d, { csrf: r.app.csrf, leadId, hasDemo: !!liveDemo, approval })}${P.modulesCard(d, { csrf: r.app.csrf, leadId, v: modView })}${P.phoneView(d, analysis, { sender, demoUrl, contactPerson, csrf: r.app.csrf, leadId })}
       ${P.contact(d, r.app.csrf, leadId, settings, r.app.mock)}${P.templatesCard(d, { sender: settings.callerName || ctx.cfg.agency.callerName || undefined, demoUrl, csrf: r.app.csrf, leadId, emailStatus: ctx.contact.effective(d.lead), hasEmail })}${P.notesCard(d, note, { csrf: r.app.csrf, leadId, hints })}${P.costsCard(costs)}
       ${P.why(d)}${P.sales(d, r.app.csrf, leadId)}${P.statusCard(d, r.app.csrf, leadId)}${P.docs(d, r.app.csrf, leadId, { demos, offer, order, templates: allTemplates().map((t) => ({ key: t.key, label: t.label })), recommended: rec, baseUrl: r.app.baseUrl })}
       ${P.dimensions(d)}${P.audit(d)}
@@ -111,7 +111,7 @@ export const routes: Route[] = [
   { method: 'POST', path: new RegExp(`^/leads/${id}/enrich$`), h: async (r) => {
     const leadId = r.params[0];
     const o = await r.ctx.enrichment.enrichLead(leadId, { force: true, ignoreCache: r.form.get('ignoreCache') === '1' });
-    return redirect(`/leads/${leadId}#enrichment`, o.status === 'budget_blocked' || o.status === 'provider_unavailable' ? { kind: 'err', text: `Enrichment: ${o.note}` } : okFlash(`Enrichment: ${o.note} Anfragen: ${o.requests}, Kosten ${(o.costCents / 100).toFixed(4).replace('.', ',')} €.`));
+    return redirect(`/leads/${leadId}#enrichment`, o.status === 'budget_blocked' || o.status === 'provider_unavailable' ? { kind: 'err', text: `Enrichment: ${o.note}` } : okFlash(`Enrichment: ${o.note} Anfragen: ${o.requests}, Kosten ${(o.costCents / 100).toFixed(4).replace('.', ',')} €${o.providerCost.currency === 'USD' ? ` (${o.providerCost.amount.toFixed(4).replace('.', ',')} USD)` : ''}.`));
   } },
   { method: 'POST', path: new RegExp(`^/leads/${id}/analysis$`), h: async (r) => {
     const tier = r.form.get('tier'); if (tier !== 'MASS' && tier !== 'DEEP' && tier !== 'PREMIUM') throw new UserError('Bitte eine KI-Stufe wählen.');

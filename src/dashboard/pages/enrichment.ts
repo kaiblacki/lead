@@ -20,6 +20,7 @@ export const routes: Route[] = [
         <div class="kpi"><b>${eur(b.monthSpentCents)}</b><span>verbraucht diesen Monat (von ${eur(b.monthlyLimitCents)})</span></div><div class="kpi"><b>${eur(b.monthLeftCents)}</b><span>übrig diesen Monat</span></div>
         <div class="kpi"><b>${eur(b.todaySpentCents)}</b><span>heutige Kosten (Limit ${eur(b.dailyLimitCents)})</span></div><div class="kpi"><b>${b.monthRequests}</b><span>Anfragen diesen Monat (heute ${b.todayRequests})</span></div>
         <div class="kpi"><b>${b.costPerEnrichedLeadCents === null ? NA : eur4(b.costPerEnrichedLeadCents)}</b><span>Kosten je angereichertem Lead (${b.monthEnrichedLeads} Leads)</span></div></div>
+        <p class="mute">Preis der Websuche: ${ctx.cfg.pipeline.sources.WEB_SEARCH.pricing.usdPerThousandRequests} ${ctx.cfg.pipeline.sources.WEB_SEARCH.pricing.currency} je 1.000 Anfragen (= ${(ctx.cfg.pipeline.sources.WEB_SEARCH.pricing.usdPerThousandRequests / 1000).toFixed(3).replace('.', ',')} ${ctx.cfg.pipeline.sources.WEB_SEARCH.pricing.currency} je Anfrage ≈ ${eur4(ctx.enrichment.estEurCents())} bei ${String(ctx.cfg.ai.eurPerUsd).replace('.', ',')} EUR/USD). Das Budget oben rechnet in EUR, brutto (ohne das Anbieter-Guthaben von ${ctx.cfg.pipeline.sources.WEB_SEARCH.pricing.monthlyCreditUsd} USD/Monat).</p>
         <p class="mute">Websuche: <b>${ctx.enrichment.provider.name}</b>${ctx.enrichment.available ? '' : ' – nicht verfügbar (BRAVE_SEARCH_API_KEY fehlt), Enrichment: provider_unavailable'}. Limits in <code>config/pipeline.json</code> (monthly_enrichment_budget_eur, daily_enrichment_budget_eur). Bei erreichtem Limit läuft alles Kostenlose weiter; betroffene Leads bleiben DATA_NEEDED (budget_blocked).</p>
         <form method="post" action="/enrichment/run" class="row"><input type="hidden" name="csrf" value="${r.app.csrf}"><label>Höchstens Leads<input name="limit" type="number" min="1" max="200" value="10" style="width:100px"></label><button class="primary">Enrichment für „Daten beschaffen“ starten</button></form>
         <small class="mute">Reihenfolge: A, dann B, dann interessante C; D wird nicht kostenpflichtig angereichert. Gleiche Suchen werden nicht wiederholt.</small></div>
@@ -33,6 +34,6 @@ export const routes: Route[] = [
     if (!ids.length) throw new UserError('Keine Leads mit DATA_NEEDED.');
     const res = await r.ctx.enrichment.enrichBatch(ids, { limit });
     if (res.counts.provider_unavailable) return redirect('/enrichment', { kind: 'err', text: 'Websuche nicht verfügbar (BRAVE_SEARCH_API_KEY fehlt) – nichts abgefragt.' });
-    return redirect('/enrichment', okFlash(`Enrichment: ${res.attempted} Lead(s) abgefragt, ${res.requests} Anfragen, ${eur4(res.costCents)}. ${Object.entries(res.counts).map(([k, v]) => `${ENRICH_LABEL[k] ?? k}: ${v}`).join(' · ')}`));
+    return redirect('/enrichment', okFlash(`Enrichment: ${res.attempted} Lead(s) abgefragt, ${res.requests} Anfragen, ${eur4(res.costCents)}${res.providerCost.currency === 'USD' ? ` (${res.providerCost.amount.toFixed(4).replace('.', ',')} USD)` : ''}. ${Object.entries(res.counts).map(([k, v]) => `${ENRICH_LABEL[k] ?? k}: ${v}`).join(' · ')}`));
   } },
 ];

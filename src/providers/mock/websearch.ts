@@ -16,6 +16,6 @@ export class MockWebSearchProvider implements WebSearchProvider {
       hits.push({ url: `https://www.gelbeseiten.example/firma/${b.id}`, title: `${b.name} – Gelbe Seiten`, snippet: `${b.name}, ${b.city}`, rank: 1 });
       const site = websiteUrlOf(b); if (site && !/instagram|facebook/.test(site)) hits.push({ url: site, title: `${b.name} – ${b.city}`, snippet: `${b.name} in ${b.city}. Kontakt und Öffnungszeiten.`, rank: 2 });
     }
-    return { hits: hits.slice(0, q.count ?? 5), requests: 1, source: this.name, retrievedAt: this.now().toISOString(), costCents: 0 };
+    return { hits: hits.slice(0, q.count ?? 5), requests: 1, source: this.name, retrievedAt: this.now().toISOString(), cost: { amount: 0, currency: 'EUR' as const } };
   }
 }

@@ -8,9 +8,11 @@ import { compareRecords } from '../../src/dedupe/match.ts';
 import { dedupeCandidates } from '../../src/dedupe/merge.ts';
 import { computePriority, type PriorityInput } from '../../src/scoring/priority.ts';
 import { effectiveModules, familyFor, recommendModules, FAMILIES } from '../../src/site/modules.ts';
-import { extractContactFacts } from '../../src/sources/site-contact.ts';
+import { extractContactFacts, findAddressIn } from '../../src/sources/site-contact.ts';
 import { createSources } from '../../src/sources/registry.ts';
 import { BraveSearchProvider } from '../../src/providers/real/websearch.ts';
+import { WebSearchError } from '../../src/sources/types.ts';
+import { toEurCents, NOT_OWN_SITE } from '../../src/enrich/service.ts';
 import { MockWebSearchProvider } from '../../src/providers/mock/websearch.ts';
 import { OsmPlacesProvider } from '../../src/providers/real/osm.ts';
 import { createProviders, osmOptions } from '../../src/providers/registry.ts';
@@ -130,13 +132,35 @@ test('Website-Anreicherung: Telefon, E-Mail, Adresse, Formular, WhatsApp, Social
 });
 
 // ---------- 6. Web Search ----------
-test('Websuche-Adapter: Brave (Schlüssel, Anfrage, Antwort, Kosten), ohne Schlüssel Mock/„keine Quelle“, Quellenübersicht', async () => {
-  const orig = globalThis.fetch; const calls: { url: string; init?: RequestInit }[] = [];
-  globalThis.fetch = (async (url: string, init?: RequestInit) => { calls.push({ url: String(url), init }); return new Response(JSON.stringify({ web: { results: [{ url: 'https://a.example', title: '<b>A</b> GmbH', description: 'Text' }] } }), { status: 200 }); }) as typeof fetch;
+test('Websuche-Adapter Brave: Schlüssel, Anfrage, Antwort, Kosten in USD (5 USD / 1000), Rate-Limit, 429-Wiederholung, Fehlerklassen; ohne Schlüssel Mock/„keine Quelle“, Quellenübersicht', async () => {
+  const orig = globalThis.fetch; const calls: { url: string; init?: RequestInit }[] = []; let script: (n: number) => Response = () => new Response(JSON.stringify({ web: { results: [{ url: 'https://a.example', title: '<b>A</b> GmbH', description: 'Text' }] } }), { status: 200, headers: { 'x-ratelimit-remaining': '1, 1999', 'x-ratelimit-limit': '1, 2000' } });
+  globalThis.fetch = (async (url: string, init?: RequestInit) => { calls.push({ url: String(url), init }); return script(calls.length); }) as typeof fetch;
   try {
-    const r = await new BraveSearchProvider('KEY', 0.5, () => new Date('2026-06-01T10:00:00Z')).search({ query: 'Salon X Völklingen', count: 3 });
-    assert.equal(r.hits[0].title, 'A GmbH'); assert.equal(r.costCents, 0.5); assert.equal(r.requests, 1); assert.match(calls[0].url, /search\.brave\.com.*q=Salon%20X%20V/); assert.equal((calls[0].init!.headers as any)['x-subscription-token'], 'KEY');
+    const p = new BraveSearchProvider('KEY', { usdPerThousandRequests: 5, minIntervalMs: 0, maxRetries: 2 }, () => new Date('2026-06-01T10:00:00Z'));
+    const r = await p.search({ query: 'Salon X Völklingen', count: 3 });
+    assert.equal(r.hits[0].title, 'A GmbH'); assert.deepEqual(r.cost, { amount: 0.005, currency: 'USD' }); assert.equal(r.requests, 1); assert.match(r.rateLimit!, /remaining=1, 1999/);
+    assert.match(calls[0].url, /^https:\/\/api\.search\.brave\.com\/res\/v1\/web\/search\?q=Salon%20X%20V.*count=3.*country=DE.*search_lang=de/); assert.equal((calls[0].init!.headers as any)['x-subscription-token'], 'KEY'); assert.doesNotMatch(calls[0].url, /KEY/, 'Schlüssel nie in der URL');
+    assert.equal(toEurCents(r.cost, 0.92), 0.46, '0,005 USD = 0,46 EUR-Cent bei 0,92 EUR/USD'); assert.equal(toEurCents({ amount: 0.005, currency: 'EUR' }, 0.92), 0.5);
+    // 429 → wiederholen (Retry-After), danach Erfolg
+    calls.length = 0; script = (n) => (n === 1 ? new Response('slow down', { status: 429, headers: { 'retry-after': '1' } }) : new Response(JSON.stringify({ web: { results: [] } }), { status: 200 }));
+    const t0 = Date.now(); const r2 = await p.search({ query: 'x' }); assert.equal(calls.length, 2); assert.deepEqual(r2.hits, []); assert.ok(Date.now() - t0 >= 900);
+    // 401 → fatal (Stapel bricht ab), 500 → nicht fatal, Netzfehler → nicht fatal; Schlüssel steht nie im Fehlertext
+    script = () => new Response('{"error":"bad token"}', { status: 401 }); await assert.rejects(p.search({ query: 'x' }), (e: any) => e instanceof WebSearchError && e.fatal && e.status === 401 && /Schlüssel ungültig/.test(e.message) && !/KEY/.test(e.message));
+    script = () => new Response('oops', { status: 500 }); await assert.rejects(p.search({ query: 'x' }), (e: any) => e instanceof WebSearchError && !e.fatal && e.status === 500);
+    script = () => new Response('quota', { status: 429 }); await assert.rejects(new BraveSearchProvider('KEY', { usdPerThousandRequests: 5, minIntervalMs: 0, maxRetries: 0 }).search({ query: 'x' }), (e: any) => e.fatal === true && e.status === 429);
+    const t1 = Date.now(); script = () => new Response(JSON.stringify({ web: { results: [] } }), { status: 200 }); const slow = new BraveSearchProvider('KEY', { usdPerThousandRequests: 5, minIntervalMs: 300 }); await slow.search({ query: 'a' }); await slow.search({ query: 'b' }); assert.ok(Date.now() - t1 >= 290, 'Mindestabstand zwischen Anfragen');
     await assert.rejects(new BraveSearchProvider(undefined).search({ query: 'x' }), /BRAVE_SEARCH_API_KEY fehlt/);
+    // Brave meldet einen ungültigen/fehlenden Schlüssel mit HTTP 422 (nicht 401) – das ist fatal, damit nicht jeder Lead erneut scheitert (echte Antworttexte der API)
+    calls.length = 0; script = () => new Response('{"error":{"code":"SUBSCRIPTION_TOKEN_INVALID","detail":"The provided subscription token is invalid.","meta":{"component":"authentication"},"status":422},"type":"ErrorResponse"}', { status: 422 });
+    await assert.rejects(p.search({ query: 'x' }), (e: any) => e instanceof WebSearchError && e.fatal === true && e.status === 422 && /Schlüssel ungültig/.test(e.message) && /SUBSCRIPTION_TOKEN_INVALID/.test(e.message) && !/\bKEY\b/.test(e.message)); assert.equal(calls.length, 1, 'kein Wiederholen bei ungültigem Schlüssel');
+    script = () => new Response('{"error":{"code":"VALIDATION","detail":"Unable to validate request parameter(s)","meta":{"errors":[{"input":null,"loc":["header","x-subscription-token"],"msg":"Field required","type":"missing"}]},"status":422},"type":"ErrorResponse"}', { status: 422 });
+    await assert.rejects(p.search({ query: 'x' }), (e: any) => e.fatal === true && /Schlüssel ungültig oder fehlt/.test(e.message));
+    // abgelehnter optionaler Parameter (country/search_lang): einmal ohne ihn wiederholen; andere Validierungsfehler sind nicht fatal und werden nicht wiederholt
+    calls.length = 0; script = (n) => (n === 1 ? new Response('{"error":{"code":"VALIDATION","detail":"Unable to validate request parameter(s)","meta":{"errors":[{"loc":["query","country"],"msg":"Input should be a valid enum value","type":"enum"}]},"status":422},"type":"ErrorResponse"}', { status: 422 }) : new Response(JSON.stringify({ web: { results: [{ url: 'https://b.example', title: 'B', description: '' }] } }), { status: 200 }));
+    const rr = await p.search({ query: 'Salon Y' }); assert.equal(calls.length, 2); assert.match(calls[0].url, /country=DE/); assert.doesNotMatch(calls[1].url, /country=/); assert.match(calls[1].url, /search_lang=de/); assert.equal(rr.hits[0].url, 'https://b.example'); assert.equal(rr.requests, 1);
+    calls.length = 0; script = () => new Response('{"error":{"code":"VALIDATION","detail":"Unable to validate request parameter(s)","meta":{"errors":[{"loc":["query","q"],"msg":"String too long"}]},"status":422},"type":"ErrorResponse"}', { status: 422 });
+    await assert.rejects(p.search({ query: 'x' }), (e: any) => e.fatal === false && e.status === 422 && /query\.q: String too long/.test(e.message)); assert.equal(calls.length, 1);
+    script = () => new Response('{"type":"ErrorResponse","error":{"status":429,"code":"QUOTA_LIMITED","detail":"Request quota limit exceeded for plan."}}', { status: 429 }); await assert.rejects(new BraveSearchProvider('KEY', { usdPerThousandRequests: 5, minIntervalMs: 0, maxRetries: 0 }).search({ query: 'x' }), (e: any) => e.fatal === true && /Kontingent erschöpft/.test(e.message));
   } finally { globalThis.fetch = orig; }
   const mockP = createProviders({}, { baseUrl: 'http://x' }).providers;
   assert.ok(createSources({}, cfg, mockP).webSearch.isMock);
@@ -144,9 +168,12 @@ test('Websuche-Adapter: Brave (Schlüssel, Anfrage, Antwort, Kosten), ohne Schl�
   assert.equal(live.webSearch.name, 'keine-quelle'); assert.deepEqual((await live.webSearch.search({ query: 'x' })).hits, []);
   assert.equal(createSources({ APP_MODE: 'live', BRAVE_SEARCH_API_KEY: 'k' }, cfg, createProviders({ APP_MODE: 'live' }, { baseUrl: 'http://x' }).providers).webSearch.name, 'brave-search');
   const st = Object.fromEntries(live.status.map((s) => [s.id, s])); assert.deepEqual(Object.keys(st).sort(), ['DIRECT_WEBSITE', 'GOOGLE_PLACES', 'OSM', 'WEB_SEARCH']);
-  assert.equal(st.OSM.mode, 'PUBLIC_DEMO'); assert.equal(st.GOOGLE_PLACES.enabled, false); assert.match(st.GOOGLE_PLACES.note, /standardmäßig aus/); assert.equal(st.WEB_SEARCH.enabled, false);
+  assert.equal(st.OSM.mode, 'PUBLIC_DEMO'); assert.equal(st.GOOGLE_PLACES.enabled, false); assert.match(st.GOOGLE_PLACES.note, /standardmäßig aus/); assert.equal(st.WEB_SEARCH.enabled, false); assert.match(st.WEB_SEARCH.pricing, /^5 USD je 1\.000 Anfragen$/);
   const w = getWorld().find((b) => b.domain && b.variant === 'modern')!; const hit = await new MockWebSearchProvider().search({ query: `${w.name} ${w.city}` });
-  assert.ok(hit.hits.some((h) => h.url.includes(w.domain!)));
+  assert.ok(hit.hits.some((h) => h.url.includes(w.domain!))); assert.deepEqual(hit.cost, { amount: 0, currency: 'EUR' });
+  // Kostenkonfiguration: Providerpreis mit Währung, Budget in EUR, ein einziger Wechselkurs
+  const W = cfg.pipeline.sources.WEB_SEARCH.pricing; assert.deepEqual([W.usdPerThousandRequests, W.currency, W.monthlyCreditUsd], [5, 'USD', 5]); assert.equal(cfg.pipeline.enrichment.monthly_enrichment_budget_eur, 10); assert.equal(cfg.pipeline.enrichment.daily_enrichment_budget_eur, 2); assert.equal(typeof cfg.ai.eurPerUsd, 'number');
+  assert.ok(!('centsPerRequest' in cfg.pipeline.sources.WEB_SEARCH), 'keine mehrdeutige Cent-Angabe ohne Währung');
 });
 
 // ---------- 7. OSM-Modi ----------
@@ -170,4 +197,26 @@ test('OSM-Provider-Modi: PUBLIC_DEMO (Zwischenspeicher, Deckel), LOCAL_EXTRACT (
     await com.search(q); assert.equal((calls[0].init!.headers as any).authorization, 'Bearer SECRET');
     calls.length = 0; await pub.search({ ...q, radiusKm: 120 }); assert.match(decodeURIComponent(String(calls[0].init!.body)), /around:50000/, 'öffentliche Server: Radiusdeckel 50 km');
   } finally { globalThis.fetch = orig; }
+});
+
+test('Verzeichnisse, Portale, Buchungs- und Jobseiten gelten nie als eigene Website; eigene Domains und Baukasten-Adressen schon', () => {
+  const dir = ['www.gelbeseiten.de', 'www.dasoertliche.de', 'sellwerk.de', 'www.oeffnungszeitenbuch.de', 'www.provenexpert.com', 'bridebook.com', 'www.stepstone.de', 'www.planity.com', 'www.treatwell.de', 'www.fresha.com', 'calendly.com', 'www.facebook.com', 'm.instagram.com', 'x.com', 'de.wikipedia.org', 'www.golocal.de', 'web2.cylex.de'];
+  for (const h of dir) assert.ok(NOT_OWN_SITE.test(h + '.'), `${h} ist ein Verzeichnis/Portal`);
+  const own = ['www.haarstudio-tanja.de', 'saarschere.de', 'hairloft-saarlouis.de', 'salon-lisa.jimdosite.com', 'www.friseur-tamer.de', 'sellwerkstatt.de', 'www.boxer.de'];
+  for (const h of own) assert.ok(!NOT_OWN_SITE.test(h + '.'), `${h} ist (möglicherweise) eine eigene Website`);
+});
+
+test('Anschrift auf Websites: Straße + Hausnummer vor „PLZ Ort“; Telefonnummern, Firmennamen und Platzhalter werden nie als Anschrift gelesen (an einer echten Salon-Website gefundener Fehler)', () => {
+  const cases: [string, string | null][] = [
+    ['Wir freuen uns auf Ihren Anruf. 0683146306 Instagraminhalte von @wellapro_dach', null],      // Telefonnummer enthält „46306“ – keine PLZ
+    ['Telefon: 06831 46306 Instagram', null], ['Fax 6831 46306 Foo', null],
+    ['Dieselstr. 5 66740 Saarlouis Hier finden Sie unseren Salon', 'Dieselstr. 5|66740|Saarlouis'],
+    ['Salon Schoenes GmbH Dieselstr. // Globus // Globus 66740 Saarlouis Telefon: 0683146306', null],  // Hausnummer fehlt (Platzhalter) – nichts raten
+    ['Impressum Nagelstudio Mafezun Testweg 3, 66333 Völklingen', 'Testweg 3|66333|Völklingen'],
+    ['Haarstudio Tanja, Am Markt 25, 66763 Dillingen/Saar', 'Am Markt 25|66763|Dillingen/Saar'], ['Lange Straße 7, 66333 Völklingen', 'Lange Straße 7|66333|Völklingen'],
+    ['Silberherzstraße 22-24, 66740 Saarlouis', 'Silberherzstraße 22-24|66740|Saarlouis'], ['Stummstraße 46a · 66763 Dillingen/Saar', 'Stummstraße 46a|66763|Dillingen/Saar'],
+    ['Lisdorfer Str. 4 66740 Saarlouis', 'Lisdorfer Str. 4|66740|Saarlouis'], ['Postfach 12 66740 Saarlouis', null],
+    ['Hauptstraße 12 | 66333 Völklingen', 'Hauptstraße 12|66333|Völklingen'], ['Bahnhofstr. 3a, 66111 Saarbrücken', 'Bahnhofstr. 3a|66111|Saarbrücken'],
+  ];
+  for (const [text, want] of cases) { const r = findAddressIn(text); assert.equal(r ? [r.street, r.postalCode, r.city].join('|') : null, want, text); }
 });

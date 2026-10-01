@@ -13,11 +13,11 @@ import { assessContactability } from '../../src/contact/contactability.ts';
 const apps: App[] = []; after(async () => { for (const a of apps) await a.close(); });
 const owner = (n: number) => `00000000-0000-0000-0000-0000000002${String(n).padStart(2, '0')}`;
 class FakeSearch {
-  name = 'brave-search'; isMock = false; queries: string[] = []; hits: Record<string, string[]> = {}; cents = 0.5; fail = false;
+  name = 'brave-search'; isMock = false; queries: string[] = []; hits: Record<string, string[]> = {}; amount = 0.005; currency: 'USD' | 'EUR' = 'EUR'; fail = false;
   async search(q: { query: string }) {
     this.queries.push(q.query); if (this.fail) throw new Error('HTTP 500');
     const key = Object.keys(this.hits).find((n) => q.query.includes(n));
-    return { hits: [{ url: 'https://www.gelbeseiten.de/x', title: 'Verzeichnis', snippet: '', rank: 1 }, ...(key ? this.hits[key].map((u, i) => ({ url: u, title: key, snippet: '', rank: i + 2 })) : [])], requests: 1, source: this.name, retrievedAt: '2026-06-01T10:00:00.000Z', costCents: this.cents };
+    return { hits: [{ url: 'https://www.gelbeseiten.de/x', title: 'Verzeichnis', snippet: '', rank: 1 }, ...(key ? this.hits[key].map((u, i) => ({ url: u, title: key, snippet: '', rank: i + 2 })) : [])], requests: 1, source: this.name, retrievedAt: '2026-06-01T10:00:00.000Z', cost: { amount: this.amount, currency: this.currency } };
   }
 }
 const nameOf = (i: number) => `Nagelstudio ${word(i)}`; const siteOf = (i: number) => `https://www.${word(i).toLowerCase()}-nails.example/`;
@@ -28,7 +28,7 @@ async function fresh(n: number, syn: ConstructorParameters<typeof SyntheticPlace
   const { limits } = await app.repo.getLimits(); await app.repo.saveLimits({ ...limits, maxLeadsPerRun: 1000, maxAuditsPerRun: 1000, maxCrawlPagesPerRun: 20000 }); await enablePhone(app);
   const places = new SyntheticPlaces(syn), crawler = new StubCrawler(); const live = createProviders({ APP_MODE: 'live' }, { baseUrl: app.base });
   Object.assign(app.ctx.registry.providers, { places, crawler, directory: live.providers.directory, social: live.providers.social });
-  const ws = new FakeSearch(); app.ctx.sources.webSearch = (opts.noWs ? live.providers.directory && (app.ctx.sources.webSearch) : ws) as never;
+  const ws = new FakeSearch(); app.ctx.sources.webSearch = ws as never;
   app.ctx.cfg.pipeline = JSON.parse(JSON.stringify(app.ctx.cfg.pipeline)); app.ctx.enrichment.d.cfg = app.ctx.cfg; (app.ctx.enrichment.budget as any).cfg = app.ctx.cfg.pipeline.enrichment;
   return { app, ws, crawler, places };
 }
@@ -185,4 +185,101 @@ test('Freigabe-Workflow: Demo wird nur EMPFOHLEN (Begründung), nie automatisch 
   assert.match(await flash(app, await app.post(`/leads/${rid}/demo/skip`, { undo: '1' })), /zurückgenommen/); assert.equal((await q(app, "select state from approvals where lead_id=$2 order by requested_at desc limit 1", [rid]))[0].state, 'RECOMMENDED');
   // nichts wurde gesendet
   assert.equal((app.ctx.registry.providers.email as any).sent?.length ?? 0, 0); assert.equal((await q(app, "select count(*)::int n from outbox where owner_id=$1 and kind not like 'owner_%'"))[0].n, 0);
+});
+
+// ---------- Absicherung gegen Namensvettern und Anbieterfehler ----------
+import { scoreCandidate, toEurCents, type LeadInfo } from '../../src/enrich/service.ts';
+import { WebSearchError } from '../../src/sources/types.ts';
+import { loadConfig } from '../../src/core/config.ts';
+
+const VC = loadConfig().pipeline.enrichment.verify; const GEN = loadConfig().pipeline.dedupe.genericWords as string[];
+const doc = (title: string, body = '') => `<html><head><title>${title}</title></head><body><h1>${title}</h1>${body}</body></html>`;
+const ev = (pages: { url: string; html: string }[], o: object = {}) => ({ pages, host: 'salon-xyz.example', ...o });
+const lead = (o: Partial<LeadInfo> = {}): LeadInfo => ({ name: 'Haarstudio Tanja', city: 'Dillingen/Saar', postalCode: '66763', address: 'Am Markt 25', subKeywords: ['friseur', 'haarstudio'], point: { lat: 49.35, lng: 6.73 }, ...o });
+
+test('Verifikation (rein): Namensvetter in anderer Stadt, Verzeichnis-/Aggregatorseiten, nicht abrufbare Seiten, kurze Namen und weit entfernte Adressen werden nie „wahrscheinlich“; Standort am OSM-Eintrag verifiziert auch ohne Ort/PLZ', { skip }, async () => {
+  const imp = (addr: string) => ({ url: 'https://salon-xyz.example/impressum', html: `<html><body><h1>Impressum</h1><p>Haarstudio Tanja</p><p>${addr}</p></body></html>` });
+  const home = (title: string, body = '') => ({ url: 'https://salon-xyz.example/', html: doc(title, body + '<a href="mailto:info@salon-xyz.example">Mail</a>') });
+  // richtige Firma: Name im Titel, Ort, PLZ, Adresse
+  const good = scoreCandidate(ev([home('Haarstudio Tanja', '<p>Dillingen/Saar</p>'), imp('Am Markt 25, 66763 Dillingen/Saar')], { siteCity: 'Dillingen/Saar' }), lead(), GEN, VC);
+  assert.equal(good.verification, 'VERIFIED'); assert.ok(good.why.includes('Straße und Hausnummer stimmen') && good.why.includes('PLZ stimmt'));
+  // Namensvetter: gleicher Name, Adresse in Köln
+  const twin = scoreCandidate(ev([home('Haarstudio Tanja – Köln'), imp('Hauptstraße 5, 50667 Köln')], { siteCity: 'Köln', distanceKm: 330 }), lead(), GEN, VC);
+  assert.equal(twin.verification, 'REJECTED', 'Namensvetter in einer anderen Region wird abgelehnt (kein Eintrag in „Manuell prüfen“)'); assert.ok(twin.warnings.some((w) => /anderer Stadt \(Köln\)/.test(w)) && twin.warnings.some((w) => /330 km vom OSM-Standort entfernt/.test(w)));
+  const gb = scoreCandidate(ev([home('Haarstudio Tanja Gengenbach'), imp('Gartenstraße 15, 77723 Gengenbach')], { siteCity: 'Gengenbach', distanceKm: 141.1 }), lead({ city: undefined, postalCode: undefined, address: undefined, cityHint: 'Saarlouis' }), GEN, VC);   // echter Fall: gleicher Name, 141 km entfernt
+  assert.equal(gb.verification, 'REJECTED'); assert.ok(gb.confidence < VC.uncertainAt, String(gb.confidence));
+  // Aggregator: nennt Name + Ort + Branche, aber der Name steht nicht im Seitentitel/in der Domain
+  const agg = scoreCandidate({ pages: [{ url: 'https://friseur-liste.example/', html: doc('Die besten Friseure im Saarland', '<p>Haarstudio Tanja, Am Markt 25, 66763 Dillingen/Saar – Friseur</p><a href="mailto:x@y.example">k</a>') }], host: 'friseur-liste.example' }, lead(), GEN, VC);
+  assert.ok(agg.verification === 'UNCERTAIN' && agg.confidence < VC.likelyAt, `${agg.verification} ${agg.confidence}`); assert.ok(agg.warnings.some((w) => /nicht im Seitentitel/.test(w)));
+  // nicht abrufbar: nur Suchtreffer (Titel/Snippet) – höchstens unsicher
+  const failed = scoreCandidate({ pages: [], crawlFailed: true, hit: { title: 'Haarstudio Tanja Dillingen', snippet: 'Friseur Am Markt 25 66763 Dillingen/Saar' }, host: 'salon-xyz.example' }, lead(), GEN, VC);
+  assert.ok(failed.verification !== 'VERIFIED' && failed.verification !== 'LIKELY'); assert.ok(failed.warnings.some((w) => /nicht abrufbar/.test(w)));
+  // OSM-Eintrag ohne Stadt/Adresse/Telefon (so sehen 44 von 47 Saarlouis-Leads aus): Name + Titel allein reicht nicht …
+  const bare = lead({ city: undefined, postalCode: undefined, address: undefined, cityHint: 'Saarlouis', name: 'Coiffeur Joseph Barone' });
+  const nameOnly = scoreCandidate({ pages: [{ url: 'https://barone.example/', html: doc('Coiffeur Joseph Barone', '<a href="mailto:a@b.example">m</a><p>Friseur Impressum</p>') }], host: 'barone.example' }, bare, GEN, VC);
+  assert.ok(nameOnly.confidence < VC.likelyAt && nameOnly.verification === 'UNCERTAIN', `${nameOnly.verification} ${nameOnly.confidence}`);
+  // … aber die Adresse der Website, am OSM-Standort geocodiert, verifiziert
+  const geoPage = { pages: [{ url: 'https://barone.example/', html: doc('Coiffeur Joseph Barone', '<a href="mailto:a@b.example">m</a><p>Friseur</p>') }, imp('Silberherzstraße 3, 66740 Saarlouis')], host: 'barone.example', siteCity: 'Saarlouis' };
+  assert.equal(scoreCandidate({ ...geoPage, distanceKm: 0.08 }, bare, GEN, VC).verification, 'VERIFIED');
+  const near = scoreCandidate({ ...geoPage, distanceKm: 1.0 }, bare, GEN, VC); assert.ok(near.confidence > nameOnly.confidence && near.verification !== 'VERIFIED');
+  const far = scoreCandidate({ ...geoPage, distanceKm: 14 }, bare, GEN, VC); assert.equal(far.verification, 'UNCERTAIN'); assert.equal(scoreCandidate({ ...geoPage, distanceKm: 40 }, bare, GEN, VC).verification, 'REJECTED', 'über 25 km: anderer Betrieb'); assert.ok(far.warnings.some((w) => /14 km vom OSM-Standort entfernt/.test(w)), 'weit entfernte Adresse: nie automatisch übernehmen (auch Filialbetriebe → manuell prüfen)');
+  // sehr kurzer Name („R&H“): nie „wahrscheinlich“ ohne Telefonnummer
+  const short = scoreCandidate({ pages: [{ url: 'https://rh.example/', html: doc('R&H Friseure Saarlouis', '<a href="mailto:a@b.example">m</a><p>Saarlouis 66740 Friseur Impressum</p>') }], host: 'rh.example' }, lead({ name: 'R&H', city: 'Saarlouis', postalCode: '66740', address: undefined }), GEN, VC);
+  assert.ok(short.verification === 'UNCERTAIN' || short.verification === 'REJECTED'); assert.ok(short.warnings.some((w) => /sehr kurz/.test(w)));
+  // Telefonnummer stimmt: starker Beleg
+  const ph = scoreCandidate({ pages: [{ url: 'https://rh.example/', html: doc('R&H Friseure', '<p>Tel 06831 123456</p>') }], host: 'rh.example' }, lead({ name: 'R&H', phone: '06831 123456', city: undefined, postalCode: undefined, address: undefined }), GEN, VC); assert.ok(ph.why.includes('Telefonnummer stimmt überein'));
+  assert.equal(toEurCents({ amount: 0.005, currency: 'USD' }, 0.92), 0.46);
+});
+
+test('Namensvetter im Ablauf: gleiche Qualität zweier Websites → nicht übernehmen (UNCERTAIN); Standort-Abgleich über die Adresse der Website (Geocoding) verifiziert Leads ohne Stadt; Protokoll mit Anfragen/Treffern/Begründung wird gespeichert und angezeigt', { skip }, async () => {
+  const { app, ws, crawler, places } = await fresh(8, { n: 6, noSiteEvery: 1, noPhoneEvery: 1 }); await run(app);
+  const L = async (i: number) => { const l = await leadByName(app, nameOf(i)); await setPrio(app, l.id, 'A'); return l; };
+  const [amb, geoOk, geoFar] = [await L(0), await L(1), await L(2)];
+  // 1) zwei Domains gleich gut → mehrdeutig
+  ws.hits[nameOf(0)] = [siteOf(0), siteOf(0).replace('-nails', '-studio')];
+  for (const u of [siteOf(0), siteOf(0).replace('-nails', '-studio')]) crawler.sites[u] = [{ path: '/', html: page(nameOf(0), { city: 'Völklingen', plz: '66333', mail: true }) }];
+  const r0 = await app.ctx.enrichment.enrichLead(amb.id); assert.equal(r0.status, 'uncertain'); assert.match(r0.note, /zwei ähnlich passende Websites/); assert.equal((await leadByName(app, nameOf(0))).website_url, null);
+  assert.match((await q(app, "select note from lead_facts where lead_id=$2 and key='websiteCandidate'", [amb.id]))[0].note, /manuell prüfen/);
+  // 2) Lead OHNE Stadt/Adresse (nur Name + Koordinaten, wie bei den meisten OSM-Friseuren): Ortshinweis nur aus dem Suchlauf, Verifikation über den Standort
+  for (const l of [geoOk, geoFar]) await app.pool.query('update leads set city = null, address = null, postal_code = null where id=$1', [l.id]);
+  ws.hits[nameOf(1)] = [siteOf(1)]; ws.hits[nameOf(2)] = [siteOf(2)];
+  const site = (i: number, addr: string) => [{ path: '/', html: doc(nameOf(i), '<a href="mailto:a@salon.example">Mail</a><p>Friseur</p>') }, { path: '/impressum', html: `<html><body><h1>Impressum</h1><p>${nameOf(i)}</p><p>${addr}</p></body></html>` }];
+  crawler.sites[siteOf(1)] = site(1, 'Testweg 3, 66333 Völklingen'); crawler.sites[siteOf(2)] = site(2, 'Fernweg 9, 66333 Völklingen');
+  const p1 = { lat: Number(geoOk.lat), lng: Number(geoOk.lng) }, p2 = { lat: Number(geoFar.lat), lng: Number(geoFar.lng) };
+  (places as any).geocode = async (qq: string) => ({ query: qq, name: 'x', source: 'osm', point: qq.includes('Testweg') ? { lat: p1.lat + 0.0006, lng: p1.lng } : qq.includes('Fernweg') ? { lat: p2.lat + 0.2, lng: p2.lng } : null });
+  const r1 = await app.ctx.enrichment.enrichLead(geoOk.id); assert.equal(r1.verification, 'VERIFIED', JSON.stringify(r1.trace?.candidates)); assert.ok(r1.trace!.candidates[0].why.some((x) => /am OSM-Standort/.test(x))); assert.ok(r1.trace!.candidates[0].distanceKm! < 0.1);
+  assert.deepEqual(r1.trace!.place, { value: (await q(app, 'select region from lead_runs where owner_id=$1 limit 1'))[0].region, source: 'search-region' }); assert.match(r1.trace!.queries[0].query, /^"Nagelstudio .*" Völklingen/);
+  const r2 = await app.ctx.enrichment.enrichLead(geoFar.id); assert.equal(r2.verification, 'UNCERTAIN'); assert.equal(r2.status, 'uncertain'); assert.ok(r2.trace!.candidates[0].warnings.some((w) => /km vom OSM-Standort entfernt/.test(w))); assert.equal((await leadByName(app, nameOf(2))).website_url, null);
+  // Neubewertung ohne Netz verliert keine Quelldaten (Koordinaten, Kategorien, Karten-Link bleiben)
+  const after = await leadByName(app, nameOf(1)); assert.equal(after.website_url, siteOf(1)); assert.ok(after.lat !== null && after.lng !== null, 'Koordinaten bleiben erhalten');
+  const keys = (await q(app, "select distinct key from lead_facts where lead_id=$2 and source='osm'", [after.id])).map((x) => x.key); for (const k of ['name', 'point', 'mapsUrl', 'sourceCategories']) assert.ok(keys.includes(k), `Fakt ${k} aus der Quelle bleibt erhalten`);
+  assert.ok((await q(app, "select count(*)::int n from lead_facts where lead_id=$2 and source='web-search' and key='website'", [after.id]))[0].n === 1);
+  // Protokoll in der Datenbank und auf der Lead-Seite
+  const log = (await q(app, 'select * from enrichment_log where lead_id=$2 order by created_at desc limit 1', [after.id]))[0]; assert.ok(log.found.trace.queries.length >= 1 && log.found.trace.candidates[0].confidence >= 75);
+  const pg = await page_(app, `/leads/${after.id}`); for (const w of ['Enrichment-Protokoll', 'Suche:', 'Geprüfte Websites', 'verifiziert', 'Adresse auf der Website: Testweg 3, 66333 Völklingen', 'Ortsangabe für die Suche', 'nur Hinweis: Region des Suchlaufs', 'Verzeichnis/Portal (keine eigene Website)']) assert.ok(pg.includes(w), w);
+  assert.match(await page_(app, `/leads/${geoFar.id}`), /Vorbehalte: .*km vom OSM-Standort entfernt/);
+});
+
+test('Anbieterfehler und Währung: fataler Fehler (Schlüssel/Kontingent) stoppt den Stapel ohne Kosten; mehrere Fehler in Folge ebenfalls; USD-Providerkosten werden mit Währung gespeichert und in EUR gebucht', { skip }, async () => {
+  const { app, ws } = await fresh(9, { n: 8, noSiteEvery: 1, noPhoneEvery: 1 }); await run(app);
+  const ids = (await q(app, 'select id from leads where owner_id=$1')).map((r) => r.id as string); for (const id of ids) await setPrio(app, id, 'A');
+  // fatal (401): genau EIN Aufruf, danach Abbruch
+  const orig = ws.search.bind(ws); let calls = 0; ws.search = async () => { calls++; throw new WebSearchError('Brave Search HTTP 401 (API-Schlüssel ungültig oder ohne Berechtigung)', { status: 401, fatal: true }); };
+  const b1 = await app.ctx.enrichment.enrichBatch(ids, { limit: 100 }); assert.equal(calls, 1, 'keine Fehlerkaskade'); assert.match(b1.stoppedBy!, /401/); assert.equal(b1.costCents, 0); assert.equal(b1.counts.provider_unavailable, 1);
+  assert.equal((await q(app, "select count(*)::int n from leads where owner_id=$1 and enrichment_status='provider_unavailable'"))[0].n, 1); assert.equal((await q(app, 'select count(*)::int n from enrichment_log where owner_id=$1 and cost_cents > 0'))[0].n, 0);
+  assert.match(await flash(app, await app.post(`/leads/${ids[0]}/enrich`)), /Websuche fehlgeschlagen: .*401/);
+  // nicht fatal: nach 3 Fehlern in Folge Abbruch
+  calls = 0; ws.search = async () => { calls++; throw new WebSearchError('Brave Search HTTP 500 (Serverfehler)', { status: 500, fatal: false }); };
+  const b2 = await app.ctx.enrichment.enrichBatch(ids, { limit: 100 }); assert.equal(calls, 3); assert.ok(b2.stoppedBy);
+  // Fehler wird nicht gecacht: nach Behebung läuft dieselbe Suche
+  ws.search = orig; const ok = await app.ctx.enrichment.enrichLead(ids[0]); assert.equal(ok.status, 'not_found'); assert.equal(ok.requests, 3);
+  // USD-Providerkosten mit Währung
+  ws.currency = 'USD'; ws.amount = 0.005; const lead2 = ids[3]; const o2 = await app.ctx.enrichment.enrichLead(lead2); assert.equal(o2.requests, 3);
+  assert.deepEqual([o2.providerCost.currency, Math.round(o2.providerCost.amount * 1e6) / 1e6], ['USD', 0.015]); assert.equal(o2.costCents, toEurCents({ amount: 0.015, currency: 'USD' }, 0.92)); assert.equal(o2.costCents, 1.38);
+  const row = (await q(app, 'select provider_cost_amount a, provider_cost_currency c, fx_eur_per_usd fx, cost_cents e from enrichment_log where lead_id=$2 and provider_cost_currency = \'USD\' and provider_cost_amount > 0 limit 1', [lead2]))[0];
+  assert.deepEqual([Number(row.a), row.c, Number(row.fx), Number(row.e)], [0.015, 'USD', 0.92, 1.38]);
+  const bs = await app.ctx.enrichment.budget.status(app.ctx.now()); assert.ok(bs.monthSpentCents > 1.37 && bs.monthSpentCents < 4, 'Budget wird in EUR geführt (USD umgerechnet)');
+  const pg = await page_(app, '/enrichment'); assert.match(pg, /5 USD je 1\.000 Anfragen \(= 0,005 USD je Anfrage ≈ 0,0046 €/); assert.match(pg, /0,92 EUR\/USD/); assert.match(pg, /Guthaben von 5 USD\/Monat/);
+  // Lauf: Kosten mit Währung im Protokoll
+  const r = await run(app, { excludeExisting: '0' }, true); assert.equal(r.costs.currency, 'EUR'); assert.equal(r.costs.provider.web_search.currency, 'USD'); const src = (r.sources as any[]).find((s) => s.id === 'WEB_SEARCH'); if (src) assert.equal(src.providerCost.currency, 'USD');
 });

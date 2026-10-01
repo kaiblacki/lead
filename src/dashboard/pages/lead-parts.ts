@@ -278,7 +278,7 @@ export function demoConfirm(d: any, o: { csrf: string; leadId: string; template:
     <a class="btn" href="/leads/${o.leadId}#module">Funktionen ändern</a></div></div>`;
 }
 
-export function enrichmentCard(d: any, o: { csrf: string; leadId: string; facts: any[]; budgetLeftCents: number; available: boolean }): Safe {
+export function enrichmentCard(d: any, o: { csrf: string; leadId: string; facts: any[]; budgetLeftCents: number; available: boolean; log?: any }): Safe {
   const l = d.lead; const web = o.facts.find((f) => f.key === 'website' && f.source === 'web-search'); const cand = o.facts.find((f) => f.key === 'websiteCandidate');
   const missing = [!l.phone ? 'Telefonnummer' : '', !(l.email || o.facts.some((f) => f.key === 'email')) ? 'geschäftliche E-Mail' : '', !l.website_url ? 'Website' : ''].filter(Boolean);
   const verified = l.official_website_verified as keyof typeof VERIFY_LABEL | null;
@@ -288,6 +288,7 @@ export function enrichmentCard(d: any, o: { csrf: string; leadId: string; facts:
       <dt>Enrichment</dt><dd>${l.enrichment_status ? ENRICH_LABEL[l.enrichment_status] ?? l.enrichment_status : 'noch nicht geprüft'}${l.last_enrichment_at ? html` · zuletzt ${fmt(l.last_enrichment_at)}` : ''}</dd></dl>
     ${l.official_website_candidate ? html`<div class="${verified === 'VERIFIED' ? 'note' : 'warnbox'}"><b>Offizielle Website (Kandidat):</b> <code>${l.official_website_candidate}</code><br>Verifikation: <b>${verified ? VERIFY_LABEL[verified] : '–'}</b>${l.official_website_confidence !== null ? ` · ${l.official_website_confidence}/100` : ''}
       ${verified === 'UNCERTAIN' ? html`<br><b>Manuell prüfen</b> – wurde nicht als Website übernommen.` : verified === 'LIKELY' ? html`<br>Übernommen, aber bitte kurz prüfen.` : ''}${(web ?? cand)?.note ? html`<br><small>${(web ?? cand).note}</small>` : ''}</div>` : ''}
+    ${o.log ? enrichmentLog(o.log) : ''}
     ${o.available ? '' : html`<p class="mute">Websuche nicht verfügbar (BRAVE_SEARCH_API_KEY fehlt) – Enrichment: provider_unavailable.</p>`}
     ${postForm(o.csrf, `/leads/${o.leadId}/enrich`, html`<div class="row"><button>Enrichment erneut starten</button><label class="inline" style="display:flex;gap:6px;align-items:center;min-height:44px"><input type="checkbox" name="ignoreCache" value="1"> Zwischenspeicher ignorieren</label></div><small class="mute">Websuche kostet etwas: Budget diesen Monat übrig ${(o.budgetLeftCents / 100).toFixed(2).replace('.', ',')} €. Es wird nichts gesendet.</small>`, { style: 'display:block' })}</div>`;
 }
@@ -340,4 +341,16 @@ export function costsCard(costs: any): Safe {
   const euro = (c: number) => `${(c / 100).toFixed(c < 10 ? 4 : 2).replace('.', ',')} €`;
   return html`<div class="card" id="kosten">    <h3>KI-Kosten dieses Leads</h3><table><tr><td>Analyse</td><td class="r">${euro(costs.analysisCents)}</td></tr><tr><td>Demo / Konzept</td><td class="r">${euro(costs.demoCents)}</td></tr><tr><td>Kontaktvorlage</td><td class="r">${euro(costs.contactCents)}</td></tr><tr><td><b>Gesamt</b></td><td class="r"><b>${euro(costs.totalCents)}</b></td></tr></table>
     <small class="mute">${costs.calls} KI-Aufruf(e), ${costs.inputTokens + costs.outputTokens} Token. ${costs.totalCents === 0 ? 'Mock-/regelbasierte Aufrufe kosten nichts.' : ''}</small><small class="mute">Kosten für OSM und Websuche werden je Suchlauf erfasst (siehe Lauf-Protokoll).</small></div>`;
+}
+
+/** Protokoll der letzten Websuche-Runde: welche Anfragen liefen, welche Treffer kamen, welche Websites geprüft und warum (nicht) übernommen wurden. */
+function enrichmentLog(log: any): Safe {
+  const t = (log.found?.trace ?? {}) as any; const cost = `${Number(log.provider_cost_amount).toFixed(4).replace('.', ',')} ${log.provider_cost_currency} (≈ ${(Number(log.cost_cents) / 100).toFixed(4).replace('.', ',')} €)`;
+  return html`<details><summary>Enrichment-Protokoll (${fmt(log.created_at)} · ${log.requests} Anfrage(n) · ${cost})</summary>
+    ${t.place ? html`<p class="mute">Ortsangabe für die Suche: <b>${t.place.value}</b> ${t.place.source === 'search-region' ? '(nur Hinweis: Region des Suchlaufs, kein Beleg)' : '(OSM-Stadt)'}</p>` : ''}
+    ${(t.queries ?? []).map((q: any) => html`<h3>Suche: <code>${q.query}</code></h3><ul>${q.hits.map((h: any) => html`<li><small>#${h.rank}</small> <code>${h.url}</code> – ${h.title}${h.note ? html` <small class="mute">[${h.note}]</small>` : ''}</li>`)}</ul>`)}
+    ${(t.candidates ?? []).length ? html`<h3>Geprüfte Websites</h3><ul>${t.candidates.map((c: any) => html`<li><b>${c.host}</b>: ${VERIFY_LABEL[c.verification as keyof typeof VERIFY_LABEL] ?? c.verification} (${c.confidence}/100), ${c.pages} Seite(n) gelesen${c.siteAddress ? html`<br><small>Adresse auf der Website: ${c.siteAddress}${c.distanceKm !== null && c.distanceKm !== undefined ? ` – ${String(c.distanceKm.toFixed ? c.distanceKm.toFixed(2) : c.distanceKm).replace('.', ',')} km vom OSM-Standort` : ''}</small>` : ''}
+      ${c.why?.length ? html`<br><small>Dafür: ${c.why.join('; ')}</small>` : ''}${c.warnings?.length ? html`<br><small>Vorbehalte: ${c.warnings.join('; ')}</small>` : ''}${c.crawlError ? html`<br><small>Nicht abrufbar: ${c.crawlError}</small>` : ''}</li>`)}</ul>` : ''}
+    ${(t.social ?? []).length ? html`<p><b>Social-Profile (ungeprüft):</b> ${t.social.map((x: any) => `${x.platform}: ${x.url}`).join(' · ')}</p>` : ''}
+    ${t.decision ? html`<p><b>Entscheidung:</b> ${t.decision}</p>` : ''}${t.providerError ? html`<p class="errbox">${t.providerError}</p>` : ''}</details>`;
 }

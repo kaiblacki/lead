@@ -20,6 +20,26 @@ const jsonLd = (html: string): any[] => {
   return out;
 };
 
+/**
+ * Anschrift „Straße 12, 66333 Ort“ aus Seitentext (nur was dort steht). Der Anker ist „PLZ Ort“ (genau fünf Ziffern, nicht Teil einer längeren Zahl – sonst würde eine
+ * Telefonnummer wie „06831 46306“ als PLZ gelesen); davor wird Straße + Hausnummer gelesen: ein Straßenwort mit Endung (Straße, Str., Weg, Platz …) bzw. zwei Wörter
+ * wie „Lange Straße“/„Am Markt“, dann eine Hausnummer von 1–4 Ziffern ohne führende Null (auch „46a“, „22-24“). So landet weder ein Firmenname noch ein Telefonwort im Straßenfeld.
+ */
+export function findAddressIn(text: string): { street: string; postalCode: string; city: string } | null {
+  const city = /(?<!\d)(\d{5})(?!\d)\s+([A-ZÄÖÜ][A-Za-zäöüßÄÖÜ\-]{2,30}(?:\/[A-ZÄÖÜ][A-Za-zäöüßÄÖÜ\-]{2,20}|\s+(?:am|an der|a\.\s?d\.|bei|b\.)\s+[A-ZÄÖÜ][a-zäöüß]{2,20})?)/g;
+  const generic = 'Straße|Strasse|Str\\.|Weg|Platz|Allee|Gasse|Ring|Damm|Ufer|Markt';
+  const suffix = '(?:stra(?:ß|ss)e|str\\.|weg|platz|allee|gasse|ring|damm|ufer|markt|hof|berg|garten|pfad|steig|chaussee|promenade|park|zentrum|center|passage|tor)';
+  const no = '[1-9]\\d{0,3}\\s?[a-z]?(?:\\s*[-–/]\\s*[1-9]\\d{0,3}\\s?[a-z]?)?';
+  const street = new RegExp(`((?:(?:[A-ZÄÖÜ][a-zäöüß.\\-]{2,25}|Am|An|Auf|Im|In|Zur|Zum|Bei)\\s+(?:der\\s+|dem\\s+)?(?:${generic})|[A-ZÄÖÜ][A-Za-zäöüßÄÖÜ\\-]{2,35}${suffix})\\s*${no})\\s*[,|·\\-–]?\\s*$`);
+  for (const m of text.matchAll(city)) {
+    const before = text.slice(Math.max(0, (m.index ?? 0) - 90), m.index ?? 0); const s = street.exec(before);
+    if (s) return { street: s[1].trim(), postalCode: m[1], city: m[2].trim() };
+  }
+  return null;
+}
+/** Sichtbarer Text einer HTML-Seite. */
+export const visibleText = strip;
+
 export function extractContactFacts(pages: Page[], capturedAt: string): Fact[] {
   const out: Fact[] = [];
   const seen = new Set<string>();
@@ -46,8 +66,8 @@ export function extractContactFacts(pages: Page[], capturedAt: string): Fact[] {
     }
     // Adresse (nur aus Impressum/Kontakt, Muster „Straße 12, 66333 Ort“)
     if (/impressum|kontakt|contact|imprint/i.test(p.url)) {
-      const m = /([A-ZÄÖÜ][A-Za-zäöüßÄÖÜ.\- ]{2,40}?(?:str(?:aße|\.)?|weg|platz|allee|gasse|ring|damm|ufer)\s*\d+\s?[a-z]?)\s*,?\s*(\d{5})\s+([A-ZÄÖÜ][A-Za-zäöüßÄÖÜ\- ]{2,30})/.exec(text);
-      if (m) { add('address', m[1].trim(), p.url, 'low', 'Aus Impressum/Kontaktseite gelesen – bitte prüfen'); add('postalCode', m[2], p.url, 'low'); add('city', m[3].trim().split(/\s{2,}|Tel|E-Mail|Telefon/)[0], p.url, 'low'); }
+      const a = findAddressIn(text);
+      if (a) { add('address', a.street, p.url, 'low', 'Aus Impressum/Kontaktseite gelesen – bitte prüfen'); add('postalCode', a.postalCode, p.url, 'low'); add('city', a.city, p.url, 'low'); }
     }
     // Öffnungszeiten: Abschnitt nach „Öffnungszeiten“ mit Wochentagen
     const oi = text.search(/Öffnungszeiten|Sprechzeiten|Geschäftszeiten/i);

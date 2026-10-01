@@ -39,13 +39,13 @@ export class SearchRunner {
   constructor(d: RunnerDeps) { this.d = d; this.pipeline = d.pipeline ?? new PipelineStore({ repo: d.repo, cfg: d.cfg, now: d.now }); }
 
   /** Startet einen Lauf im Hintergrund und gibt sofort die Lauf-ID zurück. */
-  async start(criteria: SearchCriteria, opts: { scoring?: ScoringConfig } = {}): Promise<string> {
+  async start(criteria: SearchCriteria, opts: { scoring?: ScoringConfig; /** false: keine Web-Anreicherung nach dem Lauf (z. B. für einen kontrollierten Test) */ enrich?: boolean } = {}): Promise<string> {
     const { killSwitch } = await this.d.repo.getLimits();
     if (killSwitch) throw new Error('Kill Switch ist aktiv – keine neuen Suchläufe.');
     if (this.inflight.size || (await this.d.runs.running()).length) throw new Error('Es läuft bereits eine Suche. Bitte warten, bis sie fertig ist.');
     const description = describeCriteria(criteria, this.d.cfg.taxonomy);
     const runId = await this.d.runs.create(criteria, description);
-    const p = this.execute(runId, criteria, opts.scoring).catch(async (e) => { await this.d.runs.finish(runId, 'FAILED', {}, e instanceof Error ? e.message : String(e)); }).finally(() => { this.inflight.delete(p); });
+    const p = this.execute(runId, criteria, opts.scoring, { enrich: opts.enrich }).catch(async (e) => { await this.d.runs.finish(runId, 'FAILED', {}, e instanceof Error ? e.message : String(e)); }).finally(() => { this.inflight.delete(p); });
     this.inflight.add(p);
     return runId;
   }
@@ -102,8 +102,8 @@ export class SearchRunner {
   /** Wartet auf laufende Läufe (für Tests und sauberes Beenden). */
   async idle() { while (this.inflight.size) await Promise.all([...this.inflight]); }
 
-  async execute(runId: string, c: SearchCriteria, scoringOverride?: ScoringConfig): Promise<void> {
-    const { repo, leads, runs, providers: P, cfg } = this.d;
+  async execute(runId: string, c: SearchCriteria, scoringOverride?: ScoringConfig, o: { enrich?: boolean } = {}): Promise<void> {
+    const { repo, leads, runs, providers: P, cfg } = this.d; const enrichment = o.enrich === false ? undefined : this.d.enrichment;
     const now = this.d.now();
     const startedAt = new Date();
     const PC = cfg.pipeline ?? {}; const S = PC.sources ?? {};
@@ -122,7 +122,8 @@ export class SearchRunner {
     const errorsList: string[] = []; let webCents = 0; let rawCount = 0; let dedupeStats = { raw: 0, unique: 0, merged: 0, possible: 0 };
     let aiOpenerLeft = Number(PC.costControl?.aiOpenerPerRun ?? 10);
     let status: 'DONE' | 'STOPPED' = 'DONE';
-    const sourcesUsed: { id: string; provider: string; requests: number; costCents: number }[] = [];
+    const sourcesUsed: { id: string; provider: string; requests: number; costCents: number; providerCost?: { amount: number; currency: string } }[] = [];
+    let webProviderCost = { amount: 0, currency: 'EUR' as string };
     const placesProv = P.places as typeof P.places & { mode?: string };
 
     try {
@@ -233,11 +234,12 @@ export class SearchRunner {
     if (sum.stoppedReason && /MAX LEADS/.test(sum.stoppedReason) && c.maxLeads > limits.maxLeadsPerRun) sum.warnings.push(`Die Suchgröße (${c.maxLeads}) übersteigt das Limit „Max. Leads pro Lauf“ (${limits.maxLeadsPerRun}) – in den Einstellungen erhöhen.`);
     // Web-Enrichment (nur wenn Daten fehlen, in Prioritätsreihenfolge, im Budget) – danach wird neu bewertet
     let enr: Record<string, unknown> = { attempted: 0 };
-    if (this.d.enrichment && savedIds.length && status === 'DONE') {
+    if (enrichment && savedIds.length && status === 'DONE') {
       await runs.phase(runId, 'enriching');
       try {
-        const r = await this.d.enrichment.enrichBatch(savedIds, { runId });
-        enr = { attempted: r.attempted, counts: r.counts, requests: r.requests, costCents: r.costCents }; sum.usage.websearch += r.requests; webCents += r.costCents;
+        const r = await enrichment.enrichBatch(savedIds, { runId });
+        enr = { attempted: r.attempted, counts: r.counts, requests: r.requests, costCents: r.costCents, providerCost: r.providerCost, stoppedBy: r.stoppedBy }; sum.usage.websearch += r.requests; webCents += r.costCents; webProviderCost = r.providerCost;
+        if (r.stoppedBy) sum.warnings.push(`Web-Enrichment vorzeitig beendet: ${r.stoppedBy}`);
         errorsList.push(...r.outcomes.filter((o) => /^Fehler/.test(o.note)).slice(0, 5).map((o) => o.note));
         if (r.counts.provider_unavailable) sum.warnings.push('Web-Enrichment übersprungen: Websuche nicht verfügbar (BRAVE_SEARCH_API_KEY fehlt).');
         if (r.counts.budget_blocked) sum.warnings.push(`Enrichment-Budget erreicht – ${r.counts.budget_blocked} Lead(s) bleiben ohne Anreicherung (budget_blocked).`);
@@ -245,7 +247,7 @@ export class SearchRunner {
       await runs.phase(runId, 'analyzing');
     }
     await repo.usage(runId, P.crawler.name, 'crawl', sum.usage.crawl); await repo.usage(runId, P.social.name, 'lookup', sum.usage.social);
-    if (this.d.enrichment) { await repo.usage(runId, this.d.enrichment.provider.name, 'search', sum.usage.websearch); if (sum.usage.websearch) sourcesUsed.push({ id: 'WEB_SEARCH', provider: this.d.enrichment.provider.name, requests: sum.usage.websearch, costCents: webCents }); }
+    if (enrichment) { await repo.usage(runId, enrichment.provider.name, 'search', sum.usage.websearch); if (sum.usage.websearch) sourcesUsed.push({ id: 'WEB_SEARCH', provider: enrichment.provider.name, requests: sum.usage.websearch, costCents: webCents, providerCost: webProviderCost }); }
     if (sum.usage.crawl) sourcesUsed.push({ id: 'DIRECT_WEBSITE', provider: P.crawler.name, requests: sum.usage.crawl, costCents: sum.usage.crawl * Number(S.DIRECT_WEBSITE?.centsPerRequest ?? 0) });
     // Demo-Empfehlungen entstehen bei der Bewertung jedes Leads; hier nur die Zählung (es wird nie automatisch eine Demo erstellt)
     let demoInfo = { recommended: 0 };
@@ -254,7 +256,7 @@ export class SearchRunner {
     (sum as RunSummary & Record<string, unknown>).pipeline = { dedupe: dedupeStats, demoRecommended: demoInfo.recommended, enrichment: enr, webSearchCalls: sum.usage.websearch };
     const ai = await new AiUsageStore(repo).forRun(runId, startedAt);
     const osmCents = sourcesUsed.filter((s) => s.id === 'OSM' || s.id === 'GOOGLE_PLACES').reduce((n, s) => n + s.costCents, 0);
-    const costs = { osm: osmCents, web_search: webCents, ai: ai.analysisCents + ai.otherCents, demo: ai.demoCents, total: osmCents + webCents + ai.totalCents };
+    const costs = { currency: 'EUR', unit: 'EUR-Cent', provider: { web_search: webProviderCost }, osm: osmCents, web_search: webCents, ai: ai.analysisCents + ai.otherCents, demo: ai.demoCents, total: osmCents + webCents + ai.totalCents };
     await save();
     await runs.finish(runId, status, sum, undefined, { sources: sourcesUsed, costs, errors: errorsList, rawCount, foundCount: sum.analyzed });
   }

@@ -22,7 +22,7 @@ Tests: `npm run test:all` (Unit-Tests, danach lokale Test-Datenbank `dbtest` mit
 ## 2. Eigene Datenbank (Supabase) mit Mock-Diensten
 
 1. supabase.com → New project → Region **Central EU (Frankfurt)** → Datenbankpasswort speichern.
-2. SQL Editor → nacheinander den Inhalt von `supabase/migrations/0001_core.sql` bis `0009_invoices.sql` einfügen und jeweils **Run** (Reihenfolge einhalten).
+2. SQL Editor → nacheinander den Inhalt von `supabase/migrations/0001_core.sql` bis `0013_provider_cost_currency.sql` einfügen und jeweils **Run** (Reihenfolge einhalten).
 3. Authentication → Users → **Add user**. Die **User UID** ist `OWNER_ID`.
 4. Project Settings → Database → **Connection string** (URI) → `DATABASE_URL` (Passwort einsetzen).
 5. `.env` anlegen (`cp .env.example .env`), mindestens setzen: `DATABASE_URL`, `OWNER_ID`, `DASHBOARD_PASSWORD` (≥ 12 Zeichen, zufällig). `APP_MODE=mock` lassen.
@@ -39,6 +39,7 @@ Unter **Einstellungen → Provider** steht je Dienst, ob Mock oder echt aktiv is
 |---|---|---|
 | **OpenStreetMap (Suche ohne Schlüssel)** | `APP_MODE=live`, optional `OSM_CONTACT` | wird automatisch genutzt, wenn kein Google-Key gesetzt ist; kleine Suche mit 5 Leads, Daten sind lückenhafter als bei Google |
 | Google Places (Suche) | `GOOGLE_PLACES_API_KEY` | `node src/cli.ts providers`, dann eine kleine Suche mit 5 Leads; Kosten im Budget-Limit „Places-Anfragen pro Lauf“ |
+| **Websuche für die Anreicherung (Brave Search API)** | `BRAVE_SEARCH_API_KEY` (nur als Umgebungsvariable – nie in Chat, Repository oder Client-Code), `APP_MODE=live` | Preis 5 USD je 1.000 Anfragen; Budget 10 €/Monat und 2 €/Tag in `config/pipeline.json`. Zuerst **`npm run enrich:check -- --ensure-run`** (5 Leads, harte Anfragen-Obergrenze, Bericht VORHER → NACHHER, nichts wird gesendet oder erstellt), siehe unten |
 | Crawler + Browser-Tiefenprüfung | `PROVIDER_CRAWLER=real`, Chromium (`CHROMIUM_PATH`) | wenige bekannte Websites per CSV-Import; Ergebnisse gegen die eigene Einschätzung lesen |
 | KI (Gesprächseinstieg, Änderungswünsche) | `ANTHROPIC_API_KEY`, optional `ANTHROPIC_MODEL` | Ausgaben werden geprüft (nur belegte Gründe, keine Versprechen); Budget-Limits in den Einstellungen |
 | Zahlungen (Stripe) | `STRIPE_SECRET_KEY` (`sk_test_…` zuerst), `STRIPE_WEBHOOK_SECRET` | Stripe CLI: `stripe listen --forward-to http://127.0.0.1:3000/webhooks/stripe`; Testkarte `4242 4242 4242 4242`; ganzen Weg bis „Wartung aktiv“ durchspielen. Ereignisse: `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.expired`, `customer.subscription.deleted`, `invoice.payment_failed` |
@@ -46,6 +47,12 @@ Unter **Einstellungen → Provider** steht je Dienst, ob Mock oder echt aktiv is
 | E-Mail (Benachrichtigungen an dich, Zahlungs-/Freigabe-Links an Kunden) | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | Einstellungen → „E-Mail und Benachrichtigungen“: Adresse eintragen, **Test-E-Mail senden**; alles Gesendete steht im **Postausgang**. Zugangsdaten werden nur über verschlüsselte Verbindung gesendet |
 | WhatsApp (nur mit Opt-in) | `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID` | Versand nur über die Kontaktregeln (Kanal aktiv, Einwilligung, Limit); Meta erlaubt Neukontakten nur Vorlagen |
 | Verzeichnisse, Social-Daten | – | **noch nicht gebaut** (nur Mock), siehe docs/STATUS.md |
+
+#### Brave-Schlüssel und der 5-Lead-Test
+- **Lokal (Mac/Linux):** im Projektordner, im selben Terminalfenster: `export BRAVE_SEARCH_API_KEY='…'` und `test -n "$BRAVE_SEARCH_API_KEY" && echo "Brave-Key ist gesetzt"`. Danach `npm run enrich:check -- --ensure-run` (legt bei Bedarf eine lokale Datenbank `agency_live` an, wenn `DATABASE_URL` nicht gesetzt ist; fehlende Migrationen meldet das Skript, `--migrate` spielt sie lokal ein).
+- **Claude-Code-Cloud-Sitzung:** ein `export` auf dem eigenen Rechner erreicht die Cloud-Umgebung nicht. Die Variable `BRAVE_SEARCH_API_KEY` in den Einstellungen der Cloud-Umgebung anlegen (Menü der Umgebung in der Titelleiste → Bearbeiten → „API credentials“ bzw. Umgebungsvariable) und eine **neue** Sitzung auf dem Branch starten. Die Datenbank der Cloud-Umgebung ist flüchtig: der Suchlauf wird mit `--ensure-run` kostenlos neu angelegt.
+- Ohne Schlüssel: `npm run enrich:check -- --dry-run` zeigt Auswahl und Zustand VORHER, ohne Anfrage. Der Bericht (Markdown + JSON) liegt in `out/enrich-check/` (nicht im Git).
+- Danach **stoppen**: die übrigen Leads werden erst nach ausdrücklicher Bestätigung angereichert (Dashboard „Daten“ → Enrichment starten oder `enrichBatch`).
 
 Reihenfolge-Empfehlung: Places → Crawler → KI → Stripe (Test) → Hosting → erst dann Stripe live. Nach jedem Schritt Dashboard → Einstellungen → Provider prüfen.
 

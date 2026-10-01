@@ -50,7 +50,7 @@ export function buildContext(repo: Repo, o: ContextOptions): Context {
   const pipeline = new PipelineStore({ repo, cfg, now });
   leads.afterSave = (leadId, c) => pipeline.recomputePriority(leadId, c).then(() => undefined);
   const sources = createSources(env, cfg, P, { now: o.providerNow ?? now });
-  const enrichment = new EnrichmentService({ repo, leads, pipeline, cfg, now, sources, providers: P, reanalyze: async (id) => { await reanalyzeLead(ctx, id); await automation.afterAnalysis(id, { matched: true, noWebsite: false, opportunity: null, blocked: false }); } });
+  const enrichment = new EnrichmentService({ repo, leads, pipeline, cfg, now, sources, providers: P, reanalyze: async (id) => { await reanalyzeLead(ctx, id, { offline: true }); await automation.afterAnalysis(id, { matched: true, noWebsite: false, opportunity: null, blocked: false }); } });
   const runner = new SearchRunner({ repo, leads, runs, providers: P, cfg, now, pipeline, enrichment: cfg.pipeline.sources.WEB_SEARCH.enabled ? enrichment : undefined });
   const orders = new OrderService(repo, cfg, now);
   const delivery = new DeliveryService(orders);

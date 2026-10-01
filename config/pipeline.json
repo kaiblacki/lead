@@ -17,10 +17,19 @@
       "cacheDays": 7
     },
     "WEB_SEARCH": {
-      "_hinweis": "Optionale Websuche (Brave Search API, BRAVE_SEARCH_API_KEY). Nur für Firmen, bei denen Daten fehlen UND die interessant genug sind. Ohne Schlüssel: Mock/keine Ergebnisse.",
+      "_hinweis": "Optionale Websuche (Brave Search API, BRAVE_SEARCH_API_KEY). Nur für Firmen, bei denen Daten fehlen UND die interessant genug sind. Ohne Schlüssel: Mock/keine Ergebnisse. Providerkosten stehen IMMER mit Währung (USD); das interne Budget rechnet in EUR (Kurs: config/ai.json → eurPerUsd).",
       "enabled": true,
-      "centsPerRequest": 0.5,
-      "resultsPerQuery": 5
+      "provider": "brave",
+      "pricing": {
+        "usdPerThousandRequests": 5,
+        "currency": "USD",
+        "monthlyCreditUsd": 5,
+        "note": "Brave Search API, Tarif „Search“: 5 USD je 1.000 Anfragen (= 0,005 USD = 0,5 US-Cent je Anfrage), enthält 5 USD Guthaben pro Monat. Das interne Budget rechnet brutto (ohne dieses Guthaben) und in EUR.",
+        "source": "https://api-dashboard.search.brave.com/documentation/pricing"
+      },
+      "resultsPerQuery": 10,
+      "minIntervalMs": 1100,
+      "maxRetries": 2
     },
     "DIRECT_WEBSITE": {
       "maxPages": 5,
@@ -306,9 +315,23 @@
         "phone": 35,
         "industry": 5,
         "impressum": 5,
-        "contact": 5
-      }
-    }
+        "contact": 5,
+        "title": 8,
+        "domain": 5,
+        "locationMatch": 35,
+        "locationNear": 8,
+        "locationFar": -30,
+        "cityMismatch": -25
+      },
+      "locationMatchKm": 0.4,
+      "locationNearKm": 1.5,
+      "locationFarKm": 6,
+      "rejectFarKm": 25,
+      "ambiguityPoints": 8
+    },
+    "maxCandidatesPerQuery": 4,
+    "verifyPages": 3,
+    "geocodeSiteAddress": true
   },
   "recommendation": {
     "_hinweis": "Demo-Empfehlung (nur Empfehlung – erstellt wird die Demo erst nach deiner Bestätigung).",
