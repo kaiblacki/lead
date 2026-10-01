@@ -24,6 +24,10 @@ try {
   const criteria = normalizeCriteria(p.criteria, ctx.cfg.taxonomy);
   const uaHint = env.OSM_CONTACT ? '' : ' – Tipp: OSM_CONTACT mit deiner Kontakt-Adresse setzen';
   console.log(`\nSuche: ${p.understood.join(' · ')}\n(Nominatim/Overpass: höchstens 1 Anfrage pro Sekunde, eindeutiger User-Agent${uaHint})\n`);
+  // „Möglichst vollständig“: die Standard-Obergrenzen (100 Leads/Lauf) würden den Lauf abbrechen. Nur erhöhen, nie senken; bleibt in den Einstellungen sichtbar.
+  const cur = (await repo.getLimits()).limits;
+  const want = { ...cur, maxLeadsPerRun: Math.max(cur.maxLeadsPerRun, 400), maxAuditsPerRun: Math.max(cur.maxAuditsPerRun, 400) };
+  if (want.maxLeadsPerRun !== cur.maxLeadsPerRun || want.maxAuditsPerRun !== cur.maxAuditsPerRun) { await repo.saveLimits(want); console.log(`Limits für diesen Test erhöht: ${want.maxLeadsPerRun} Leads / ${want.maxAuditsPerRun} Analysen pro Lauf.`); }
   const runId = await ctx.runner.start(criteria);
   await ctx.runner.idle();
   console.log(formatReport(await buildReport(repo, runId, P.ai)));

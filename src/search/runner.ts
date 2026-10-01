@@ -14,6 +14,9 @@ import { hostOf, norm, normPhone, socialPlatformOf } from '../core/text.ts';
 import type { ScoringConfig } from '../scoring/intelligence.ts';
 import type { Lead } from '../core/types.ts';
 
+/** Absendername für den Gesprächseinstieg: eigene Einstellung, sonst Agentur-Konfiguration – aber nie ein offener Platzhalter wie „[Dein Name]“. */
+const callerOf = (own: string | null | undefined, cfg: string | undefined) => [own, cfg].find((n) => n && !/[\[\]]/.test(n)) || undefined;
+
 export type Merged = { place?: PlaceCandidate; directory?: DirectoryRecord };
 
 const keysOf = (x: { name: string; phone?: string; website?: string; postalCode?: string; city?: string }) => {
@@ -90,7 +93,7 @@ export class SearchRunner {
           sum.analyzed++;
           const hits = await repo.findSuppression(suppressionKeys(res.facts, res.lead.companyName));
           const contact = assessContact({ facts: res.facts, audit: res.audit, suppressionHits: hits, phoneEnabled: settings.phoneEnabled });
-          const brief = res.analysis.salesOpportunity.category === 'UNRATED' ? null : buildBrief({ company: res.lead.companyName, facts: res.facts, audit: res.audit, analysis: res.analysis, contact, now, pricing: cfg.pricing, sales: cfg.sales, callerName: settings.callerName ?? cfg.agency.callerName });
+          const brief = res.analysis.salesOpportunity.category === 'UNRATED' ? null : buildBrief({ company: res.lead.companyName, facts: res.facts, audit: res.audit, analysis: res.analysis, contact, now, pricing: cfg.pricing, sales: cfg.sales, callerName: callerOf(settings.callerName, cfg.agency.callerName) });
           const saved = await leads.saveAnalysis({ res, contact, brief, runId, scoring, runResult: { matched: contact.readiness !== 'DO_NOT_CONTACT', failReasons: contact.readiness === 'DO_NOT_CONTACT' ? ['Auf der Sperrliste'] : [] } });
           if (contact.readiness !== 'DO_NOT_CONTACT') sum.matched++;
           void saved;
@@ -167,11 +170,11 @@ export class SearchRunner {
 
           const hits = await repo.findSuppression(suppressionKeys(res.facts, res.lead.companyName));
           const contact = assessContact({ facts: res.facts, audit: res.audit, suppressionHits: hits, phoneEnabled: settings.phoneEnabled });
-          let brief = res.analysis.salesOpportunity.category === 'UNRATED' ? null : buildBrief({ company: res.lead.companyName, facts: res.facts, audit: res.audit, analysis: res.analysis, contact, now, pricing: cfg.pricing, sales: cfg.sales, callerName: settings.callerName ?? cfg.agency.callerName });
+          let brief = res.analysis.salesOpportunity.category === 'UNRATED' ? null : buildBrief({ company: res.lead.companyName, facts: res.facts, audit: res.audit, analysis: res.analysis, contact, now, pricing: cfg.pricing, sales: cfg.sales, callerName: callerOf(settings.callerName, cfg.agency.callerName) });
           const fail = postfilter(c, { analysis: res.analysis, audit: res.audit, profiles: (res.lead.socials ?? []).map((s) => ({ platform: s.platform, lastPostAt: s.lastActivityAt })), socialComplete: !!res.social?.complete,
             readiness: contact.readiness, hasPhone: !!res.lead.phone, hasEmail: !!res.lead.email, bookingRelevant: cfg.taxonomy.sub(res.lead.subIndustry)?.booking !== false, now, cfg: scoring });
           const matched = fail.length === 0 && contact.readiness !== 'DO_NOT_CONTACT';
-          if (matched && brief && (brief.priority === 'A' || brief.priority === 'B')) brief = await polishOpener(brief, { company: res.lead.companyName, callerName: settings.callerName ?? cfg.agency.callerName }, gateway, res.externalId);
+          if (matched && brief && (brief.priority === 'A' || brief.priority === 'B')) brief = await polishOpener(brief, { company: res.lead.companyName, callerName: callerOf(settings.callerName, cfg.agency.callerName) }, gateway, res.externalId);
           const saved = await leads.saveAnalysis({ res, contact, brief, runId, scoring, runResult: { matched, failReasons: contact.readiness === 'DO_NOT_CONTACT' && !fail.length ? ['Auf der Sperrliste'] : fail } });
           if (matched) { sum.matched++; matchedLeads.push({ leadId: saved.leadId, sales: res.analysis.salesOpportunity.value, dn: res.analysis.digitalNeed.value, dist: res.lead.distanceKm, reviews: res.lead.reviewCount }); }
         } catch (e) {
