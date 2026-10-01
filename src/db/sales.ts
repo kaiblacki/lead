@@ -25,6 +25,12 @@ export class SalesStore {
       return { id: r.rows[0].id, token };
     });
   }
+  /** Inhalt einer bestehenden Demo ersetzen (Link und Ablauf bleiben). */
+  async updateDemoHtml(demoId: string, template: string, html: string) {
+    const r = await this.pool.query('update demos set html=$3, template=$4 where id=$1 and owner_id=$2 and not revoked returning lead_id', [demoId, this.owner, html, template]);
+    if (!r.rowCount) throw new Error('Demo nicht gefunden');
+    await this.repo.event(this.pool, r.rows[0].lead_id, 'demo_updated', { demo_id: demoId, template, actor: 'user' });
+  }
   async listDemos(leadId: string) { return (await this.pool.query('select id, template, token, expires_at, revoked, view_count, last_viewed_at, created_at from demos where lead_id=$1 and owner_id=$2 order by created_at desc', [leadId, this.owner])).rows; }
   async revokeDemo(demoId: string) {
     const r = await this.pool.query('update demos set revoked=true where id=$1 and owner_id=$2 returning lead_id', [demoId, this.owner]);

@@ -20,6 +20,7 @@ export type CallOutcome = { result: CallResult; moved: Status[]; messages: strin
 
 
 /** „Meine heutigen Calls“ und die Pipeline-Logik hinter den Ergebnis-Buttons. Es wird nie automatisch angerufen oder gesendet. */
+const prioRank = (r: any) => ({ A: 3, B: 2, C: 1, D: 0 } as Record<string, number>)[r.effective_priority ?? r.brief?.priority ?? 'D'] ?? 0;
 export class CallService {
   repo: Repo; leads: LeadStore; sales: SalesStore; docs: SalesDocs; orders: OrderService; now: () => Date; tasks?: TaskStore;
   constructor(d: { repo: Repo; leads: LeadStore; sales: SalesStore; docs: SalesDocs; orders: OrderService; now?: () => Date; tasks?: TaskStore }) { this.tasks = d.tasks; this.repo = d.repo; this.leads = d.leads; this.sales = d.sales; this.docs = d.docs; this.orders = d.orders; this.now = d.now ?? (() => new Date()); }
@@ -32,7 +33,7 @@ export class CallService {
     const dayStart = startOfBerlinDay(now), dayEnd = endOfBerlinDay(now);
     const settings = await this.repo.getSettings();
     const base = `select l.id, l.company_name, l.city, l.sub_industry, l.status, l.phone, l.website_url, l.website_state, l.distance_km, l.callback_at, l.last_contact_at, l.call_count, l.is_mock, l.contact_reason,
-        o.score, o.category, o.digital_need, (o.dimensions->'dataQuality'->>'value')::float as dq, (o.dimensions->'contactability'->>'value')::float as contactability, l.address, l.source, sp.brief, sp.opener, sp.approved_at,
+        o.score, o.category, o.digital_need, (o.dimensions->'dataQuality'->>'value')::float as dq, (o.dimensions->'contactability'->>'value')::float as contactability, l.address, l.source, l.effective_priority, sp.brief, sp.opener, sp.approved_at,
         (select note from contact_history h where h.lead_id = l.id and h.note is not null order by at desc limit 1) as last_note,
         (select result from contact_history h where h.lead_id = l.id and h.channel='PHONE' order by at desc limit 1) as last_result
       from leads l
@@ -44,12 +45,12 @@ export class CallService {
     const callbacks = (await this.pool.query(`${base} and l.callback_at < $2 and l.status = any($3) order by l.callback_at`, [this.owner, dayEnd, PRE_SALE])).rows;
     const demoReady = (await this.pool.query(`${base} and exists (select 1 from lead_tasks t where t.lead_id = l.id and t.owner_id = $1 and t.kind = 'CALL_DEMO_READY' and t.status = 'OPEN') and l.callback_at is null order by o.score desc nulls last, l.created_at`, [this.owner])).rows;
     const demoIds = new Set(demoReady.map((r) => r.id));
-    const fresh = (await this.pool.query(`${base} and l.callback_at is null and l.status in ('QUALIFIED') and o.score is not null order by o.score desc nulls last, l.created_at`, [this.owner])).rows.sort((a, b) => cmp(b.score, a.score) || cmp(b.dq, a.dq) || cmp(b.contactability, a.contactability) || cmp(b.digital_need, a.digital_need));
+    const fresh = (await this.pool.query(`${base} and l.callback_at is null and l.status in ('QUALIFIED') and o.score is not null order by o.score desc nulls last, l.created_at`, [this.owner])).rows.sort((a, b) => cmp(prioRank(b), prioRank(a)) || cmp(b.score, a.score) || cmp(b.dq, a.dq) || cmp(b.contactability, a.contactability) || cmp(b.digital_need, a.digital_need));
     const follow = (await this.pool.query(`${base} and l.callback_at is null and l.status in ('DEMO_CREATED','INTERESTED','OFFER_SENT') and l.last_contact_at < $2 order by case l.status when 'OFFER_SENT' then 0 when 'INTERESTED' then 1 else 2 end, l.last_contact_at`, [this.owner, new Date(now.getTime() - FOLLOW_UP_DAYS * 86400000)])).rows;
-    const shape = (r: any, kind: 'callback' | 'demo_ready' | 'new' | 'follow_up') => ({ ...r, kind, priority: r.brief?.priority ?? 'D' });
+    const shape = (r: any, kind: 'callback' | 'demo_ready' | 'new' | 'follow_up') => ({ ...r, kind, priority: r.effective_priority ?? r.brief?.priority ?? 'D' });
     const ok = (r: any) => !handledIds.has(r.id);
     const okNoDemo = (r: any) => ok(r) && !demoIds.has(r.id);     // Leads mit „Demo fertig“-Aufgabe stehen schon oben
-    const list = [...callbacks.filter(ok).map((r) => shape(r, 'callback')), ...demoReady.filter((r) => !handledIds.has(r.id)).map((r) => ({ ...shape(r, 'demo_ready'), priority: r.brief?.priority ?? 'B' })), ...fresh.filter(okNoDemo).filter((r) => r.brief?.priority && r.brief.priority !== 'D').map((r) => shape(r, 'new')), ...follow.filter(okNoDemo).map((r) => shape(r, 'follow_up'))];
+    const list = [...callbacks.filter(ok).map((r) => shape(r, 'callback')), ...demoReady.filter((r) => !handledIds.has(r.id)).map((r) => ({ ...shape(r, 'demo_ready'), priority: r.effective_priority ?? r.brief?.priority ?? 'B' })), ...fresh.filter(okNoDemo).filter((r) => (r.effective_priority ?? r.brief?.priority) && (r.effective_priority ?? r.brief?.priority) !== 'D').map((r) => shape(r, 'new')), ...follow.filter(okNoDemo).map((r) => shape(r, 'follow_up'))];
     const callbacksN = list.filter((x) => x.kind === 'callback').length;
     const target = settings.dailyCallTarget;
     const limited = [...list.slice(0, callbacksN), ...list.slice(callbacksN).slice(0, Math.max(0, target - doneToday.leads - callbacksN))];

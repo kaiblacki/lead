@@ -25,7 +25,7 @@ export function header(d: any, csrf: string): Safe {
     <p>${l.address && l.postal_code && String(l.address).includes(l.postal_code) ? l.address : [l.address, [l.postal_code, l.city].filter(Boolean).join(' ')].filter(Boolean).join(', ')} ${l.distance_km ? html`<small>· ${Number(l.distance_km).toFixed(1).replace('.', ',')} km</small>` : ''}</p>
     <div class="row">${categoryBadge(o?.category)}${statusBadge(l.status)}${readinessBadge(l.contact_readiness)}<span class="badge">${webStateText(l.website_state)}</span>${l.paused ? html`<span class="badge b-warn">pausiert</span>` : ''}</div>
     <div class="grid" style="margin-top:10px"><div class="kpi"><b>${o?.score ?? '–'}</b><span>Sales Opportunity</span></div><div class="kpi"><b>${o?.digital_need ?? '–'}</b><span>Digital Need</span></div>
-      <div class="kpi"><b>${d.sales?.brief?.priority ?? '–'}</b><span>Priorität</span></div><div class="kpi"><b>${l.call_count}</b><span>Anrufe</span></div></div>
+      <div class="kpi"><b>${l.effective_priority ?? d.sales?.brief?.priority ?? '–'}</b><span>Priorität</span></div><div class="kpi"><b>${l.call_count}</b><span>Anrufe</span></div></div>
     ${(() => { const en = enrichment(l); const dq = o?.dimensions?.dataQuality?.value; return html`<dl class="facts"><dt>Telefon</dt><dd>${l.phone ? html`<a class="tel" href="tel:${String(l.phone).replace(/[^\d+]/g, '')}">${l.phone}</a>` : NA}</dd>
       <dt>Website</dt><dd>${l.website_url ? html`<code>${l.website_url}</code>` : NA}</dd><dt>E-Mail</dt><dd>${orNA(l.email)}</dd><dt>Branche</dt><dd>${orNA(l.sub_industry ?? l.industry)}</dd>
       <dt>Quelle</dt><dd>${sourceLabel(l.source)}</dd><dt>Datenqualität</dt><dd>${dq !== undefined && dq !== null ? `${Math.round(dq)}/100` : NA}</dd></dl>
@@ -61,7 +61,7 @@ export function sales(d: any, csrf: string, id: string): Safe {
   const s = d.sales, b = s?.brief;
   if (!b) return html`<div class="card"><h2>Verkaufsgrundlage</h2><p class="mute">Noch keine Verkaufsgrundlage (Lead nicht bewertbar oder noch nicht analysiert).</p></div>`;
   const v = b.valueRange;
-  return html`<div class="card"><div class="row"><h2 class="grow">Verkaufsgrundlage</h2>${prioBadge(b.priority)}</div><p><b>${b.priorityLabel}</b></p>
+  return html`<div class="card"><div class="row"><h2 class="grow">Verkaufsgrundlage</h2></div>
     <h3>Die wichtigsten Verkaufsgründe</h3><ol>${b.reasons.map((r: any) => html`<li>${r.text}<br><small class="mute">Beleg: ${r.evidence}</small></li>`)}</ol>
     <h3>Mögliche Leistung</h3><p><b>${b.service.name}</b> – ${eur(b.service.priceCents)} einmalig (laut Preisliste)</p>
     ${b.service.upsells.length ? html`<ul>${b.service.upsells.map((u: any) => html`<li>Zusatz: ${u.label} <small class="mute">(${u.reason})</small></li>`)}</ul>` : ''}
@@ -201,7 +201,7 @@ export function nextActionText(l: any, now = new Date()): string {
   if (l.demo_ready_call) return l.phone ? 'Demo fertig – anrufen' : 'Demo fertig – Telefonnummer fehlt';
   if (l.email_send_status === 'sent' && l.email_sent_at && now.getTime() - new Date(l.email_sent_at).getTime() >= 4 * 86400000) return 'Follow-up fällig';
   if (l.website_url && !l.has_demo && !l.demo_decision) return 'Entscheiden: Demo erstellen oder überspringen';
-  if (!l.website_url && !l.has_demo && l.website_state === 'none') return 'Demo erstellen';
+  if (!l.website_url && !l.has_demo && l.website_state === 'none') return l.demo_decision === 'recommended' ? 'Demo empfohlen – erstellen' : 'Demo erstellen';
   if (l.status === 'QUALIFIED' && !l.call_count) return l.phone ? 'Anrufen' : 'Telefonnummer ergänzen';
   return l.has_demo && !l.call_count ? 'Anrufen' : '—';
 }
@@ -231,8 +231,7 @@ export function analysisCard(d: any, a: any, o: { csrf: string; leadId: string; 
     <h3>KI-Stufe</h3>
     ${postForm(o.csrf, `/leads/${o.leadId}/analysis`, html`<div class="row"><label>Stufe<select name="tier"><option value="MASS" ${l.ai_tier === 'MASS' ? raw('selected') : ''}>MASS – regelbasiert, kostenlos</option><option value="DEEP" ${l.ai_tier === 'DEEP' ? raw('selected') : ''}>DEEP – Tiefenanalyse (KI)</option><option value="PREMIUM" ${l.ai_tier === 'PREMIUM' ? raw('selected') : ''}>PREMIUM – Website-Konzept (KI)</option></select></label>
       <button class="primary">Analyse ausführen</button></div><small class="mute">Unveränderte Grundlage wird nicht erneut berechnet (keine Kosten). Modell je Stufe: config/ai.json.</small>`, { style: 'display:block' })}
-    <h3>KI-Kosten dieses Leads</h3><table><tr><td>Analyse</td><td class="r">${euro(o.costs.analysisCents)}</td></tr><tr><td>Demo / Konzept</td><td class="r">${euro(o.costs.demoCents)}</td></tr><tr><td>Kontaktvorlage</td><td class="r">${euro(o.costs.contactCents)}</td></tr><tr><td><b>Gesamt</b></td><td class="r"><b>${euro(o.costs.totalCents)}</b></td></tr></table>
-    <small class="mute">${o.costs.calls} KI-Aufruf(e), ${o.costs.inputTokens + o.costs.outputTokens} Token. ${o.costs.totalCents === 0 ? 'Mock-/regelbasierte Aufrufe kosten nichts.' : ''}</small></div>`;
+</div>`;
 }
 
 /** „Was soll ich am Telefon sagen?“ – kompakt, persönlich, nur belegte Punkte. */
@@ -261,4 +260,54 @@ export function demoDecision(d: any, o: { csrf: string; leadId: string; hasDemo:
   if (!l.website_url || o.hasDemo) return html``;
   return html`<div class="card"><h2>Demo für diese Firma?</h2>${l.demo_decision === 'skipped' ? html`<p>Du hast <b>Überspringen</b> gewählt.</p>${postBtn(o.csrf, `/leads/${o.leadId}/demo/skip`, 'Entscheidung zurücknehmen', { hidden: { undo: '1' } })}`
     : html`<p class="mute">Diese Firma hat eine Website – es wird nichts automatisch erstellt. Prüfe die Analyse und entscheide.</p><div class="row">${postBtn(o.csrf, `/leads/${o.leadId}/demo`, 'Demo erstellen', { cls: 'primary', hidden: { template: 'auto' } })}${postBtn(o.csrf, `/leads/${o.leadId}/demo/skip`, 'Überspringen')}</div>`}</div>`;
+}
+
+// ---------- Priorität, Demo-Module, Notizen, Dubletten ----------
+const PRIO_TEXT: Record<string, string> = { A: 'A – zuerst bearbeiten', B: 'B – bald', C: 'C – bei Gelegenheit', D: 'D – aktuell uninteressant' };
+
+export function priorityCard(d: any, o: { csrf: string; leadId: string }): Safe {
+  const l = d.lead;
+  return html`<div class="card" id="prioritaet"><div class="row">${prioBadge(l.effective_priority)}<h2 class="grow" style="margin:0">Priorität</h2>
+      ${l.manual_priority ? html`<span class="badge b-info">manuell gesetzt</span>` : html`<span class="badge">automatisch</span>`}</div>
+    <p><b>${l.effective_priority ? PRIO_TEXT[l.effective_priority] : 'noch nicht eingestuft'}</b></p>
+    <p class="mute">${l.priority_reason ?? 'Noch keine automatische Einstufung.'}</p>
+    ${l.manual_priority && l.auto_priority ? html`<p class="mute">Automatisch wäre: <b>${l.auto_priority}</b> – deine Einstellung bleibt, bis du sie zurücknimmst.</p>` : ''}
+    ${postForm(o.csrf, `/leads/${o.leadId}/priority`, html`<div class="row"><label>Priorität überschreiben<select name="priority"><option value="">Automatisch</option>${['A', 'B', 'C', 'D'].map((p) => html`<option value="${p}" ${l.manual_priority === p ? raw('selected') : ''}>${PRIO_TEXT[p]}</option>`)}</select></label><button>Speichern</button></div>`, { style: 'display:block' })}</div>`;
+}
+
+export type ModuleView = { family: string; autoFamily: string; families: { key: string; label: string }[]; modules: { key: string; label: string }[]; recommended: string[]; selected: string[] | null; hasDemo: boolean; demoUrl?: string };
+export function modulesCard(d: any, o: { csrf: string; leadId: string; v: ModuleView }): Safe {
+  const { v } = o, l = d.lead; const active = new Set(v.selected ?? v.recommended);
+  return html`<div class="card" id="module"><h2>Layout und Website-Funktionen</h2>
+    ${l.demo_decision === 'recommended' && !v.hasDemo ? html`<div class="note"><b>Demo empfohlen</b> – diese Firma hat keine Website und genug Daten. Es wurde keine Demo automatisch erstellt (Obergrenze je Suchlauf erreicht).</div>` : ''}
+    ${postForm(o.csrf, `/leads/${o.leadId}/modules`, html`
+      <label>Layout-Familie<select name="family">${v.families.map((f) => html`<option value="${f.key}" ${v.family === f.key ? raw('selected') : ''}>${f.label}${f.key === v.autoFamily ? ' (empfohlen)' : ''}</option>`)}</select></label>
+      <fieldset><legend>Funktionen der möglichen Website</legend>
+        ${v.modules.map((m) => html`<label class="inline" style="display:flex;gap:8px;align-items:center;min-height:44px"><input type="checkbox" name="mod" value="${m.key}" ${active.has(m.key) ? raw('checked') : ''}> <span>${m.label}${v.recommended.includes(m.key) ? html` <span class="badge b-info">empfohlen</span>` : ''}</span></label>`)}</fieldset>
+      <p class="mute">${v.selected ? 'Deine Auswahl ist gespeichert.' : 'Noch keine eigene Auswahl – es gilt die Empfehlung.'} Empfehlung und Auswahl werden getrennt gespeichert.</p>
+      <div class="row"><button class="primary">${v.hasDemo ? 'Speichern und Demo aktualisieren' : 'Speichern'}</button>${v.selected ? html`<button name="reset" value="1">Auf Empfehlung zurücksetzen</button>` : ''}</div>`, { style: 'display:block' })}
+    <div class="row">${v.hasDemo && v.demoUrl ? html`<a class="btn" href="${v.demoUrl}" target="_blank" rel="noopener noreferrer">Demo ansehen</a>` : ''}${postBtn(o.csrf, `/leads/${o.leadId}/demo`, v.hasDemo ? 'Neue Demo erstellen' : 'Demo erstellen', { cls: v.hasDemo ? '' : 'primary', hidden: { template: 'auto' } })}</div>
+    <small class="mute">Funktionen in der Demo sind nur Darstellungen (als „Demo-Funktion“ markiert) – sie verbinden sich mit keinem Anbieter und senden nichts.</small></div>`;
+}
+
+export function notesCard(d: any, note: { body: string; created_at: Date; updated_at: Date } | null, o: { csrf: string; leadId: string; hints: string[] }): Safe {
+  return html`<div class="card" id="notizen"><h2>Notizen</h2>
+    <h3>System-/KI-Hinweise <small class="mute">(automatisch, nicht bearbeitbar)</small></h3>
+    ${o.hints.length ? html`<ul>${o.hints.map((h) => html`<li>${h}</li>`)}</ul>` : html`<p class="mute">Keine Hinweise.</p>`}
+    <h3>Meine Notizen</h3>
+    ${postForm(o.csrf, `/leads/${o.leadId}/notes`, html`<textarea name="body" rows="6" maxlength="20000" placeholder="Eigene Notizen zu diesem Lead …">${note?.body ?? ''}</textarea><div class="row"><button class="primary">Notiz speichern</button>${note ? html`<small class="mute">angelegt ${fmt(note.created_at)} · zuletzt geändert ${fmt(note.updated_at)}</small>` : ''}</div>`, { style: 'display:block' })}</div>`;
+}
+
+export function duplicatesCard(cands: any[], o: { csrf: string; leadId: string }): Safe {
+  if (!cands.length) return html``;
+  return html`<div class="card" id="dubletten"><h2>Mögliche Dublette – bitte prüfen</h2><p class="mute">Das System hat nichts automatisch zusammengeführt.</p>
+    <ul class="items">${cands.map((c) => html`<li><div class="row"><a class="grow" href="/leads/${c.lead_id}"><b>${c.company_name}</b></a><span class="badge b-warn">Ähnlichkeit ${c.score}</span></div>
+      <small>${[c.address, c.city, c.phone, c.website_url].filter(Boolean).join(' · ') || 'keine weiteren Angaben'}</small><br><small class="mute">${(c.reasons as string[]).join(' · ')}</small>
+      <div class="row">${postBtn(o.csrf, `/leads/${o.leadId}/merge`, 'Den anderen Lead hier hineinführen', { hidden: { other: c.lead_id, cid: c.id } })}${postBtn(o.csrf, `/dupes/${c.id}/dismiss`, 'Kein Duplikat')}</div></li>`)}</ul></div>`;
+}
+
+export function costsCard(costs: any): Safe {
+  const euro = (c: number) => `${(c / 100).toFixed(c < 10 ? 4 : 2).replace('.', ',')} €`;
+  return html`<div class="card" id="kosten">    <h3>KI-Kosten dieses Leads</h3><table><tr><td>Analyse</td><td class="r">${euro(costs.analysisCents)}</td></tr><tr><td>Demo / Konzept</td><td class="r">${euro(costs.demoCents)}</td></tr><tr><td>Kontaktvorlage</td><td class="r">${euro(costs.contactCents)}</td></tr><tr><td><b>Gesamt</b></td><td class="r"><b>${euro(costs.totalCents)}</b></td></tr></table>
+    <small class="mute">${costs.calls} KI-Aufruf(e), ${costs.inputTokens + costs.outputTokens} Token. ${costs.totalCents === 0 ? 'Mock-/regelbasierte Aufrufe kosten nichts.' : ''}</small><small class="mute">Kosten für OSM und Websuche werden je Suchlauf erfasst (siehe Lauf-Protokoll).</small></div>`;
 }

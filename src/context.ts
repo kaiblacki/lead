@@ -22,13 +22,16 @@ import { Budget } from './guardrails/budget.ts';
 import { AnalysisService } from './analysis/service.ts';
 import { TaskStore } from './db/tasks.ts';
 import { Automation } from './workflow/automation.ts';
+import { PipelineStore } from './db/pipeline.ts';
+import { Enricher } from './sources/enrich.ts';
+import { createSources, type Sources } from './sources/registry.ts';
 import { loadConfig, type AppConfig } from './core/config.ts';
 import { createProviders, type Registry } from './providers/registry.ts';
 
 export type Context = {
   repo: Repo; cfg: AppConfig; registry: Registry; baseUrl: string; now: () => Date;
   leads: LeadStore; runs: RunStore; sales: SalesStore; social: SocialStore; analytics: AnalyticsStore; learning: LearningStore;
-  runner: SearchRunner; orders: OrderService; delivery: DeliveryService; maintenance: MaintenanceService; docs: SalesDocs; calls: CallService; contact: ContactService; retention: Retention; notifier: Notifier; invoices: InvoiceService; gdpr: Gdpr; aiUsage: AiUsageStore; analysis: AnalysisService; tasks: TaskStore; automation: Automation;
+  pipeline: PipelineStore; sources: Sources; runner: SearchRunner; orders: OrderService; delivery: DeliveryService; maintenance: MaintenanceService; docs: SalesDocs; calls: CallService; contact: ContactService; retention: Retention; notifier: Notifier; invoices: InvoiceService; gdpr: Gdpr; aiUsage: AiUsageStore; analysis: AnalysisService; tasks: TaskStore; automation: Automation;
   /** KI-Aufruf mit Stufe, Budget-Prüfung und Kostenprotokoll (für Dashboard-Aktionen außerhalb eines Suchlaufs). */
   aiComplete: (leadId: string | null, req: Parameters<AiGateway['complete']>[1]) => ReturnType<AiGateway['complete']>;
 };
@@ -43,12 +46,17 @@ export function buildContext(repo: Repo, o: ContextOptions): Context {
   const registry = createProviders(env, { baseUrl: o.baseUrl, now: o.providerNow ?? now, hostingRoot: o.hostingRoot ?? env.MOCK_HOSTING_DIR });
   const P = registry.providers;
   const leads = new LeadStore(repo), runs = new RunStore(repo), sales = new SalesStore(repo), social = new SocialStore(repo), analytics = new AnalyticsStore(repo), learning = new LearningStore(repo);
-  const runner = new SearchRunner({ repo, leads, runs, providers: P, cfg, now });
+  const pipeline = new PipelineStore({ repo, cfg, now });
+  leads.afterSave = (leadId, c) => pipeline.recomputePriority(leadId, c).then(() => undefined);
+  const sources = createSources(env, cfg, P, { now: o.providerNow ?? now });
+  const wsCfg = cfg.pipeline.sources.WEB_SEARCH;
+  const enricher = new Enricher({ sources, providers: P, genericWords: cfg.pipeline.dedupe.genericWords, cfg: wsCfg });
+  const runner = new SearchRunner({ repo, leads, runs, providers: P, cfg, now, pipeline, enricher: wsCfg.enabled ? enricher : undefined });
   const orders = new OrderService(repo, cfg, now);
   const delivery = new DeliveryService(orders);
   const maintenance = new MaintenanceService(repo, P.crawler, now);
   const tasks = new TaskStore(repo);
-  const docs = new SalesDocs({ repo, leads, sales, cfg, baseUrl: o.baseUrl, now, tasks });
+  const docs = new SalesDocs({ repo, leads, sales, cfg, baseUrl: o.baseUrl, now, tasks, pipeline });
   const calls = new CallService({ repo, leads, sales, docs, orders, now, tasks });
   const contact = new ContactService({ repo, leads, providers: P, now });
   const retention = new Retention(repo, cfg.retention);
@@ -65,7 +73,8 @@ export function buildContext(repo: Repo, o: ContextOptions): Context {
     return new AiGateway(P.ai, budget, { cfg: cfg.ai, store: aiUsage, env }).complete(leadId, req);
   };
   const analysis = new AnalysisService({ repo, leads, usage: aiUsage, cfg, complete: aiComplete as never, now, aiIsMock: () => P.ai.isMock });
-  const automation = new Automation({ repo, docs, cfg, analysis });
+  const automation = new Automation({ repo, docs, cfg, analysis, pipeline });
   runner.afterSave = (leadId, info) => automation.afterAnalysis(leadId, info);
-  return { repo, cfg, registry, notifier, invoices, gdpr, aiUsage, aiComplete, analysis, tasks, automation, baseUrl: o.baseUrl, now, leads, runs, sales, social, analytics, learning, runner, orders, delivery, maintenance, docs, calls, contact, retention };
+  runner.afterRun = (runId, ids, opts) => automation.afterRun(runId, ids, opts);
+  return { repo, cfg, registry, pipeline, sources, notifier, invoices, gdpr, aiUsage, aiComplete, analysis, tasks, automation, baseUrl: o.baseUrl, now, leads, runs, sales, social, analytics, learning, runner, orders, delivery, maintenance, docs, calls, contact, retention };
 }

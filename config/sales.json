@@ -70,14 +70,14 @@
   },
   "defaultSender": "Ihr Ansprechpartner",
   "autoDemo": {
-    "_hinweis": "Firmen OHNE Website bekommen automatisch eine Demo, wenn genug öffentliche Daten da sind. Firmen MIT Website: nie automatisch – nur nach deiner Entscheidung.",
+    "_hinweis": "Firmen OHNE Website bekommen automatisch eine Demo – aber höchstens maxPerSearch je Suchlauf (die am höchsten priorisierten); alle weiteren geeigneten Firmen bekommen „Demo empfohlen“. Firmen MIT Website: nie automatisch – nur nach deiner Entscheidung.",
     "enabled": true,
     "minOpportunity": 45,
-    "maxPerRun": 100,
     "requireAnyOf": [
       "phone",
       "address"
-    ]
+    ],
+    "maxPerSearch": 5
   },
   "emailFollowUpDays": 4
 }

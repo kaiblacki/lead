@@ -6,8 +6,13 @@ import { EXAMPLE_SEARCHES } from '../../search/examples.ts';
 import { CriteriaError, EMPLOYEE_BUCKETS, READINESS, SORTS, WEBSITE_FILTERS, WEBSITE_LABEL, criteriaFromForm, normalizeCriteria, parseQuickSearch } from '../../search/criteria.ts';
 import { leadsFromCsv } from '../../connectors/csv.ts';
 
+const PHASE_LABEL: Record<string, string> = { queued: 'queued – wartet', discovering: 'discovering – Firmen werden gesucht', enriching: 'enriching – Daten werden ergänzt', analyzing: 'analyzing – Analyse läuft', complete: 'complete – abgeschlossen', partial: 'partial – teilweise (gestoppt)', failed: 'failed – fehlgeschlagen' };
+const SIZE_LABEL: Record<string, string> = { SMALL: 'SMALL', MEDIUM: 'MEDIUM', LARGE: 'LARGE' };
+const cents = (c: unknown) => `${(Number(c ?? 0) / 100).toFixed(2).replace('.', ',')} €`;
 const SORT_LABEL: Record<string, string> = { sales_opportunity: 'Sales Opportunity', digital_need: 'Digital Need', distance: 'Entfernung', reviews: 'Bewertungen' };
 const READY_LABEL: Record<string, string> = { READY_FOR_MANUAL_CALL: 'Bereit für Anruf', EMAIL_PERMISSION_REQUIRED: 'E-Mail: Einwilligung nötig', WHATSAPP_OPT_IN_REQUIRED: 'WhatsApp: Opt-in nötig', MANUAL_REVIEW: 'Manuell prüfen', DO_NOT_CONTACT: 'Nicht kontaktieren' };
+
+const sizePicker = (sizes: Record<string, number>, cur: string) => html`<fieldset><legend>Suchgröße</legend><div class="row">${Object.entries(sizes).map(([k, n]) => html`<label class="inline" style="display:flex;gap:6px;align-items:center;min-height:44px"><input type="radio" name="size" value="${k}" ${cur === k ? raw('checked') : ''}> <span><b>${k}</b> · ${n} Firmen</span></label>`)}</div></fieldset>`;
 
 export const routes: Route[] = [
   { method: 'GET', path: /^\/search$/, h: async (r) => {
@@ -24,6 +29,7 @@ export const routes: Route[] = [
     return render(r, { title: 'Lead-Suche', nav: 'search', body: html`
       <div class="card"><h2>Schnellsuche</h2>
         ${postForm(r.app.csrf, '/search/quick', html`<label>Suchsatz, Teile mit „+“ trennen<input name="q" value="${v('qs')}" placeholder="Völklingen + 30 km + Nagelstudios + Website fehlt oder verbesserungswürdig" maxlength="300" required></label>
+        ${sizePicker(ctx.cfg.pipeline.sizes, 'SMALL')}
         <p class="row"><button class="primary">Suche starten</button></p>`, { style: 'display:block' })}
         <p class="row">${EXAMPLE_SEARCHES.map((q) => postForm(r.app.csrf, '/search/quick', html`<input type="hidden" name="q" value="${q}"><button title="${q}">${q.split(' + ').slice(0, 3).join(' · ')}</button>`, { style: 'display:inline' }))}</p>
         <small>Erkannt werden: Ort, „30 km“, Branche, „Website fehlt / verbesserungswürdig“, „mobile Probleme“, „keine Terminbuchung“, „Instagram aktiv“, „Score ab 60“, „20 Leads“, „1-4 Mitarbeiter“.</small></div>
@@ -42,18 +48,20 @@ export const routes: Route[] = [
             <div class="row"><label>Bewertung ab<input name="minRating" type="number" step="0.1" min="0" max="5" value="${v('minRating')}" style="width:110px"></label><label>bis<input name="maxRating" type="number" step="0.1" min="0" max="5" value="${v('maxRating')}" style="width:110px"></label><label>Min. Bewertungen<input name="minReviews" type="number" min="0" value="${v('minReviews')}" style="width:130px"></label></div>
             ${cb('requirePhone', 'Telefonnummer nötig', q.get('requirePhone') === '1')}${cb('requireEmail', 'E-Mail nötig', q.get('requireEmail') === '1')}${cb('excludeChains', 'Filialbetriebe/Ketten ausschließen', q.get('excludeChains') === '1')}${cb('excludeExisting', 'Bereits vorhandene Leads ausschließen', !formMode || q.get('excludeExisting') === '1')}</fieldset>
           <fieldset><legend>Ergebnis</legend><div class="row">
-            <label>Mindestanzahl<input name="minLeads" type="number" min="0" value="${v('minLeads', '0')}" style="width:120px"></label><label>Höchstanzahl<input name="maxLeads" type="number" min="1" max="500" value="${v('maxLeads', '25')}" style="width:120px"></label>
+            ${sizePicker(ctx.cfg.pipeline.sizes, v('size', 'SMALL'))}<label>Mindestanzahl<input name="minLeads" type="number" min="0" value="${v('minLeads', '0')}" style="width:120px"></label>
             <label>Min. Opportunity-Score<input name="minOpportunity" type="number" min="0" max="100" value="${v('minOpportunity', '0')}" style="width:150px"></label><label>Min. Digital Need<input name="minDigitalNeed" type="number" min="0" max="100" value="${v('minDigitalNeed', '0')}" style="width:150px"></label></div>
             <label>Sortierung<select name="sort">${SORTS.map((s) => html`<option value="${s}" ${v('sort', 'sales_opportunity') === s ? raw('selected') : ''}>${SORT_LABEL[s]}</option>`)}</select></label>
             <div>${READINESS.map((x) => chk('readiness', x, chosenReady, READY_LABEL[x]))}</div></fieldset>
           <p class="row"><button class="primary">Suche starten</button></p></form></div>
       <div class="card"><h2>Eigene Liste importieren (CSV)</h2>
         ${postForm(r.app.csrf, '/search/import', html`<label>CSV-Inhalt einfügen (Kopfzeile: Firmenname;Branche;Adresse;Stadt;Telefon;Website;E-Mail;Instagram)<textarea name="csv" rows="5" maxlength="1000000" placeholder="Firmenname;Stadt;Telefon;Website"></textarea></label><p><button>Importieren und analysieren</button></p>`, { style: 'display:block' })}</div>
-      <div class="card"><h2>Letzte Läufe</h2>${runs.length ? html`<ul class="items">${runs.map((x) => html`<li><a href="/search/run/${x.id}"><b>${x.description}</b></a><br><small>${fmt(x.created_at)} · ${x.status} · ${x.counters?.matched ?? 0} Treffer / ${x.counters?.analyzed ?? 0} analysiert${x.error ? ` · ${x.error}` : ''}</small></li>`)}</ul>` : html`<p class="mute">Noch keine Läufe.</p>`}</div>` });
+      <div class="card"><h2>Quellen</h2><ul class="items">${ctx.sources.status.map((x) => html`<li><b>${x.id}</b> <span class="badge ${x.enabled ? (x.isMock ? 'b-mock' : 'b-ok') : ''}">${x.mode}</span> <small>${x.provider} · ${x.note}</small></li>`)}</ul>
+        <small class="mute">Die Lead-Logik kennt die Quelle nicht – jede Angabe wird mit Quelle und Zeitpunkt gespeichert. Öffentliche OSM-Server sind nur für Demo und kleine Läufe gedacht (Einstellung OSM_MODE).</small></div>
+      <div class="card"><h2>Letzte Läufe</h2>${runs.length ? html`<ul class="items">${runs.map((x) => html`<li><a href="/search/run/${x.id}"><b>${x.description}</b></a><br><small>${fmt(x.created_at)} · <span class="badge">${PHASE_LABEL[x.phase] ?? x.status}</span>${x.size ? html` · ${x.size}` : ''} · ${x.counters?.matched ?? 0} Treffer / ${x.counters?.analyzed ?? 0} analysiert${x.requested_count ? ` (gewünscht ${x.requested_count})` : ''}${x.costs?.total !== undefined ? ` · Kosten ${cents(x.costs.total)}` : ''}${x.error ? ` · ${x.error}` : ''}</small></li>`)}</ul>` : html`<p class="mute">Noch keine Läufe.</p>`}</div>` });
   } },
 
   { method: 'POST', path: /^\/search$/, h: async (r) => {
-    let c; try { c = normalizeCriteria(criteriaFromForm(r.form), r.ctx.cfg.taxonomy); } catch (e) { if (e instanceof CriteriaError) throw new UserError(e.errors.join(' · ')); throw e; }
+    let c; try { c = normalizeCriteria(criteriaFromForm(r.form), r.ctx.cfg.taxonomy, r.ctx.cfg.pipeline.sizes); } catch (e) { if (e instanceof CriteriaError) throw new UserError(e.errors.join(' · ')); throw e; }
     const id = await r.ctx.runner.start(c);
     return redirect(`/search/run/${id}`, okFlash('Suche gestartet.'));
   } },
@@ -63,7 +71,9 @@ export const routes: Route[] = [
     if (!text) throw new UserError('Bitte einen Suchsatz eingeben.');
     const p = parseQuickSearch(text, r.ctx.cfg.taxonomy);
     if (p.unmatched.length) throw new UserError(`Nicht verstanden: ${p.unmatched.join(', ')}. Bitte umformulieren oder die Detailsuche nutzen.`);
-    let c; try { c = normalizeCriteria(p.criteria, r.ctx.cfg.taxonomy); } catch (e) { if (e instanceof CriteriaError) throw new UserError(e.errors.join(' · ')); throw e; }
+    const formSize = (r.form.get('size') ?? '').toUpperCase();
+    if (formSize && p.criteria.size === undefined && p.criteria.maxLeads === undefined) p.criteria.size = formSize;
+    let c; try { c = normalizeCriteria(p.criteria, r.ctx.cfg.taxonomy, r.ctx.cfg.pipeline.sizes); } catch (e) { if (e instanceof CriteriaError) throw new UserError(e.errors.join(' · ')); throw e; }
     const id = await r.ctx.runner.start(c);
     return redirect(`/search/run/${id}`, okFlash(`Verstanden: ${p.understood.join(' · ')}`));
   } },
@@ -83,9 +93,19 @@ export const routes: Route[] = [
     const c = run.counters ?? {}, s = run.summary ?? {};
     const running = run.status === 'RUNNING';
     const body = html`${running ? raw('<meta http-equiv="refresh" content="3">') : ''}
-      <div class="card"><div class="row"><span class="badge ${run.status === 'DONE' ? 'b-ok' : run.status === 'RUNNING' ? 'b-info' : 'b-bad'}">${run.status === 'RUNNING' ? 'läuft …' : run.status}</span><b class="grow">${run.description}</b></div>
+      <div class="card"><div class="row"><span class="badge ${run.status === 'DONE' ? 'b-ok' : run.status === 'RUNNING' ? 'b-info' : 'b-bad'}">${run.status === 'RUNNING' ? (PHASE_LABEL[run.phase] ?? 'läuft …') : (PHASE_LABEL[run.phase] ?? run.status)}</span><b class="grow">${run.description}</b></div>
         <p class="mute">${fmt(run.created_at)}${run.finished_at ? ` – ${fmt(run.finished_at)}` : ''}</p>
         <div class="grid"><div class="kpi"><b>${c.found ?? 0}</b><span>Kandidaten gefunden</span></div><div class="kpi"><b>${c.prefiltered ?? 0}</b><span>vorab aussortiert</span></div><div class="kpi"><b>${c.analyzed ?? 0}</b><span>analysiert</span></div><div class="kpi"><b>${c.matched ?? 0}</b><span>Treffer</span></div></div>
+        <details open><summary>Lauf-Protokoll</summary><dl class="facts">
+          <dt>Suche-ID</dt><dd><code>${run.id}</code></dd><dt>Status</dt><dd><b>${PHASE_LABEL[run.phase] ?? run.status}</b></dd>
+          <dt>Branche / Suchbegriff</dt><dd>${run.search_term ?? run.industry ?? '–'}</dd><dt>Ort · Radius</dt><dd>${run.region} · ${run.radius_km ?? '–'} km</dd>
+          <dt>Suchgröße</dt><dd>${run.size ?? 'eigene Anzahl'} · gewünscht ${run.requested_count ?? run.run_limit ?? '–'}</dd>
+          <dt>Gefunden</dt><dd>${run.raw_count ?? '–'} Roh-Treffer → ${c.found ?? 0} nach Dedupe${s.pipeline?.dedupe ? html` (${s.pipeline.dedupe.merged} zusammengeführt, ${s.pipeline.dedupe.possible} mögliche Dubletten)` : ''} → ${run.found_count ?? c.analyzed ?? 0} gespeichert/analysiert</dd>
+          <dt>Start / Ende</dt><dd>${fmt(run.started_at ?? run.created_at)} / ${run.finished_at ? fmt(run.finished_at) : 'läuft noch'}</dd>
+          <dt>Quellen</dt><dd>${(run.sources ?? []).length ? (run.sources as any[]).map((x) => html`<span class="badge">${x.id}: ${x.provider} · ${x.requests} Anfragen · ${cents(x.costCents)}</span> `) : '–'}</dd>
+          <dt>Kosten</dt><dd>OSM ${cents(run.costs?.osm)} · Websuche ${cents(run.costs?.web_search)} · KI ${cents(run.costs?.ai)} · Demo ${cents(run.costs?.demo)} · <b>Gesamt ${cents(run.costs?.total)}</b></dd>
+          <dt>Automatische Demos</dt><dd>${s.pipeline ? `${s.pipeline.autoDemos} erstellt · ${s.pipeline.demoRecommended} empfohlen` : '–'}</dd>
+          <dt>Fehler</dt><dd>${(run.errors ?? []).length ? html`<ul>${(run.errors as string[]).map((e) => html`<li>${e}</li>`)}</ul>` : 'keine'}</dd></dl></details>
         ${run.error ? html`<div class="errbox">${run.error}</div>` : ''}${s.stoppedReason ? html`<div class="warnbox">Lauf gestoppt: ${s.stoppedReason}. Bereits analysierte Leads sind gespeichert.</div>` : ''}
         ${(s.warnings ?? []).map((w: string) => html`<div class="warnbox">${w}</div>`)}${c.errors ? html`<div class="errbox">${c.errors} Fehler: ${(s.errorSamples ?? []).join(' | ')}</div>` : ''}
         ${Object.keys(s.skipped ?? {}).length ? html`<details><summary>Vorab aussortiert (${c.prefiltered})</summary><ul>${Object.entries(s.skipped).map(([k, n]) => html`<li>${k}: ${n as number}</li>`)}</ul></details>` : ''}</div>

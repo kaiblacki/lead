@@ -9,13 +9,15 @@ export const WEBSITE_FILTERS: WebsiteFilter[] = ['none', 'exists', 'needs_improv
 export const WEBSITE_LABEL: Record<WebsiteFilter, string> = { none: 'Website fehlt', exists: 'Website vorhanden', needs_improvement: 'Website verbesserungswürdig', fine: 'Website in Ordnung' };
 export const EMPLOYEE_BUCKETS: EmployeeBucket[] = ['1-4', '5-9', '10-49', '50+'];
 export const READINESS: Readiness[] = ['READY_FOR_MANUAL_CALL', 'EMAIL_PERMISSION_REQUIRED', 'WHATSAPP_OPT_IN_REQUIRED', 'MANUAL_REVIEW', 'DO_NOT_CONTACT'];
+export type SearchSize = 'SMALL' | 'MEDIUM' | 'LARGE' | 'CUSTOM';
+export const SEARCH_SIZES: Record<'SMALL' | 'MEDIUM' | 'LARGE', number> = { SMALL: 50, MEDIUM: 200, LARGE: 500 };
 export const SORTS = ['sales_opportunity', 'digital_need', 'distance', 'reviews'] as const;
 
 export type SearchCriteria = {
   location: string; radiusKm: number;
   industry?: string; subIndustries: string[]; keywords: string[];
   employeeBuckets: EmployeeBucket[]; includeUnknownSize: boolean;
-  minLeads: number; maxLeads: number;
+  minLeads: number; maxLeads: number; size: SearchSize;
   website: WebsiteFilter[];
   mobileProblems: boolean; noBooking: boolean;
   socialPresent: 'any' | 'yes' | 'no'; socialActive: 'any' | 'yes' | 'no';
@@ -34,7 +36,7 @@ const toBool = (v: unknown, d: boolean) => (v === undefined || v === null || v =
 const toNum = (v: unknown): number | undefined => (v === undefined || v === null || String(v).trim() === '' ? undefined : Number(String(v).replace(',', '.')));
 
 /** Prüft und normalisiert Suchkriterien. Wirft CriteriaError mit allen Fehlern. */
-export function normalizeCriteria(raw: Record<string, unknown>, tax: Taxonomy): SearchCriteria {
+export function normalizeCriteria(raw: Record<string, unknown>, tax: Taxonomy, sizes: Record<'SMALL' | 'MEDIUM' | 'LARGE', number> = SEARCH_SIZES): SearchCriteria {
   const errors: string[] = [];
   const location = String(raw.location ?? '').trim();
   if (!location) errors.push('Ort fehlt.'); else if (location.length > 80) errors.push('Ort ist zu lang (max. 80 Zeichen).');
@@ -49,7 +51,11 @@ export function normalizeCriteria(raw: Record<string, unknown>, tax: Taxonomy): 
   if (!industry && !subs.length && !keywords.length) errors.push('Bitte eine Branche, Unterbranche oder ein Stichwort angeben.');
   const buckets = toArr(raw.employeeBuckets);
   for (const b of buckets) if (!EMPLOYEE_BUCKETS.includes(b as EmployeeBucket)) errors.push(`Ungültige Mitarbeitergröße: ${b.slice(0, 10)}`);
-  const maxLeads = toNum(raw.maxLeads ?? 50), minLeads = toNum(raw.minLeads ?? 0);
+  const rawSize = String(raw.size ?? '').toUpperCase();
+  if (rawSize && !(rawSize in sizes)) errors.push('Suchgröße muss SMALL, MEDIUM oder LARGE sein.');
+  const hasMax = raw.maxLeads !== undefined && raw.maxLeads !== null && String(raw.maxLeads).trim() !== '';
+  const maxLeads = rawSize in sizes ? sizes[rawSize as keyof typeof sizes] : toNum(hasMax ? raw.maxLeads : sizes.SMALL), minLeads = toNum(raw.minLeads ?? 0);
+  const size: SearchSize = rawSize in sizes ? (rawSize as SearchSize) : (Object.entries(sizes).find(([, n]) => n === maxLeads)?.[0] as SearchSize | undefined) ?? 'CUSTOM';
   if (maxLeads === undefined || !Number.isInteger(maxLeads) || maxLeads < 1 || maxLeads > 500) errors.push('Höchstzahl Leads muss zwischen 1 und 500 liegen.');
   if (minLeads === undefined || !Number.isInteger(minLeads) || minLeads < 0) errors.push('Mindestzahl Leads muss eine ganze Zahl ≥ 0 sein.');
   else if (maxLeads !== undefined && minLeads > maxLeads) errors.push('Mindestzahl darf nicht größer als die Höchstzahl sein.');
@@ -71,7 +77,7 @@ export function normalizeCriteria(raw: Record<string, unknown>, tax: Taxonomy): 
   if (errors.length) throw new CriteriaError(errors);
   return {
     location, radiusKm: radius!, industry, subIndustries: subs, keywords, employeeBuckets: buckets as EmployeeBucket[], includeUnknownSize: toBool(raw.includeUnknownSize, true),
-    minLeads: minLeads!, maxLeads: maxLeads!, website: website as WebsiteFilter[], mobileProblems: toBool(raw.mobileProblems, false), noBooking: toBool(raw.noBooking, false),
+    minLeads: minLeads!, maxLeads: maxLeads!, size, website: website as WebsiteFilter[], mobileProblems: toBool(raw.mobileProblems, false), noBooking: toBool(raw.noBooking, false),
     socialPresent, socialActive, minOpportunity: minOpp, minDigitalNeed: minDN, minRating, maxRating, minReviews, requirePhone: toBool(raw.requirePhone, false), requireEmail: toBool(raw.requireEmail, false),
     readiness: readiness as Readiness[], excludeExisting: toBool(raw.excludeExisting, true), excludeChains: toBool(raw.excludeChains, false), sort: sort as SearchCriteria['sort'],
   };
@@ -83,7 +89,7 @@ export function criteriaFromForm(f: URLSearchParams): Record<string, unknown> {
   const cb = (n: string, d: boolean) => (marker ? f.get(n) === '1' : d);
   return {
     location: f.get('location'), radiusKm: f.get('radiusKm'), industry: f.get('industry'), subIndustries: f.getAll('sub'), keywords: f.get('keywords') ?? '',
-    employeeBuckets: f.getAll('emp'), includeUnknownSize: cb('includeUnknownSize', true), minLeads: f.get('minLeads'), maxLeads: f.get('maxLeads'), website: f.getAll('website'),
+    employeeBuckets: f.getAll('emp'), includeUnknownSize: cb('includeUnknownSize', true), minLeads: f.get('minLeads'), maxLeads: f.get('size') ? undefined : f.get('maxLeads'), size: f.get('size'), website: f.getAll('website'),
     mobileProblems: cb('mobileProblems', false), noBooking: cb('noBooking', false), socialPresent: f.get('socialPresent') ?? 'any', socialActive: f.get('socialActive') ?? 'any',
     minOpportunity: f.get('minOpportunity'), minDigitalNeed: f.get('minDigitalNeed'), minRating: f.get('minRating'), maxRating: f.get('maxRating'), minReviews: f.get('minReviews'),
     requirePhone: cb('requirePhone', false), requireEmail: cb('requireEmail', false), readiness: f.getAll('readiness'), excludeExisting: cb('excludeExisting', true),
@@ -103,7 +109,7 @@ export function describeCriteria(c: SearchCriteria, tax: Taxonomy): string {
   if (c.socialActive !== 'any') parts.push(c.socialActive === 'yes' ? 'Social Media aktiv' : 'Social Media inaktiv');
   if (c.minOpportunity > 0) parts.push(`Opportunity ≥ ${c.minOpportunity}`);
   if (c.employeeBuckets.length) parts.push(`Größe ${c.employeeBuckets.join('/')}`);
-  parts.push(`max. ${c.maxLeads} Leads`);
+  parts.push(c.size && c.size !== 'CUSTOM' ? `${c.size} (${c.maxLeads} Firmen)` : `max. ${c.maxLeads} Leads`);
   return parts.join(' · ');
 }
 
@@ -196,6 +202,7 @@ export function parseQuickSearch(text: string, tax: Taxonomy): QuickSearch {
     { re: /social\s*media\s+vorhanden|hat\s+instagram|instagram\s+vorhanden/i, apply: () => { c.socialPresent = 'yes'; return 'Social Media vorhanden'; } },
     { re: /kein(?:e)?\s+social(?:\s*media)?/i, apply: () => { c.socialPresent = 'no'; return 'ohne Social Media'; } },
     { re: /(?:score|opportunity)\s*(?:ab|>=|mind\.?|mindestens)?\s*(\d{1,3})|ab\s+(\d{1,3})\s*punkte/i, apply: (m) => { c.minOpportunity = Number(m[1] ?? m[2]); return `Opportunity ≥ ${c.minOpportunity}`; } },
+    { re: /\b(small|medium|large)\b/i, apply: (m) => { c.size = m[1].toUpperCase(); return `Größe ${c.size}`; } },
     { re: /(\d{1,3})\s*(?:leads|treffer|ergebnisse)/i, apply: (m) => { c.maxLeads = Number(m[1]); return `max. ${m[1]} Leads`; } },
     { re: /(\d+)\s*[-–]\s*(\d+)\s*mitarbeiter/i, apply: (m) => { const lo = Number(m[1]), hi = Number(m[2]); const b = ([['1-4', 1, 4], ['5-9', 5, 9], ['10-49', 10, 49], ['50+', 50, 9999]] as const).filter(([, x, z]) => x <= hi && z >= lo).map(([k]) => k); c.employeeBuckets.push(...b); return `Größe ${b.join('/')}`; } },
   ];

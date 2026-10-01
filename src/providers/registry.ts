@@ -12,11 +12,19 @@ import { PlaywrightRenderProvider, findChromium } from './real/render.ts';
 import { AnthropicProvider } from './real/ai.ts';
 import { StripeProvider } from './real/stripe.ts';
 import { SmtpEmailProvider } from './real/smtp.ts';
-import { OsmPlacesProvider } from './real/osm.ts';
+import { OsmPlacesProvider, type OsmMode, type OsmOptions } from './real/osm.ts';
+import { loadConfig } from '../core/config.ts';
 import { WhatsAppCloudProvider } from './real/whatsapp.ts';
 import { FolderHostingProvider, VercelHostingProvider } from './real/hosting.ts';
 
 type Env = Record<string, string | undefined>;
+/** OSM-Modus und Adressen aus Umgebung + config/pipeline.json (sources.OSM). Zwischenspeicher nur im Live-Modus. */
+export function osmOptions(env: Env): OsmOptions {
+  const c = loadConfig().pipeline?.sources?.OSM ?? {};
+  const mode = (env.OSM_MODE || c.mode || 'PUBLIC_DEMO') as OsmMode;
+  if (!['PUBLIC_DEMO', 'LOCAL_EXTRACT', 'COMMERCIAL_PROVIDER'].includes(mode)) throw new Error(`OSM_MODE „${mode}“ unbekannt (PUBLIC_DEMO | LOCAL_EXTRACT | COMMERCIAL_PROVIDER)`);
+  return { mode, overpassUrl: env.OSM_OVERPASS_URL, nominatimUrl: env.OSM_NOMINATIM_URL, apiKey: env.OSM_API_KEY, cacheDir: env.APP_MODE === 'live' ? env.OSM_CACHE_DIR || 'out/cache/osm' : undefined, cacheDays: c.cacheDays, publicMaxResults: c.publicMaxResults, publicMaxRadiusKm: c.publicMaxRadiusKm };
+}
 /** Live-Modus ohne angebundene Quelle: liefert KEINE Daten (statt erfundener Mock-Daten) – fehlende Angaben erscheinen als „nicht verfügbar“. */
 class NoDirectory implements DirectoryProvider { readonly name = 'keine-quelle'; readonly isMock = false; async search() { return { items: [], requests: 0 }; } async lookup() { return null; } }
 class NoSocial implements SocialDataProvider { readonly name = 'keine-quelle'; readonly isMock = false; async lookup() { return { profiles: [], complete: false, source: 'keine-quelle', capturedAt: new Date().toISOString() }; } }
@@ -51,7 +59,7 @@ export function createProviders(env: Env, o: RegistryOptions): Registry {
 
   // Google Places, wenn ein Key da ist; sonst (oder mit PLACES_SOURCE=osm) die keyfreie OpenStreetMap-Quelle
   const useOsm = env.PLACES_SOURCE === 'osm' || (!env.GOOGLE_PLACES_API_KEY && env.PLACES_SOURCE !== 'google');
-  const places = pick<PlacesProvider>('places', { ok: true, why: '', make: () => (useOsm ? new OsmPlacesProvider(env.OSM_CONTACT, now) : new GooglePlacesProvider(env.GOOGLE_PLACES_API_KEY, now)) }, () => new MockGooglePlacesProvider({ now }), useOsm ? 'OpenStreetMap (Nominatim/Overpass, ohne Key)' : 'Google Places API');
+  const places = pick<PlacesProvider>('places', { ok: true, why: '', make: () => (useOsm ? new OsmPlacesProvider(env.OSM_CONTACT, now, osmOptions(env)) : new GooglePlacesProvider(env.GOOGLE_PLACES_API_KEY, now)) }, () => new MockGooglePlacesProvider({ now }), useOsm ? 'OpenStreetMap (Nominatim/Overpass, ohne Key)' : 'Google Places API');
   const directory = want('directory') === 'real' ? (() => { const d = new NoDirectory(); note('directory', d.name, 'real', 'Kein Verzeichnis angebunden (noch nicht gebaut) – keine Daten, es wird nichts erfunden'); return d as DirectoryProvider; })()
     : pick<DirectoryProvider>('directory', null, () => new MockDirectoryProvider({ now }), '');
   const placesReal = !places.isMock;

@@ -18,6 +18,8 @@ export type LeadFilter = { quick?: string; tier?: string; q?: string; category?:
 
 export class LeadStore {
   repo: Repo;
+  /** Nach dem Speichern einer Analyse (innerhalb derselben Transaktion), z. B. um die Priorität A–D neu zu berechnen. */
+  afterSave?: (leadId: string, c: pg.PoolClient) => Promise<void>;
   constructor(repo: Repo) { this.repo = repo; }
   private get pool() { return this.repo.pool; }
   private get owner() { return this.repo.ownerId; }
@@ -25,7 +27,7 @@ export class LeadStore {
   /** Welche externen Referenzen gibt es schon? (für „bereits vorhandene ausschließen“) */
   async existingRefs(source: string[], refs: string[]): Promise<Set<string>> {
     if (!refs.length) return new Set();
-    const r = await this.pool.query('select source_ref from leads where owner_id=$1 and source = any($2) and source_ref = any($3)', [this.owner, source, refs]);
+    const r = await this.pool.query('select source_ref from leads where owner_id=$1 and source = any($2) and source_ref = any($3) union select source_ref from lead_aliases where owner_id=$1 and source = any($2) and source_ref = any($3)', [this.owner, source, refs]);
     return new Set(r.rows.map((x) => x.source_ref));
   }
 
@@ -89,6 +91,7 @@ export class LeadStore {
       await this.repo.event(c, leadId, 'audit_done', { audit_id: aud.rows[0].id, status: au.status, checks: au.checks.length, sales_opportunity: so.value, digital_need: a.digitalNeed.value, actor: 'system' });
       if (runId && i.runResult) await c.query('insert into run_results(run_id, lead_id, owner_id, matched, fail_reasons, sales_opportunity, digital_need) values ($1,$2,$3,$4,$5,$6,$7) on conflict (run_id, lead_id) do update set matched=$4, fail_reasons=$5, sales_opportunity=$6, digital_need=$7',
         [runId, leadId, this.owner, i.runResult.matched, JSON.stringify(i.runResult.failReasons), so.value, a.digitalNeed.value]);
+      await this.afterSave?.(leadId, c);
       return { leadId, created: up.rows[0].created as boolean, status: from, snapshotId: snap.rows[0].id as string };
     });
   }
@@ -101,7 +104,7 @@ export class LeadStore {
     if (f.readiness) add('l.contact_readiness = ?', f.readiness);
     if (f.websiteState) add('l.website_state = ?', f.websiteState);
     if (f.minScore) add('o.score >= ?', f.minScore);
-    if (f.priority) add("sp.brief->>'priority' = ?", f.priority);
+    if (f.priority) add("coalesce(l.effective_priority, sp.brief->>'priority') = ?", f.priority);
     if (f.tier) add('l.ai_tier = ?', f.tier);
     if (f.q) add('(l.company_name ilike ? or l.city ilike ? or l.sub_industry ilike ?)', `%${f.q}%`);
     const hasDemo = 'exists (select 1 from demos d where d.lead_id = l.id and not d.revoked)';
@@ -116,14 +119,21 @@ export class LeadStore {
       not_contacted: "l.call_count = 0 and l.last_contact_at is null and l.status in ('QUALIFIED','DEMO_CREATED')",
       call_today: `(${openCall} or (l.callback_at is not null and l.callback_at < now() + interval '1 day')) and l.contact_readiness = 'READY_FOR_MANUAL_CALL' and not l.paused`,
       has_email: hasEmail, has_phone: 'l.phone is not null',
+      has_website: 'l.website_url is not null',
+      demo_recommended: `l.demo_decision = 'recommended' and not ${hasDemo}`,
+      manual_check: "(l.review_flag is not null or l.contact_readiness = 'MANUAL_REVIEW')",
+      new_a: "l.effective_priority = 'A' and l.call_count = 0 and l.created_at > now() - interval '14 days' and l.status in ('QUALIFIED','DEMO_CREATED')",
+      // „Heute bearbeiten“: alle A-Leads, die noch nicht kontaktiert sind, fällige Rückrufe und Leads mit fertiger Demo
+      today_work: `(l.contact_readiness <> 'DO_NOT_CONTACT' and not l.paused and l.status in ('QUALIFIED','DEMO_CREATED') and ((l.effective_priority = 'A' and l.call_count = 0) or ${openCall} or (l.callback_at is not null and l.callback_at < now() + interval '1 day')))`,
     };
     if (f.quick && QUICK[f.quick]) where += ` and ${QUICK[f.quick]}`;
     let join = '';
     if (f.runId) { p.push(f.runId); join = `join run_results rr on rr.lead_id = l.id and rr.run_id = $${p.length}`; if (f.matchedOnly) where += ' and rr.matched'; }
     // Standard: vertriebsorientiert – höchste Verkaufschance zuerst; bei Gleichstand Firmen ohne Website, dann schlechteste Website, dann mit Telefonnummer
     const sort = f.sort || (f.quick === 'worst_websites' ? 'website_asc' : '');
-    const order = sort === 'website_asc' ? 'au.overall_quality asc nulls last, o.score desc nulls last' : sort === 'distance' ? 'l.distance_km asc nulls last' : sort === 'digital_need' ? 'o.digital_need desc nulls last' : sort === 'recent' ? 'l.created_at desc'
-      : `o.score desc nulls last, (l.website_state = 'none') desc, au.overall_quality asc nulls last, (l.phone is not null) desc, l.created_at desc`;
+    const prioRank = "case l.effective_priority when 'A' then 0 when 'B' then 1 when 'C' then 2 when 'D' then 3 else 4 end";
+    const order = sort === 'score' ? 'o.score desc nulls last, (l.website_state = \'none\') desc, au.overall_quality asc nulls last, l.created_at desc' : sort === 'website_asc' ? 'au.overall_quality asc nulls last, o.score desc nulls last' : sort === 'distance' ? 'l.distance_km asc nulls last' : sort === 'digital_need' ? 'o.digital_need desc nulls last' : sort === 'recent' ? 'l.created_at desc'
+      : `${prioRank}, o.score desc nulls last, (l.website_state = 'none') desc, au.overall_quality asc nulls last, (l.phone is not null) desc, l.created_at desc`;
     const limit = Math.min(f.limit ?? 100, 500), offset = Math.max(f.offset ?? 0, 0);
     const base = `from leads l ${join}
       left join lateral (select score, category, digital_need, data_quality_factor, dimensions from opportunities where lead_id = l.id order by created_at desc, id desc limit 1) o on true
@@ -137,7 +147,7 @@ export class LeadStore {
          (o.dimensions->'dataQuality'->>'value')::float as dq, (o.dimensions->'contactability'->>'value')::float as contactability,
          case when l.website_state = 'none' then null else au.overall_quality end as website_score, au.audit_status,
          ${hasDemo} as has_demo, ${openCall} as demo_ready_call, ${hasEmail} as has_email,
-         sp.brief->>'priority' as priority, sp.approved_at ${base} order by ${order} limit $${p.length - 1} offset $${p.length}`, p)).rows;
+         coalesce(l.effective_priority, sp.brief->>'priority') as priority, l.effective_priority, l.auto_priority, l.manual_priority, l.priority_reason, l.review_flag, sp.approved_at ${base} order by ${order} limit $${p.length - 1} offset $${p.length}`, p)).rows;
     return { total, rows };
   }
 
@@ -243,6 +253,7 @@ export class LeadStore {
       await c.query("update leads set contact_blocked=true, email_send_status='do_not_contact', contact_readiness=$3, contact_channel=$4, contact_reason=$5 where id=$1 and owner_id=$2", [leadId, this.owner, 'DO_NOT_CONTACT', 'DO_NOT_CONTACT', `Do not contact: ${reason || 'Wunsch des Unternehmens'}`]);
       try { await moveLead(this.repo, c, leadId, 'IGNORED', `Do not contact: ${reason || '—'}`, actor, { path: true }); } catch { /* Status passt nicht (z. B. Kunde) – Sperre bleibt */ }
       await this.repo.event(c, leadId, 'do_not_contact', { actor, reason });
+      await this.afterSave?.(leadId, c);
     });
   }
 

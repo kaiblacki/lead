@@ -7,7 +7,7 @@ export type Limits = {
   maxPlacesRequestsPerRun: number;
   maxCrawlPagesPerRun: number;
 };
-export const DEFAULT_LIMITS: Limits = { maxLeadsPerRun: 100, maxAuditsPerRun: 100, maxAiRequestsPerLead: 3, maxDailyCents: 500, maxMonthlyCents: 5000, maxPlacesRequestsPerRun: 20, maxCrawlPagesPerRun: 400 };
+export const DEFAULT_LIMITS: Limits = { maxLeadsPerRun: 500, maxAuditsPerRun: 500, maxAiRequestsPerLead: 3, maxDailyCents: 500, maxMonthlyCents: 5000, maxPlacesRequestsPerRun: 20, maxCrawlPagesPerRun: 4000 };
 export const LIMIT_LABELS: Record<keyof Limits, string> = {
   maxLeadsPerRun: 'Max. Leads pro Lauf', maxAuditsPerRun: 'Max. Website-Analysen pro Lauf', maxAiRequestsPerLead: 'Max. KI-Anfragen pro Lead', maxDailyCents: 'Max. KI-Budget pro Tag (Cent)',
   maxMonthlyCents: 'Max. KI-Budget pro Monat (Cent)', maxPlacesRequestsPerRun: 'Max. Places-/Verzeichnis-Anfragen pro Lauf', maxCrawlPagesPerRun: 'Max. Seitenabrufe (Crawler) pro Lauf',

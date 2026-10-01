@@ -27,6 +27,13 @@ export class AiUsageStore {
     const sum = (k: 'cents' | 'calls' | 'tin' | 'tout') => rows.reduce((s, r) => s + Number(r[k]), 0);
     return { analysisCents: by.analysis?.cents ?? 0, demoCents: by.demo?.cents ?? 0, contactCents: by.contact?.cents ?? 0, totalCents: sum('cents'), calls: sum('calls'), inputTokens: sum('tin'), outputTokens: sum('tout') };
   }
+  /** KI-Kosten der Leads eines Suchlaufs (seit Laufbeginn), nach Zweck. */
+  async forRun(runId: string, since: Date) {
+    const rows = (await this.pool.query(`select coalesce(purpose,'other') purpose, coalesce(sum(est_cents),0)::float cents from ai_usage where owner_id=$1 and created_at >= $3
+      and lead_id in (select lead_id from run_results where run_id=$2 and owner_id=$1) group by 1`, [this.owner, runId, since])).rows;
+    const by = Object.fromEntries(rows.map((r) => [r.purpose, Number(r.cents)])) as Record<string, number>;
+    return { analysisCents: by.analysis ?? 0, demoCents: by.demo ?? 0, otherCents: (by.contact ?? 0) + (by.other ?? 0), totalCents: Object.values(by).reduce((a, b) => a + b, 0) };
+  }
   /** Gesamtübersicht für Analytics. */
   async overview() {
     const t = (await this.pool.query("select coalesce(sum(est_cents),0)::float total, coalesce(sum(est_cents) filter (where purpose='analysis'),0)::float analysis, coalesce(sum(est_cents) filter (where purpose='demo'),0)::float demo, count(*)::int calls from ai_usage where owner_id=$1", [this.owner])).rows[0];

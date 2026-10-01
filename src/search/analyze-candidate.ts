@@ -1,7 +1,8 @@
 import type { DirectoryRecord, GeoPoint, PlaceCandidate, Providers, RenderMetrics, SocialResult, CrawlResult } from '../providers/types.ts';
 import type { AppConfig } from '../core/config.ts';
 import type { Lead } from '../core/types.ts';
-import { buildFacts, extractSiteFacts, leadFromFacts, bestFact, type Fact } from '../core/profile.ts';
+import { buildFacts, leadFromFacts, bestFact, type Fact } from '../core/profile.ts';
+import { extractContactFacts } from '../sources/site-contact.ts';
 import { distanceKm } from '../core/geo.ts';
 import { runAudit } from '../audit/audit.ts';
 import type { AuditReport } from '../audit/types.ts';
@@ -12,6 +13,10 @@ export type CandidateInput = {
   center?: GeoPoint; /** Bereits bekannte Entfernung (bei erneuter Analyse ohne Suchzentrum). */ distanceKm?: number; searchIndustry?: string; searchSub?: string; now: Date;
   /** Browsertest auch mit echtem Provider (teuer). Mock-Provider schätzen immer. */
   deep?: boolean;
+  /** Zusätzliche, bereits mit Quelle versehene Fakten (z. B. per Websuche gefundene Website). */
+  extraFacts?: Fact[];
+  /** Identität eines bereits vorhandenen Leads (nach Dedupe-MATCH): Speichern aktualisiert diesen Lead statt einen neuen anzulegen. */
+  identity?: { source: string; ref: string };
 };
 export type CandidateResult = {
   externalId: string; source: string; facts: Fact[]; lead: Lead; audit: AuditReport; analysis: Analysis; social: SocialResult | null; crawl: CrawlResult | null; render: RenderMetrics | null;
@@ -29,11 +34,12 @@ export async function analyzeCandidate(p: Providers, cfg: AppConfig, i: Candidat
 
   const capturedAt = i.now.toISOString();
   const dist = i.center ? (place?.point ?? directory?.point ? distanceKm(i.center, (place?.point ?? directory?.point)!) : undefined) : i.distanceKm;
-  let facts = buildFacts({ place, directory, csv: i.csv, distanceKm: dist, searchIndustry: i.searchIndustry, searchSub: i.searchSub, capturedAt });
+  const extra = i.extraFacts ?? [];
+  let facts = [...buildFacts({ place, directory, csv: i.csv, distanceKm: dist, searchIndustry: i.searchIndustry, searchSub: i.searchSub, capturedAt }), ...extra];
   const websiteUrl = bestFact(facts, 'website')?.value as string | undefined;
 
   let crawl: CrawlResult | null = null;
-  if (websiteUrl) { crawl = await p.crawler.crawl(websiteUrl, { maxPages: 4 }); usage.crawlRequests += crawl.requests; }
+  if (websiteUrl) { crawl = await p.crawler.crawl(websiteUrl, { maxPages: cfg.pipeline?.sources?.DIRECT_WEBSITE?.maxPages ?? 4 }); usage.crawlRequests += crawl.requests; }
 
   let render: RenderMetrics | null = null;
   if (crawl?.ok && crawl.pages[0]?.html && (i.deep || p.render.isMock)) {
@@ -44,9 +50,9 @@ export async function analyzeCandidate(p: Providers, cfg: AppConfig, i: Candidat
   const social = await p.social.lookup({ name, city, website: websiteUrl, knownUrls: known }); usage.socialRequests++;
 
   const okPages = (crawl?.pages ?? []).filter((x) => x.status > 0 && x.status < 400 && x.html);
-  const siteFacts = okPages.length ? extractSiteFacts(okPages) : null;
-  // Kontaktdaten der Website nur als zusätzliche Quelle (ändern die Qualität der Hauptquellen nicht).
-  facts = buildFacts({ place, directory, csv: i.csv, social, distanceKm: dist, searchIndustry: i.searchIndustry, searchSub: i.searchSub, capturedAt, siteFacts });
+  // Kontaktdaten der Website (DIRECT_WEBSITE) als zusätzliche Quelle: je Angabe mit der Seite, auf der sie stand.
+  const siteFacts = okPages.length ? extractContactFacts(okPages, capturedAt) : [];
+  facts = [...buildFacts({ place, directory, csv: i.csv, social, distanceKm: dist, searchIndustry: i.searchIndustry, searchSub: i.searchSub, capturedAt }), ...extra, ...siteFacts];
 
   const subKey = (bestFact(facts, 'subIndustry')?.value as string | undefined) ?? i.searchSub;
   const sub = cfg.taxonomy.sub(subKey) ?? cfg.taxonomy.match(`${name} ${place?.categories?.join(' ') ?? ''}`);
@@ -55,8 +61,8 @@ export async function analyzeCandidate(p: Providers, cfg: AppConfig, i: Candidat
   const websiteSources = [...new Set(facts.filter((f) => f.key === 'name').map((f) => f.source))];
   const analysis = analyzeLead({ facts, audit, social, bookingRelevant, upsells: cfg.pricing.upsells ?? [], now: i.now, websiteSources }, cfg.scoring);
 
-  const externalId = place?.externalId ?? directory?.externalId ?? i.csv?.id ?? `adhoc-${name}`;
-  const source = place?.source ?? directory?.source ?? i.csv?.source ?? 'unknown';
+  const externalId = i.identity?.ref ?? place?.externalId ?? directory?.externalId ?? i.csv?.id ?? `adhoc-${name}`;
+  const source = i.identity?.source ?? place?.source ?? directory?.source ?? i.csv?.source ?? 'unknown';
   const lead = leadFromFacts(facts, { id: externalId, source });
   lead.isMock = !!(place?.fixture || directory?.fixture);
   if (sub) { lead.subIndustry = lead.subIndustry ?? sub.key; lead.industry = sub.industryKey; }

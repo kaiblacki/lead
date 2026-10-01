@@ -109,3 +109,14 @@ Begründung der Prozentzahlen: Der lokale Umfang ist vollständig; die restliche
 - **E-Mail-Status** `draft → review_required → legally_cleared → sent` (+ `follow_up_due`, `do_not_contact`); ohne Freigabe wird nie gesendet.
 - **Telefonansicht** „Was soll ich am Telefon sagen?“ und Aufgabe „Demo fertig – anrufen“ in „Heute anrufen“.
 - Agentur-Daten (Betreiber Kai Schwarz) zentral in `config/agency.json`.
+
+## Lokale Akquise-Pipeline (Suchgröße → Quellen → Dedupe → Analyse → Priorität → Demo)
+
+- **Suchgrößen:** SMALL 50 (Standard) / MEDIUM 200 / LARGE 500 (`config/pipeline.json`). Je Lauf gespeichert: Suche-ID, Suchbegriff, Ort, Radius, gewünschte/gefundene Anzahl (Roh → Dedupe → gespeichert), Start/Ende, Quellen, Kosten (OSM/Websuche/KI/Demo/Gesamt), Fehler, Status `queued | discovering | enriching | analyzing | complete | partial | failed`.
+- **Quellen (`src/sources/`):** OSM (Modi `PUBLIC_DEMO` | `LOCAL_EXTRACT` | `COMMERCIAL_PROVIDER`, `OSM_MODE`), WEB_SEARCH (Brave, `BRAVE_SEARCH_API_KEY`; ohne Schlüssel Mock/keine Quelle), DIRECT_WEBSITE (bis 5 Seiten je Domain), GOOGLE_PLACES (optional, aus). Jede Angabe: Wert + Quelle + Quell-URL + Zeitpunkt + Qualität (`lead_facts`).
+- **Dedupe:** `src/dedupe/` – MATCH (zusammenführen, Alias bleibt), POSSIBLE_MATCH (nur Prüfliste), NO_MATCH. Schwellen in `config/pipeline.json`.
+- **Priorität A–D:** automatisch aus Fakten (`src/scoring/priority.ts`), manuell überschreibbar (`auto_priority`, `manual_priority`, `effective_priority`, `priority_reason`).
+- **Auto-Demo:** höchstens `autoDemo.maxPerSearch` (5) je Suchlauf für die höchst priorisierten Firmen ohne Website; Rest `demo_decision = recommended` („Demo empfohlen“).
+- **Demo v2:** Layout-Familien SERVICE / APPOINTMENT / GASTRO_RETAIL, wählbare Module (empfohlen ≠ ausgewählt), Demo passt sich an (gleicher Link).
+- **Dashboard:** Liste mit Priorität/Filtern, Seite „Heute“, Lead-Seite mit Priorität, Modulen, Notizen, Dubletten-Prüfung.
+- Nicht gebaut (bewusst): Angebots-/Vertrags-/Rechnungs-/Domain-/Abo-Automation, Benachrichtigungen nach außen. Es wird nichts gesendet.

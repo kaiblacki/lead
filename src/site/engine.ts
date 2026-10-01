@@ -1,5 +1,6 @@
 import type { Template, SectionKey } from './templates.ts';
 import { fill } from './templates.ts';
+import { renderDemoV2, type DemoExtras, type DemoPlan } from './demo-v2.ts';
 
 export type SiteContent = {
   companyName: string; industryLabel?: string; address?: string; city?: string; postalCode?: string; phone?: string; email?: string; openingHours?: string;
@@ -97,7 +98,8 @@ function heroHtml(c: SiteContent, t: Template, mode: Mode, h: DemoHints = {}): s
 }
 
 /** Demo-Seite: klar als unverbindliches Beispiel gekennzeichnet, nur Fakten aus dem Lead, sonst Platzhalter. */
-export function renderDemo(c: SiteContent, t: Template, agency: AgencyInfo, h: DemoHints = {}): string {
+export function renderDemo(c: SiteContent, t: Template, agency: AgencyInfo, h: DemoHints = {}, v2?: { plan: DemoPlan; extras?: DemoExtras }): string {
+  if (v2) return renderDemoV2(c, t, agency, h, v2.plan, v2.extras);
   const V = vars(c, t);
   const name = esc(c.companyName);
   const covers = ['Für Smartphones optimiert (mobile-first)', c.phone ? 'Direkter Anruf-Button' : 'Klarer Kontaktbereich', ...(h.bookingGap || t.booking ? ['Terminanfrage-Schaltfläche'] : []), 'Leistungen, Öffnungszeiten und Kontakt auf einen Blick'];

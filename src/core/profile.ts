@@ -4,7 +4,7 @@ import type { Lead } from './types.ts';
 import { normPhone, norm, hostOf, socialPlatformOf } from './text.ts';
 
 export type FactKey = 'name' | 'industry' | 'subIndustry' | 'address' | 'postalCode' | 'city' | 'distanceKm' | 'phone' | 'email' | 'website' | 'social' | 'employeeBucket'
-  | 'locationsCount' | 'rating' | 'reviewCount' | 'openingHours' | 'services' | 'description' | 'businessStatus' | 'legalForm' | 'foundedYear' | 'isChain' | 'mapsUrl' | 'point' | 'sourceCategories' | 'whatsapp' | 'contactForm' | 'contactPerson';
+  | 'locationsCount' | 'rating' | 'reviewCount' | 'openingHours' | 'services' | 'description' | 'businessStatus' | 'legalForm' | 'foundedYear' | 'isChain' | 'mapsUrl' | 'point' | 'sourceCategories' | 'whatsapp' | 'contactForm' | 'contactPerson' | 'websiteCandidate';
 
 /** Ein Einzelfakt mit Herkunft. Jeder externe Wert im System ist so gespeichert: Quelle, Erfassungsdatum, Datenqualität. */
 export type Fact = { key: FactKey; value: unknown; source: string; capturedAt: string; quality: Quality; url?: string; note?: string };
@@ -13,7 +13,7 @@ export const FACT_LABELS: Record<FactKey, string> = {
   name: 'Firma', industry: 'Branche', subIndustry: 'Unterbranche', address: 'Adresse', postalCode: 'PLZ', city: 'Stadt', distanceKm: 'Entfernung', phone: 'Telefon', email: 'E-Mail',
   website: 'Website', social: 'Social Media', employeeBucket: 'Mitarbeitergröße', locationsCount: 'Standorte', rating: 'Bewertung', reviewCount: 'Anzahl Bewertungen',
   openingHours: 'Öffnungszeiten', services: 'Öffentlich erkennbare Leistungen', description: 'Beschreibung', businessStatus: 'Betriebsstatus', legalForm: 'Rechtsform',
-  foundedYear: 'Gründungsjahr', isChain: 'Filialbetrieb/Kette', mapsUrl: 'Karten-Link', point: 'Standort (Koordinaten)', sourceCategories: 'Kategorien laut Quelle', whatsapp: 'WhatsApp-Link', contactForm: 'Kontaktformular', contactPerson: 'Ansprechpartner (laut Impressum)',
+  foundedYear: 'Gründungsjahr', isChain: 'Filialbetrieb/Kette', mapsUrl: 'Karten-Link', point: 'Standort (Koordinaten)', sourceCategories: 'Kategorien laut Quelle', whatsapp: 'WhatsApp-Link', contactForm: 'Kontaktformular', contactPerson: 'Ansprechpartner (laut Impressum)', websiteCandidate: 'Mögliche Website (ungeprüft)',
 };
 export const FACT_ORDER = Object.keys(FACT_LABELS) as FactKey[];
 const QUALITY_RANK: Record<Quality, number> = { high: 3, medium: 2, low: 1 };

@@ -1,0 +1,288 @@
+{
+  "_hinweis": "Lokale Akquise-Pipeline: Suchgrößen, Quellen, Kosten, Dedupe, Priorität A–D, Auto-Demo-Limit, Demo-Layouts und Module. Alles hier änderbar, nichts davon steht im Code.",
+  "sizes": {
+    "SMALL": 50,
+    "MEDIUM": 200,
+    "LARGE": 500
+  },
+  "defaultSize": "SMALL",
+  "sources": {
+    "OSM": {
+      "_hinweis": "PUBLIC_DEMO = öffentliche Nominatim-/Overpass-Server (nur für Demo/kleine Läufe: 1 Anfrage/s, User-Agent mit Kontakt, Cache). LOCAL_EXTRACT = eigener Overpass-/Nominatim-Server auf einem Geofabrik-Extrakt (OSM_OVERPASS_URL, OSM_NOMINATIM_URL). COMMERCIAL_PROVIDER = kostenpflichtiger OSM-Anbieter mit eigener URL und OSM_API_KEY (nichts davon ist gekauft).",
+      "mode": "PUBLIC_DEMO",
+      "modeEnv": "OSM_MODE",
+      "centsPerRequest": 0,
+      "publicMaxResults": 300,
+      "publicMaxRadiusKm": 50,
+      "cacheDays": 7
+    },
+    "WEB_SEARCH": {
+      "_hinweis": "Optionale Websuche (Brave Search API, BRAVE_SEARCH_API_KEY). Nur für Firmen, bei denen Daten fehlen UND die interessant genug sind. Ohne Schlüssel: Mock/keine Ergebnisse.",
+      "enabled": true,
+      "minOpportunity": 40,
+      "maxPerRun": 40,
+      "centsPerRequest": 0.5,
+      "resultsPerQuery": 5
+    },
+    "DIRECT_WEBSITE": {
+      "maxPages": 5,
+      "centsPerRequest": 0
+    },
+    "GOOGLE_PLACES": {
+      "_hinweis": "Optional und standardmäßig aus. Läuft isoliert (Quelle „google-places“), Daten werden nicht ungeprüft übernommen.",
+      "enabled": false
+    }
+  },
+  "dedupe": {
+    "_hinweis": "Kein Merkmal allein entscheidet. MATCH ab matchAt (mit ähnlichem Namen oder zwei übereinstimmenden Kennungen), POSSIBLE_MATCH ab possibleAt (nur zur manuellen Prüfung, nie automatisch zusammengeführt).",
+    "matchAt": 60,
+    "possibleAt": 35,
+    "weights": {
+      "phone": 45,
+      "domain": 45,
+      "email": 35,
+      "nameExact": 30,
+      "nameSimilar": 18,
+      "address": 25,
+      "postalCode": 6,
+      "near": 14,
+      "industry": 6
+    },
+    "nearMeters": 120,
+    "conflicts": {
+      "differentPhone": -8,
+      "differentDomain": -25,
+      "differentStreetNumber": -30
+    },
+    "genericWords": [
+      "gmbh",
+      "ug",
+      "kg",
+      "ohg",
+      "ek",
+      "e",
+      "k",
+      "inh",
+      "inhaber",
+      "inhaberin",
+      "mbh",
+      "und",
+      "co",
+      "studio",
+      "salon",
+      "friseur",
+      "friseursalon",
+      "friseurin",
+      "haarstudio",
+      "nagelstudio",
+      "nageldesign",
+      "nails",
+      "kosmetik",
+      "kosmetikstudio",
+      "beauty",
+      "restaurant",
+      "cafe",
+      "bistro",
+      "imbiss",
+      "werkstatt",
+      "autowerkstatt",
+      "kfz",
+      "the",
+      "der",
+      "die",
+      "das",
+      "by",
+      "von",
+      "saarland"
+    ]
+  },
+  "priority": {
+    "_hinweis": "Automatische Priorität A–D aus vorhandenen Fakten: Startwert plus Punkte je Faktor. A ab „A“, B ab „B“, C ab „C“, darunter D. Kai kann jede Einstufung manuell überschreiben (manual_priority).",
+    "base": 35,
+    "A": 70,
+    "B": 50,
+    "C": 30,
+    "factors": {
+      "noWebsite": 22,
+      "veryBadWebsite": 18,
+      "badWebsite": 10,
+      "goodWebsite": -22,
+      "highOpportunity": 18,
+      "mediumOpportunity": 8,
+      "lowOpportunity": -18,
+      "phone": 8,
+      "email": 5,
+      "active": 4,
+      "localIndustry": 3,
+      "clearWeaknesses": 5,
+      "demo": 4,
+      "unreachable": -12,
+      "closed": -60,
+      "noContact": -14,
+      "uncertainData": -8
+    },
+    "badWebsiteBelow": 55,
+    "veryBadWebsiteBelow": 35,
+    "goodWebsiteAbove": 80,
+    "highOpportunityAt": 70,
+    "mediumOpportunityAt": 50,
+    "lowOpportunityBelow": 35,
+    "uncertainBelow": 45
+  },
+  "autoDemo": {
+    "maxPerSearch": 5
+  },
+  "costControl": {
+    "_hinweis": "Reihenfolge: Discovery → Dedupe → günstige Regeln → MASS (regelbasiert, kostenlos) → Anreicherung nur wenn nötig → DEEP/PREMIUM nur auf Auswahl. Bei großen Läufen werden Firmen ohne Aussicht vorab aussortiert.",
+    "prefilterAbove": 100,
+    "aiOpenerPerRun": 10
+  },
+  "demo": {
+    "families": {
+      "SERVICE": {
+        "label": "Service / Handwerk",
+        "subIndustries": [
+          "elektriker",
+          "sanitaer",
+          "maler",
+          "makler",
+          "kfz",
+          "versicherung"
+        ],
+        "template": "handwerker",
+        "industries": [
+          "handwerk",
+          "auto",
+          "immobilien",
+          "beratung"
+        ]
+      },
+      "APPOINTMENT": {
+        "label": "Termin-Betrieb",
+        "subIndustries": [
+          "friseur",
+          "barbershop",
+          "nagelstudio",
+          "kosmetik",
+          "zahnarzt",
+          "physiotherapie",
+          "fitnessstudio"
+        ],
+        "template": "nagelstudio",
+        "industries": [
+          "beauty",
+          "gesundheit",
+          "fitness"
+        ]
+      },
+      "GASTRO_RETAIL": {
+        "label": "Gastro / Einzelhandel",
+        "subIndustries": [
+          "restaurant",
+          "cafe"
+        ],
+        "template": "restaurant",
+        "industries": [
+          "gastro"
+        ]
+      }
+    },
+    "modules": {
+      "contact_form": {
+        "label": "Kontaktformular",
+        "demo": "Formular (nur Demo – sendet nichts)"
+      },
+      "whatsapp": {
+        "label": "WhatsApp",
+        "demo": "WhatsApp-Button"
+      },
+      "booking": {
+        "label": "Online-Terminbuchung",
+        "demo": "Terminanfrage"
+      },
+      "reservation": {
+        "label": "Reservierung",
+        "demo": "Tischreservierung"
+      },
+      "menu": {
+        "label": "Speisekarte",
+        "demo": "Speisekarte"
+      },
+      "gallery": {
+        "label": "Galerie",
+        "demo": "Bildergalerie"
+      },
+      "services": {
+        "label": "Leistungen",
+        "demo": "Leistungsübersicht"
+      },
+      "price_list": {
+        "label": "Preis-/Leistungsliste",
+        "demo": "Preisliste"
+      },
+      "map": {
+        "label": "Google-/Standortkarte",
+        "demo": "Standort / Anfahrt"
+      },
+      "social": {
+        "label": "Social Links",
+        "demo": "Social-Media-Links"
+      },
+      "newsletter": {
+        "label": "Newsletter",
+        "demo": "Newsletter-Anmeldung"
+      },
+      "quote": {
+        "label": "Angebotsanfrage",
+        "demo": "Angebot anfragen"
+      },
+      "callback": {
+        "label": "Rückrufwunsch",
+        "demo": "Rückruf anfordern"
+      },
+      "jobs": {
+        "label": "Bewerbungsbereich",
+        "demo": "Stellen & Bewerbung"
+      }
+    },
+    "recommendedByFamily": {
+      "SERVICE": [
+        "services",
+        "quote",
+        "callback",
+        "contact_form",
+        "map",
+        "whatsapp"
+      ],
+      "APPOINTMENT": [
+        "booking",
+        "gallery",
+        "whatsapp",
+        "services",
+        "price_list",
+        "map",
+        "social"
+      ],
+      "GASTRO_RETAIL": [
+        "menu",
+        "reservation",
+        "gallery",
+        "map",
+        "social",
+        "contact_form"
+      ]
+    },
+    "featureToModule": {
+      "booking": "booking",
+      "reservation": "reservation",
+      "menu": "menu",
+      "gallery": "gallery",
+      "whatsapp": "whatsapp",
+      "social": "social",
+      "maps": "map",
+      "services": "services",
+      "quote": "quote"
+    },
+    "maxRecommended": 6
+  }
+}

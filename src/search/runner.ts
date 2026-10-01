@@ -11,46 +11,32 @@ import { describeCriteria, postfilter, prefilter, sortKey, type SearchCriteria }
 import { assessContact, suppressionKeys } from '../contact/strategy.ts';
 import { buildBrief, polishOpener } from '../sales/brief.ts';
 import { distanceKm } from '../core/geo.ts';
-import { hostOf, norm, normPhone, socialPlatformOf } from '../core/text.ts';
+import { socialPlatformOf } from '../core/text.ts';
+import { dedupeCandidates, type Merged } from '../dedupe/merge.ts';
+import { compareRecords, type MatchRecord } from '../dedupe/match.ts';
+import { PipelineStore } from '../db/pipeline.ts';
+import { Enricher } from '../sources/enrich.ts';
 import type { ScoringConfig } from '../scoring/intelligence.ts';
 import type { Lead } from '../core/types.ts';
 
 /** Absendername für den Gesprächseinstieg: eigene Einstellung, sonst Agentur-Konfiguration – aber nie ein offener Platzhalter wie „[Dein Name]“. */
 const callerOf = (own: string | null | undefined, cfg: string | undefined) => [own, cfg].find((n) => n && !/[\[\]]/.test(n)) || undefined;
 
-export type Merged = { place?: PlaceCandidate; directory?: DirectoryRecord };
-
-const keysOf = (x: { name: string; phone?: string; website?: string; postalCode?: string; city?: string }) => {
-  const k: string[] = [];
-  if (x.phone && normPhone(x.phone).length >= 6) k.push(`p:${normPhone(x.phone)}`);
-  const h = x.website && !socialPlatformOf(x.website) ? hostOf(x.website) : null;
-  if (h) k.push(`d:${h}`);
-  k.push(`n:${norm(x.name)}|${x.postalCode ?? norm(x.city ?? '')}`);
-  return k;
-};
-
-/** Führt Treffer mehrerer Quellen zusammen (gleiche Nummer, gleiche Domain oder gleicher Name + PLZ). */
-export function mergeCandidates(places: PlaceCandidate[], dirs: DirectoryRecord[]): Merged[] {
-  const out: Merged[] = []; const index = new Map<string, Merged>();
-  const reg = (m: Merged, x: Parameters<typeof keysOf>[0]) => { for (const k of keysOf(x)) if (!index.has(k)) index.set(k, m); };
-  for (const p of places) { const m: Merged = { place: p }; out.push(m); reg(m, p); }
-  for (const d of dirs) {
-    const hit = keysOf(d).map((k) => index.get(k)).find(Boolean);
-    if (hit && !hit.directory) { hit.directory = d; reg(hit, d); } else if (!hit) { const m: Merged = { directory: d }; out.push(m); reg(m, d); }
-  }
-  return out;
-}
+export type { Merged };
 
 export type RunSummary = { found: number; prefiltered: number; analyzed: number; matched: number; errors: number; warnings: string[]; skipped: Record<string, number>; usage: Record<string, number>; stoppedReason?: string; errorSamples?: string[] };
 
-export type RunnerDeps = { repo: Repo; leads: LeadStore; runs: RunStore; providers: Providers; cfg: AppConfig; now: () => Date };
+export type RunnerDeps = { repo: Repo; leads: LeadStore; runs: RunStore; providers: Providers; cfg: AppConfig; now: () => Date; pipeline?: PipelineStore; enricher?: Enricher };
 
 export class SearchRunner {
   d: RunnerDeps;
   private inflight = new Set<Promise<void>>();
   /** Nachbearbeitung je gespeichertem Lead (strukturierte Analyse, Auto-Demo). Wird vom Kontext gesetzt. */
-  afterSave?: (leadId: string, info: { matched: boolean; noWebsite: boolean; opportunity: number | null; blocked: boolean; run: { left: number } }) => Promise<void>;
-  constructor(d: RunnerDeps) { this.d = d; }
+  afterSave?: (leadId: string, info: { matched: boolean; noWebsite: boolean; opportunity: number | null; blocked: boolean }) => Promise<void>;
+  pipeline: PipelineStore;
+  /** Nach dem Lauf: Auto-Demos für die besten Leads ohne Website, Empfehlung für den Rest. Wird vom Kontext gesetzt. */
+  afterRun?: (runId: string, leadIds: string[], opts: { maxAutoDemos: number }) => Promise<{ autoDemos: number; recommended: number }>;
+  constructor(d: RunnerDeps) { this.d = d; this.pipeline = d.pipeline ?? new PipelineStore({ repo: d.repo, cfg: d.cfg, now: d.now }); }
 
   /** Startet einen Lauf im Hintergrund und gibt sofort die Lauf-ID zurück. */
   async start(criteria: SearchCriteria, opts: { scoring?: ScoringConfig } = {}): Promise<string> {
@@ -119,6 +105,8 @@ export class SearchRunner {
   async execute(runId: string, c: SearchCriteria, scoringOverride?: ScoringConfig): Promise<void> {
     const { repo, leads, runs, providers: P, cfg } = this.d;
     const now = this.d.now();
+    const startedAt = new Date();
+    const PC = cfg.pipeline ?? {}; const S = PC.sources ?? {};
     const { limits } = await repo.getLimits();
     const budget = new Budget({ ...limits, maxLeadsPerRun: Math.min(limits.maxLeadsPerRun, Math.max(c.maxLeads * 4, 20)) });
     const settings = await repo.getSettings();
@@ -127,19 +115,24 @@ export class SearchRunner {
     const spent = await aiStore.spent(now);
     budget.dailyCents = spent.dailyCents; budget.monthlyCents = spent.monthlyCents;       // bereits verbrauchte KI-Kosten zählen mit
     const gateway = new AiGateway(P.ai, budget, { cfg: cfg.ai, store: aiStore });
-    const sum: RunSummary = { found: 0, prefiltered: 0, analyzed: 0, matched: 0, errors: 0, warnings: [], skipped: {}, usage: { places: 0, directory: 0, crawl: 0, social: 0, render: 0 }, errorSamples: [] };
+    const sum: RunSummary = { found: 0, prefiltered: 0, analyzed: 0, matched: 0, errors: 0, warnings: [], skipped: {}, usage: { places: 0, directory: 0, crawl: 0, social: 0, render: 0, websearch: 0 }, errorSamples: [] };
     const save = () => runs.progress(runId, { found: sum.found, prefiltered: sum.prefiltered, analyzed: sum.analyzed, matched: sum.matched, errors: sum.errors });
-    const autoDemo = { left: Number(cfg.sales?.autoDemo?.maxPerRun ?? 100) };      // Obergrenze automatisch erzeugter Demos je Lauf
     const matchedLeads: { leadId: string; sales: number | null; dn: number | null; dist?: number; reviews?: number }[] = [];
+    const savedIds: string[] = []; const refToLead = new Map<string, string>();
+    const errorsList: string[] = []; let webCents = 0; let rawCount = 0; let dedupeStats = { raw: 0, unique: 0, merged: 0, possible: 0 };
+    let aiOpenerLeft = Number(PC.costControl?.aiOpenerPerRun ?? 10);
     let status: 'DONE' | 'STOPPED' = 'DONE';
+    const sourcesUsed: { id: string; provider: string; requests: number; costCents: number }[] = [];
+    const placesProv = P.places as typeof P.places & { mode?: string };
 
     try {
+      await runs.phase(runId, 'discovering');
       const geo = await P.places.geocode(c.location);
-      if (!geo) { await runs.finish(runId, 'FAILED', sum, `Ort „${c.location}“ wurde nicht gefunden.`); return; }
+      if (!geo) { await runs.finish(runId, 'FAILED', sum, `Ort „${c.location}“ wurde nicht gefunden.`, { errors: [`Ort „${c.location}“ nicht gefunden`] }); return; }
       const subs = c.subIndustries.length ? c.subIndustries : c.industry ? cfg.taxonomy.subsOf(c.industry).map((s) => s.key) : [];
       const keywords = [...new Set([...cfg.taxonomy.keywordsFor(subs), ...c.keywords])].slice(0, 6);
       const searchSub = c.subIndustries.length === 1 ? c.subIndustries[0] : undefined;
-      const limit = Math.min(Math.max(c.maxLeads * 5, 50), 400);
+      const limit = Math.min(Math.max(c.maxLeads * 3, 50), 1500);
 
       const remaining = () => limits.maxPlacesRequestsPerRun - budget.placesRequests;
       budget.takePlaces(1);
@@ -148,21 +141,47 @@ export class SearchRunner {
       let dirs = { items: [] as DirectoryRecord[], requests: 0 };
       if (remaining() > 0) { budget.takePlaces(1); dirs = await P.directory.search({ center: geo.point, radiusKm: c.radiusKm, keywords, limit, maxRequests: remaining() }); budget.placesRequests += Math.max(0, dirs.requests - 1); sum.usage.directory += dirs.requests; }
       await repo.usage(runId, P.places.name, 'search', places.requests); await repo.usage(runId, P.directory.name, 'search', dirs.requests);
+      sourcesUsed.push({ id: P.places.name === 'google-places' ? 'GOOGLE_PLACES' : 'OSM', provider: `${P.places.name}${placesProv.mode ? ` (${placesProv.mode})` : ''}`, requests: places.requests, costCents: places.requests * Number(S.OSM?.centsPerRequest ?? 0) });
+      if (dirs.requests) sourcesUsed.push({ id: 'DIRECTORY', provider: P.directory.name, requests: dirs.requests, costCents: 0 });
 
-      const merged = mergeCandidates(places.items, dirs.items);
+      // Dedupe: dieselbe Firma aus mehreren Quellen/Objekten wird zu einem Lead (MATCH); unsichere Paare werden nur zur Prüfung vorgemerkt (POSSIBLE_MATCH)
+      rawCount = places.items.length + dirs.items.length;
+      const dd = dedupeCandidates(places.items, dirs.items, PC.dedupe);
+      dedupeStats = dd.stats;
+      const merged = dd.items;
       sum.found = merged.length;
       const distOf = (m: Merged) => { const pt = m.place?.point ?? m.directory?.point; return pt ? distanceKm(geo.point, pt) : undefined; };
-      merged.sort((a, b) => (distOf(a) ?? 1e9) - (distOf(b) ?? 1e9));
       const primary = (m: Merged) => ({ id: (m.place ?? m.directory)!.externalId, source: (m.place ?? m.directory)!.source });
-      const existing = c.excludeExisting ? await leads.existingRefs([...new Set(merged.map((m) => primary(m).source))], merged.map((m) => primary(m).id)) : new Set<string>();
+      const hasSite = (m: Merged) => !!((m.place?.website && !socialPlatformOf(m.place.website)) || (m.directory?.website && !socialPlatformOf(m.directory.website)));
+      // Reihenfolge: nach Entfernung; bei sehr großen Läufen zuerst die aussichtsreichsten Kandidaten (günstige Vorbewertung ohne Netzzugriff)
+      merged.sort((a, b) => (distOf(a) ?? 1e9) - (distOf(b) ?? 1e9));
+      if (merged.length > Number(PC.costControl?.prefilterAbove ?? 100) && merged.length > c.maxLeads) {
+        const pre = (m: Merged) => (hasSite(m) ? 0 : 3) + ((m.place?.phone ?? m.directory?.phone) ? 2 : 0) + (m.place?.address ? 1 : 0) + (m.place?.openingHours?.length ? 1 : 0) + (m.place?.businessStatus === 'CLOSED_PERMANENTLY' ? -9 : 0);
+        merged.sort((a, b) => pre(b) - pre(a) || (distOf(a) ?? 1e9) - (distOf(b) ?? 1e9));
+        sum.warnings.push(`Vorfilterung: ${merged.length} Kandidaten, es werden zuerst die aussichtsreichsten ${c.maxLeads} analysiert (kein Website-Abruf für den Rest).`);
+      }
+      const existingRefs = c.excludeExisting ? await leads.existingRefs([...new Set(merged.map((m) => primary(m).source))], merged.map((m) => primary(m).id)) : new Set<string>();
+      const aliasHit = c.excludeExisting ? new Set((await repo.pool.query('select source_ref from lead_aliases where owner_id=$1 and source_ref = any($2)', [repo.ownerId, merged.map((m) => primary(m).id)])).rows.map((r) => r.source_ref as string)) : new Set<string>();
+      const existingLeads = await this.pipeline.nearby(geo.point, c.radiusKm);
       await save();
+      await runs.phase(runId, 'analyzing');
 
+      const enricher = this.d.enricher; let webCalls = 0;
       for (const m of merged) {
         if (sum.matched >= c.maxLeads) break;
         const pr = primary(m);
+        const mrec: MatchRecord = { name: (m.place ?? m.directory)!.name, phone: m.place?.phone ?? m.directory?.phone, website: m.place?.website ?? m.directory?.website, email: m.directory?.email, address: m.place?.address ?? m.directory?.address, postalCode: m.place?.postalCode ?? m.directory?.postalCode, city: m.place?.city ?? m.directory?.city, point: m.place?.point ?? m.directory?.point, subIndustry: m.directory?.subIndustry };
+        // Abgleich mit bereits gespeicherten Leads (andere Quelle/anderes Objekt derselben Firma)
+        let identity: { source: string; ref: string } | undefined; let existingMatch: string | null = null; const possibleExisting: { id: string; score: number; reasons: string[] }[] = [];
+        let bestScore = -1;
+        for (const e of existingLeads) {
+          const r = compareRecords(mrec, e, PC.dedupe);
+          if (r.verdict === 'MATCH' && r.score > bestScore) { bestScore = r.score; existingMatch = e.id; identity = { source: e.source, ref: e.ref }; }
+          else if (r.verdict === 'POSSIBLE_MATCH') possibleExisting.push({ id: e.id, score: r.score, reasons: r.reasons });
+        }
         const view = {
           distanceKm: distOf(m), employeeBucket: m.directory?.employeeBucket, rating: m.place?.rating, reviewCount: m.place?.reviewCount, isChain: m.directory?.isChain,
-          closed: m.place?.businessStatus === 'CLOSED_PERMANENTLY', hasWebsite: !!((m.place?.website && !socialPlatformOf(m.place.website)) || (m.directory?.website && !socialPlatformOf(m.directory.website))), existing: existing.has(pr.id),
+          closed: m.place?.businessStatus === 'CLOSED_PERMANENTLY', hasWebsite: hasSite(m), existing: existingRefs.has(pr.id) || aliasHit.has(pr.id) || existingMatch !== null,
         };
         const skip = prefilter(c, view);
         if (skip) { sum.prefiltered++; const k = skip.replace(/[0-9.,]+/g, '#').slice(0, 40); sum.skipped[k] = (sum.skipped[k] ?? 0) + 1; continue; }
@@ -170,9 +189,24 @@ export class SearchRunner {
         try {
           budget.takeLead();
           if (view.hasWebsite) budget.takeAudit();
-          const res = await analyzeCandidate(P, cfg, { place: m.place, directory: m.directory, center: geo.point, searchIndustry: c.industry, searchSub, now });
+          const base = { place: m.place, directory: m.directory, center: geo.point, searchIndustry: c.industry, searchSub, now, identity } as const;
+          let res = await analyzeCandidate(P, cfg, base);
           budget.takeCrawl(res.usage.crawlRequests);
           for (const [k, v] of [['crawl', res.usage.crawlRequests], ['directory', res.usage.directoryRequests], ['social', res.usage.socialRequests], ['render', res.usage.renderRuns]] as const) sum.usage[k] += v;
+          // Anreicherung nur wenn nötig: Website/Kontaktdaten fehlen UND der Lead ist interessant genug
+          const need = enricher?.wants({ hasWebsite: !!res.lead.websiteUrl, hasPhone: !!res.lead.phone, hasEmail: !!res.lead.email, closed: view.closed, opportunity: res.analysis.salesOpportunity.value, callsUsed: webCalls });
+          if (enricher && need && need.website) {
+            await runs.phase(runId, 'enriching'); webCalls++;
+            try {
+              const f = await enricher.findWebsite({ name: res.lead.companyName, city: res.lead.city, phone: res.lead.phone, postalCode: res.lead.postalCode }, now.toISOString());
+              sum.usage.websearch += f.requests; webCents += f.costCents;
+              if (f.facts.length) {
+                res = await analyzeCandidate(P, cfg, { ...base, extraFacts: f.facts });
+                budget.takeCrawl(res.usage.crawlRequests); sum.usage.crawl += res.usage.crawlRequests;
+              }
+            } catch (e) { const msg = `Websuche ${res.lead.companyName}: ${e instanceof Error ? e.message : String(e)}`; if (errorsList.length < 20) errorsList.push(msg); }
+            await runs.phase(runId, 'analyzing');
+          }
           sum.analyzed++;
 
           const hits = await repo.findSuppression(suppressionKeys(res.facts, res.lead.companyName));
@@ -181,20 +215,28 @@ export class SearchRunner {
           const fail = postfilter(c, { analysis: res.analysis, audit: res.audit, profiles: (res.lead.socials ?? []).map((s) => ({ platform: s.platform, lastPostAt: s.lastActivityAt })), socialComplete: !!res.social?.complete,
             readiness: contact.readiness, hasPhone: !!res.lead.phone, hasEmail: !!res.lead.email, bookingRelevant: cfg.taxonomy.sub(res.lead.subIndustry)?.booking !== false, now, cfg: scoring });
           const matched = fail.length === 0 && contact.readiness !== 'DO_NOT_CONTACT';
-          if (matched && brief && (brief.priority === 'A' || brief.priority === 'B')) brief = await polishOpener(brief, { company: res.lead.companyName, callerName: callerOf(settings.callerName, cfg.agency.callerName) }, gateway, res.externalId);
+          if (matched && brief && (brief.priority === 'A' || brief.priority === 'B') && aiOpenerLeft > 0) { aiOpenerLeft--; brief = await polishOpener(brief, { company: res.lead.companyName, callerName: callerOf(settings.callerName, cfg.agency.callerName) }, gateway, res.externalId); }
           const saved = await leads.saveAnalysis({ res, contact, brief, runId, scoring, runResult: { matched, failReasons: contact.readiness === 'DO_NOT_CONTACT' && !fail.length ? ['Auf der Sperrliste'] : fail } });
           await gateway.flush(saved.leadId);
-          try { await this.afterSave?.(saved.leadId, { matched, noWebsite: res.audit.status === 'NO_WEBSITE', opportunity: res.analysis.salesOpportunity.value, blocked: contact.readiness === 'DO_NOT_CONTACT', run: autoDemo }); }
+          savedIds.push(saved.leadId); refToLead.set(`${pr.source}|${pr.id}`, saved.leadId);
+          for (const a of [...m.aliases, ...(identity ? [{ source: pr.source, ref: pr.id }] : [])]) await this.pipeline.addAlias(saved.leadId, a.source, a.ref);
+          for (const pe of possibleExisting.filter((x) => x.id !== saved.leadId).sort((a, b) => b.score - a.score).slice(0, 3)) await this.pipeline.addCandidate(saved.leadId, pe.id, pe.score, pe.reasons);
+          try { await this.afterSave?.(saved.leadId, { matched, noWebsite: res.audit.status === 'NO_WEBSITE', opportunity: res.analysis.salesOpportunity.value, blocked: contact.readiness === 'DO_NOT_CONTACT' }); }
           catch (e) { if (sum.warnings.length < 5) sum.warnings.push(`Nachbearbeitung ${res.lead.companyName}: ${e instanceof Error ? e.message : String(e)}`); }
           if (matched) { sum.matched++; matchedLeads.push({ leadId: saved.leadId, sales: res.analysis.salesOpportunity.value, dn: res.analysis.digitalNeed.value, dist: res.lead.distanceKm, reviews: res.lead.reviewCount }); }
         } catch (e) {
           if (e instanceof BudgetExceeded || e instanceof KillSwitchActive) throw e;
-          sum.errors++; if (sum.errorSamples!.length < 5) sum.errorSamples!.push(`${m.place?.name ?? m.directory?.name}: ${e instanceof Error ? e.message : String(e)}`);
+          sum.errors++; const msg = `${m.place?.name ?? m.directory?.name}: ${e instanceof Error ? e.message : String(e)}`; if (sum.errorSamples!.length < 5) sum.errorSamples!.push(msg); if (errorsList.length < 20) errorsList.push(msg);
         }
         await save();
       }
+      // unsichere Dubletten innerhalb des Laufs zur manuellen Prüfung vormerken
+      for (const m of merged) for (const pp of m.possible) {
+        const a = refToLead.get(`${pp.source}|${pp.ref}`), b = refToLead.get(`${pp.otherSource}|${pp.otherRef}`);
+        if (a && b) await this.pipeline.addCandidate(a, b, pp.score, pp.reasons);
+      }
     } catch (e) {
-      if (e instanceof BudgetExceeded || e instanceof KillSwitchActive) { status = 'STOPPED'; sum.stoppedReason = e.message; }
+      if (e instanceof BudgetExceeded || e instanceof KillSwitchActive) { status = 'STOPPED'; sum.stoppedReason = e.message; errorsList.push(e.message); }
       else throw e;
     }
 
@@ -203,8 +245,19 @@ export class SearchRunner {
     await runs.setRanks(runId, matchedLeads.map((x) => x.leadId));
     if (sum.matched < c.minLeads) sum.warnings.push(`Nur ${sum.matched} von mindestens ${c.minLeads} Leads gefunden. Radius erweitern oder Filter lockern${sum.stoppedReason ? ` (Lauf gestoppt: ${sum.stoppedReason})` : ''}.`);
     if (!sum.found) sum.warnings.push('Die Datenquellen haben für diese Suche keine Treffer geliefert.');
+    if (sum.stoppedReason && /MAX LEADS/.test(sum.stoppedReason) && c.maxLeads > limits.maxLeadsPerRun) sum.warnings.push(`Die Suchgröße (${c.maxLeads}) übersteigt das Limit „Max. Leads pro Lauf“ (${limits.maxLeadsPerRun}) – in den Einstellungen erhöhen.`);
     await repo.usage(runId, P.crawler.name, 'crawl', sum.usage.crawl); await repo.usage(runId, P.social.name, 'lookup', sum.usage.social);
+    if (this.d.enricher) { await repo.usage(runId, this.d.enricher.ws.name, 'search', sum.usage.websearch); if (sum.usage.websearch) sourcesUsed.push({ id: 'WEB_SEARCH', provider: this.d.enricher.ws.name, requests: sum.usage.websearch, costCents: webCents }); }
+    if (sum.usage.crawl) sourcesUsed.push({ id: 'DIRECT_WEBSITE', provider: P.crawler.name, requests: sum.usage.crawl, costCents: sum.usage.crawl * Number(S.DIRECT_WEBSITE?.centsPerRequest ?? 0) });
+    // Auto-Demos für die höchst priorisierten Leads ohne Website, Rest = „Demo empfohlen“
+    let demoInfo = { autoDemos: 0, recommended: 0 };
+    try { if (this.afterRun) demoInfo = await this.afterRun(runId, savedIds, { maxAutoDemos: Number(cfg.sales?.autoDemo?.maxPerSearch ?? PC.autoDemo?.maxPerSearch ?? 5) }); }
+    catch (e) { sum.warnings.push(`Auto-Demo: ${e instanceof Error ? e.message : String(e)}`); }
+    (sum as RunSummary & Record<string, unknown>).pipeline = { dedupe: dedupeStats, autoDemos: demoInfo.autoDemos, demoRecommended: demoInfo.recommended, webSearchCalls: sum.usage.websearch };
+    const ai = await new AiUsageStore(repo).forRun(runId, startedAt);
+    const osmCents = sourcesUsed.filter((s) => s.id === 'OSM' || s.id === 'GOOGLE_PLACES').reduce((n, s) => n + s.costCents, 0);
+    const costs = { osm: osmCents, web_search: webCents, ai: ai.analysisCents + ai.otherCents, demo: ai.demoCents, total: osmCents + webCents + ai.totalCents };
     await save();
-    await runs.finish(runId, status, sum);
+    await runs.finish(runId, status, sum, undefined, { sources: sourcesUsed, costs, errors: errorsList, rawCount, foundCount: sum.analyzed });
   }
 }

@@ -30,7 +30,10 @@ test('Auto-Demo NUR für Firmen ohne Website (mit Daten); Firmen mit Website bek
   assert.equal(withSiteDemos[0].n, 0);
   const noSite = await q("select l.id, l.phone, l.address, o.score, (select count(*) from demos d where d.lead_id = l.id)::int demos from leads l left join lateral (select score from opportunities where lead_id = l.id order by created_at desc limit 1) o on true where l.owner_id = $1 and l.website_url is null");
   const eligible = noSite.filter((l) => (l.phone || l.address) && l.score >= 45);
-  assert.ok(eligible.length >= 3); assert.ok(eligible.every((l) => l.demos === 1), 'jede berechtigte Firma ohne Website hat genau eine Demo');
+  assert.ok(eligible.length >= 3);
+  // Obergrenze je Suchlauf (config/pipeline.json → autoDemo.maxPerSearch): höchstens so viele Auto-Demos, der Rest ist „Demo empfohlen“
+  const max = Number(app.ctx.cfg.sales.autoDemo.maxPerSearch ?? 5), withDemo = eligible.filter((l) => l.demos === 1).length;
+  assert.equal(withDemo, Math.min(max, eligible.length)); assert.ok(eligible.every((l) => l.demos <= 1));
   assert.ok(noSite.filter((l) => l.score < 45).every((l) => l.demos === 0), 'zu geringe Chance → keine Auto-Demo');
 });
 

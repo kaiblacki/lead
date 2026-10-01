@@ -24,8 +24,8 @@ test('Lead-Liste: Suche, Filter (Status, Kategorie, Kontakt, Website, Priorität
   assert.ok(hot <= all);
   const page = await rows('?status=QUALIFIED&sort=distance');
   assert.ok(!/undefined|NaN|\[object/.test(page));
-  // Sortierung nach Sales Opportunity absteigend
-  const html = await (await app.get('/leads?status=QUALIFIED')).text();
+  // Sortierung nach Sales Opportunity absteigend (Standardsortierung ist seit der Pipeline: Priorität A→D, dann Verkaufschance – siehe pipeline.test.ts)
+  const html = await (await app.get('/leads?status=QUALIFIED&sort=score')).text();
   const scores = [...html.matchAll(/<b>(\d{1,3})<\/b> <span class="badge/g)].map((m) => Number(m[1]));
   assert.deepEqual([...scores].sort((a, b) => b - a), scores);
 });
