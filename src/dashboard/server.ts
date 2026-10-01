@@ -51,13 +51,17 @@ export function createApp(ctx: Context, opts: AppOptions): http.Server {
    * Herkunftsprüfung für Formulare. Browser senden bei „Referrer-Policy: no-referrer“ für Formulare `Origin: null` – das ist kein Angriff, sondern
    * „unbekannt“; dann entscheidet der Referer, und fehlt auch der, schützt das geheime CSRF-Token (Basic-Auth wird vom Browser sonst automatisch mitgeschickt).
    */
+  const baseHost = (() => { try { return opts.baseUrl ? new URL(opts.baseUrl).host : null; } catch { return null; } })();
   const sameOrigin = (req: http.IncomingMessage) => {
     const hostOf = (v: string) => { try { return new URL(v).host; } catch { return null; } };
+    // Hinter einem Proxy/Port-Forwarding (Codespaces, Tunnel, Caddy) unterscheidet sich der Host von der Browser-Adresse: Host, X-Forwarded-Host und PUBLIC_BASE_URL gelten alle.
+    const ok = new Set([req.headers.host, String(req.headers['x-forwarded-host'] ?? '').split(',')[0].trim(), baseHost].filter(Boolean) as string[]);
     const origin = req.headers.origin, referer = req.headers.referer;
-    if (origin && origin !== 'null') return hostOf(origin) === req.headers.host;
-    if (referer) return hostOf(referer) === req.headers.host;
+    if (origin && origin !== 'null') return ok.has(hostOf(origin) ?? '');
+    if (referer) return ok.has(hostOf(referer) ?? '');
     return true;
   };
+
 
   const send = (res: http.ServerResponse, r: Res, isPublic: boolean, killSwitch: boolean, flashKind?: Flash) => {
     void killSwitch; void flashKind;
