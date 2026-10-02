@@ -43,10 +43,10 @@ if [ -z "$found" ]; then
   fail "PostgreSQL läuft, aber keine Anmeldung klappt. Zugangsdaten in .env.local eintragen (PGUSER=… und PGPASSWORD=…, siehe .env.example)."
 fi
 export PGUSER PGPASSWORD="${PGPASSWORD:-}"
-echo "PostgreSQL: Benutzer „$PGUSER“, Port $PGPORT – OK"
+echo "PostgreSQL: Benutzer „${PGUSER}“, Port $PGPORT – OK"
 
 # 4. Datenbank + Migrationen (nur wenn sie fehlt) und Testbenutzer
-bash scripts/setup-local-db.sh "$DB" || fail "Datenbank „$DB“ konnte nicht vorbereitet werden (siehe oben)."
+bash scripts/setup-local-db.sh "$DB" || fail "Datenbank „${DB}“ konnte nicht vorbereitet werden (siehe oben)."
 psql -d "$DB" -qc "insert into auth.users(id) values ('$OWNER_ID') on conflict do nothing" || fail "Testbenutzer konnte nicht angelegt werden."
 
 # 5. Port prüfen
