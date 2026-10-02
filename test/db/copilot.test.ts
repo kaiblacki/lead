@@ -10,9 +10,9 @@ import { CopilotService } from '../../src/sales/copilot-service.ts';
 const apps: App[] = []; after(async () => { for (const a of apps) await a.close(); });
 const page = async (app: App, path: string) => app.text(await (await app.get(path)).text());
 
-async function seeded(owner: string) {
+async function seeded(owner: string, phone = true) {
   const app = await appSetup(owner, { autoDemo: false }); apps.push(app);
-  const { limits } = await app.repo.getLimits(); await app.repo.saveLimits({ ...limits, maxLeadsPerRun: 1000, maxAuditsPerRun: 1000, maxCrawlPagesPerRun: 20000 }); await enablePhone(app);
+  const { limits } = await app.repo.getLimits(); await app.repo.saveLimits({ ...limits, maxLeadsPerRun: 1000, maxAuditsPerRun: 1000, maxCrawlPagesPerRun: 20000 }); if (phone) await enablePhone(app);
   const live = createProviders({ APP_MODE: 'live' }, { baseUrl: app.base });
   Object.assign(app.ctx.registry.providers, { places: new SyntheticPlaces({ n: 12, noSiteEvery: 2, noPhoneEvery: 4 }), crawler: new StubCrawler(), directory: live.providers.directory, social: live.providers.social });
   await app.ctx.runner.start(normalizeCriteria({ location: 'Völklingen', radiusKm: '30', subIndustries: ['nagelstudio'], maxLeads: '50' }, app.ctx.cfg.taxonomy, app.ctx.cfg.pipeline.sizes)); await app.ctx.runner.idle();
@@ -102,4 +102,16 @@ test('Verkaufsassistent vertiefen (DEEP): nur geprüfte KI-Ausgabe, Cache, Mock 
   reply = JSON.stringify({ opener: 'Mit unserem Website-Rabatt von 20% sparen Sie Geld, wenn Sie eine Versicherung abschließen.', summary: 'Das Unternehmen hat keine Website und 15 Mitarbeiter.' });
   const r3 = await svc.deepen(lead.id); assert.equal(r3.used, false); assert.match(r3.note, /verworfen/); assert.equal(calls, 2);
   reply = 'kein json'; assert.equal((await svc.deepen(lead.id)).used, false);
+});
+
+test('Telefonakquise freigeben: Gesprächsziel und nächste Aktion aller vorhandenen Verkaufsassistenten ziehen sofort nach (ohne jede Lead-Seite zu öffnen)', { skip, timeout: 300_000 }, async () => {
+  const app = await seeded('00000000-0000-0000-0000-000000000465', false);   // Telefonakquise bewusst NICHT freigegeben
+  const next = async () => (await app.pool.query("select l.recommended_next_action na, l.call_goal, l.phone, l.work_status from leads l join sales_copilot s on s.lead_id=l.id and s.tier='MASS' where l.owner_id = '00000000-0000-0000-0000-000000000465'")).rows;
+  const before = await next(); assert.ok(before.length >= 2); assert.ok(before.every((r) => r.na === 'MANUAL_RESEARCH'), JSON.stringify(before.map((r) => [r.na, r.phone, r.work_status])));
+  const res = await app.post('/settings/phone', { enable: '1', ack: '1', dailyCallTarget: '20', callerName: 'Kai Schwarz' }); assert.equal(res.status, 303);
+  const after = await next(); const callable = after.filter((r) => r.phone && r.work_status === 'CONTACTABLE');
+  assert.ok(callable.length >= 2); assert.ok(callable.every((r) => r.na === 'CALL' || r.na === 'NEEDS_ANALYSIS' || r.na === 'CREATE_DEMO'), JSON.stringify(callable.map((r) => r.na)));
+  assert.ok(callable.every((r) => !/Erst Daten beschaffen/.test(r.call_goal)), 'Gesprächsziel nicht mehr „erst recherchieren“');
+  assert.ok(after.filter((r) => r.work_status === 'DATA_NEEDED').every((r) => r.na === 'MANUAL_RESEARCH'), 'DATA_NEEDED bleibt „Daten beschaffen“');
+  assert.match(await page(app, '/today'), /Nächste Aktion: <b>Anrufen<\/b>|Nächste Aktion: Anrufen|Anrufen/);
 });

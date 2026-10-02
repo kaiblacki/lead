@@ -90,6 +90,13 @@ export class CopilotService {
     return { copilot: c, cached: false };
   }
 
+  /** Nach geänderten Rahmenbedingungen (z. B. Telefonakquise freigegeben, Sperrliste): vorhandene Fassungen neu rechnen (regelbasiert, kostenlos; Cache verhindert unnötige Arbeit). */
+  async refreshAll(): Promise<number> {
+    const ids = (await this.pool.query("select lead_id from sales_copilot where owner_id=$1 and tier='MASS'", [this.owner])).rows.map((r) => r.lead_id as string);
+    let n = 0; for (const id of ids) { const r = await this.ensure(id); if (r && !r.cached) n++; }
+    return n;
+  }
+
   async stored(leadId: string): Promise<StoredCopilot> {
     const rows = (await this.pool.query('select tier, input_hash, content, ai_model, cost_cents, created_at from sales_copilot where lead_id=$1 and owner_id=$2', [leadId, this.owner])).rows;
     const mass = rows.find((r) => r.tier === 'MASS'), deep = rows.find((r) => r.tier === 'DEEP');

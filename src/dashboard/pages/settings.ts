@@ -57,6 +57,7 @@ export const routes: Route[] = [
     if (enable && !cur.phoneEnabled && r.form.get('ack') !== '1') throw new UserError('Bitte bestätige, dass du die rechtliche Grundlage geprüft hast.');
     const res = await r.ctx.repo.saveSettings({ phoneEnabled: enable, dailyCallTarget: num(r.form.get('dailyCallTarget'), cur.dailyCallTarget), callerName: (r.form.get('callerName') ?? '').trim() || null });
     const n = res.changedPhone ? await r.ctx.leads.recomputeAllContact() : 0;
+    await r.ctx.copilot.refreshAll();   // Gesprächsziel/nächste Aktion passen zur neuen Freigabe
     return redirect('/settings#telefon', okFlash(res.changedPhone ? `Telefonakquise ${enable ? 'freigegeben' : 'deaktiviert'} – ${n} Leads neu bewertet.` : 'Gespeichert.'));
   } },
   { method: 'POST', path: /^\/settings\/channels$/, h: async (r) => {
@@ -79,9 +80,9 @@ export const routes: Route[] = [
   } },
   { method: 'POST', path: /^\/settings\/suppression$/, h: async (r) => {
     await r.ctx.repo.addSuppression(r.form.get('kind') ?? '', r.form.get('value') ?? '', (r.form.get('reason') ?? '').trim() || undefined);
-    const n = await r.ctx.leads.recomputeAllContact(); return redirect('/settings#sperrliste', okFlash(`Eintrag hinzugefügt – ${n} Leads neu bewertet.`));
+    const n = await r.ctx.leads.recomputeAllContact(); await r.ctx.copilot.refreshAll(); return redirect('/settings#sperrliste', okFlash(`Eintrag hinzugefügt – ${n} Leads neu bewertet.`));
   } },
-  { method: 'POST', path: new RegExp(`^/settings/suppression/${id}/delete$`), h: async (r) => { await r.ctx.repo.removeSuppression(r.params[0]); await r.ctx.leads.recomputeAllContact(); return redirect('/settings#sperrliste', okFlash('Eintrag entfernt.')); } },
+  { method: 'POST', path: new RegExp(`^/settings/suppression/${id}/delete$`), h: async (r) => { await r.ctx.repo.removeSuppression(r.params[0]); await r.ctx.leads.recomputeAllContact(); await r.ctx.copilot.refreshAll(); return redirect('/settings#sperrliste', okFlash('Eintrag entfernt.')); } },
   { method: 'POST', path: /^\/settings\/retention$/, h: async (r) => {
     if (r.form.get('confirm') !== '1') throw new UserError('Bitte die Löschung bestätigen.');
     const out = await r.ctx.retention.execute(r.ctx.now()); return redirect('/settings#aufbewahrung', okFlash(`Bereinigt: ${out.map((o) => `${o.count} ${o.label}`).join(', ')}.`));

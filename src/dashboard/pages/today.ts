@@ -3,7 +3,7 @@ import { html, categoryBadge, prioBadge } from '../ui.ts';
 import { render } from './_page.ts';
 import { nextActionText } from './lead-parts.ts';
 import { NA } from '../../core/enrichment.ts';
-import { POTENTIAL_LABEL, type Potential } from '../../sales/copilot.ts';
+import { NEXT_ACTION_LABEL, POTENTIAL_LABEL, type NextAction, type Potential } from '../../sales/copilot.ts';
 
 const VIEWS: { key: string; title: string; hint: string }[] = [
   { key: 'today_work', title: 'Heute bearbeiten', hint: 'A-Leads ohne Kontakt, fällige Rückrufe und Leads mit fertiger Demo' },
@@ -24,7 +24,7 @@ export const routes: Route[] = [{
       ${data.map(({ v, res }) => html`<div class="card" id="${v.key}"><div class="row"><h2 class="grow">${v.title} <small class="mute">(${res.total})</small></h2><a class="btn" href="/leads?quick=${v.key}">Alle anzeigen</a></div><p class="mute">${v.hint}</p>
         ${res.rows.length ? html`<ul class="items">${res.rows.map((l) => html`<li><div class="row">${prioBadge(l.priority)}<a class="grow" href="/leads/${l.id}"><b>${l.company_name}</b><br><small>${l.city ?? NA} · ${l.sub_industry ?? l.industry ?? NA}</small></a>
           <div style="text-align:right"><b>${l.score ?? NA}</b> ${categoryBadge(l.category)}</div></div>
-          <small>${l.phone ? html`<a class="tel" href="tel:${String(l.phone).replace(/[^\d+]/g, '')}">${l.phone}</a>` : 'keine Telefonnummer'} · Nächste Aktion: <b>${nextActionText(l)}</b></small>
+          <small>${l.phone ? html`<a class="tel" href="tel:${String(l.phone).replace(/[^\d+]/g, '')}">${l.phone}</a>` : 'keine Telefonnummer'} · Nächste Aktion: <b>${l.recommended_next_action ? NEXT_ACTION_LABEL[l.recommended_next_action as NextAction] : nextActionText(l)}</b></small>
           <dl class="facts"><dt>Website-Potenzial</dt><dd>${l.website_potential ? POTENTIAL_LABEL[l.website_potential as Potential] : NA}</dd><dt>Demo</dt><dd>${l.has_demo ? 'vorhanden' : l.demo_decision === 'recommended' ? 'empfohlen' : 'keine'}</dd><dt>Gesprächsziel</dt><dd>${l.call_goal ?? NA}</dd></dl>
           <a class="btn" href="/leads/${l.id}#verkaufsassistent">Verkaufsassistent öffnen</a></li>`)}</ul>` : html`<p class="mute">Nichts offen.</p>`}</div>`)}` });
   },
