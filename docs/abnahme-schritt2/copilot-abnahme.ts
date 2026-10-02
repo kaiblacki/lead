@@ -26,8 +26,8 @@ try {
   ok('Verkaufsassistent entsteht automatisch für interessante Leads des Laufs', auto[0].n > 0, `${auto[0].n} von ${all[0].n} Leads (A/B, Verkaufschance ≥ 60 oder Demo empfohlen)`);
 
   // 2. drei Leads auswählen: ohne Website · schlechte Website · ordentliche Website (verschiedene Branchen, wenn vorhanden)
-  const pick = async (state: string, notSub: string[]) => (await q(`select id, company_name, sub_industry from leads where website_state=$1 and sub_industry <> all($2) and phone is not null order by (select score from opportunities where lead_id=leads.id order by created_at desc limit 1) desc nulls last limit 1`, [state, notSub]))[0]
-    ?? (await q('select id, company_name, sub_industry from leads where website_state=$1 order by created_at desc limit 1', [state]))[0];
+  const pick = async (state: string, notSub: string[]) => (await q(`select id, company_name, sub_industry from leads where website_state=$1 and sub_industry <> all($2) and phone is not null and call_count = 0 order by (select score from opportunities where lead_id=leads.id order by created_at desc limit 1) desc nulls last limit 1`, [state, notSub]))[0]
+    ?? (await q('select id, company_name, sub_industry from leads where website_state=$1 and call_count = 0 order by created_at desc limit 1', [state]))[0];
   const noSite = await pick('none', ['friseur', 'nagelstudio']) ?? await pick('none', []);
   const bad = await pick('needs_improvement', []); const fine = await pick('fine', [noSite?.sub_industry ?? '']);
   ok('Drei Testleads gefunden', !!noSite && !!bad && !!fine, [noSite, bad, fine].map((x) => x && `${x.company_name} (${x.sub_industry})`).join(' | '));
