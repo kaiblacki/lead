@@ -41,7 +41,7 @@ test('Änderungswünsche: Statuskette, Freigabe verlangt Zuordnung (im Paket / E
   await app.ctx.customers.setRequestStatus(q2, 'APPROVED', { scope: 'EXTRA', extraPriceCents: 9900 }); const r2 = (await app.ctx.customers.requests(cid)).find((x: any) => x.id === q2); assert.equal(r2.extra_price_cents, 9900); assert.equal((await app.ctx.customers.maintenance(cid))!.usedChanges, 1, 'Extra zählt nicht gegen das Budget');
   assert.ok((await page(app, `/customers/${cid}`)).includes('Extra-Aufwand: 99,00'));
   const q3 = await app.ctx.customers.addRequest(cid, 'Abgelehnt'); await app.ctx.customers.setRequestStatus(q3, 'DECLINED'); await assert.rejects(app.ctx.customers.setRequestStatus(q3, 'IN_REVIEW'), /nicht möglich/);
-  assert.equal((await app.pool.query('select count(*)::int n from outbox')).rows[0].n, 0);
+  assert.equal((await app.pool.query('select count(*)::int n from outbox where owner_id = $1', [app.ctx.repo.ownerId])).rows[0].n, 0);
 });
 
 test('Portal per Token: sieht nur eigene Daten, kann Änderungswunsch senden (landet als NEU + Aufgabe), ungültiger/erneuerter Token → 404; keine Preise/Rechnungen/Partnerdaten', { skip, timeout: 300_000 }, async () => {
@@ -57,5 +57,5 @@ test('Portal per Token: sieht nur eigene Daten, kann Änderungswunsch senden (la
   await app.ctx.customers.rotatePortalToken(cid); assert.equal((await app.get(`/c/${tok}`)).status, 404, 'alter Link ungültig');
   await app.ctx.customers.update(cid, { status: 'ENDED' }); const t2 = (await app.ctx.customers.get(cid)).portal_token;
   assert.equal((await app.post(`/c/${t2}/request`, { title: 'x ändern' })).status, 403);
-  assert.equal((await app.pool.query('select count(*)::int n from outbox')).rows[0].n, 0, 'nichts gesendet');
+  assert.equal((await app.pool.query('select count(*)::int n from outbox where owner_id = $1', [app.ctx.repo.ownerId])).rows[0].n, 0, 'nichts gesendet');
 });

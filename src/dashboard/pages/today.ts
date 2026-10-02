@@ -22,9 +22,14 @@ export const routes: Route[] = [{
   method: 'GET', path: /^\/today$/, h: async (r) => {
     await r.ctx.growth.refresh();
     const tg = await r.ctx.taskEngine.groups();
+    const top = (await r.ctx.leads.list({ sort: 'action', limit: 5 })).rows.filter((l: any) => (l.action_priority ?? 0) > 0);
     const data = await Promise.all(VIEWS.map(async (v) => ({ v, res: await r.ctx.leads.list({ quick: v.key, limit: 8, sort: 'action' }) })));
     return render(r, { title: 'Heute', nav: 'today', body: html`
       <div class="card" id="aufgaben"><div class="row"><h2 class="grow">Aufgaben</h2><a class="btn" href="/tasks">Alle Aufgaben</a></div><b>Überfällig (${tg.OVERDUE.length})</b>${taskList(tg.OVERDUE, r.app.csrf, { empty: 'Nichts überfällig.', back: '/today' })}<b>Heute (${tg.TODAY.length})</b>${taskList(tg.TODAY, r.app.csrf, { empty: 'Heute nichts fällig.', back: '/today' })}</div>
+      <div class="card" id="als-naechstes"><h2>Als Nächstes (nach Handlungspriorität)</h2><p class="mute">Regelbasiert aus Verkaufschance, Digitalbedarf, Kontaktierbarkeit, Datensicherheit, Partnerpotenzial und Engagement – plus fällige Aufgaben und Rückrufe. Du entscheidest, was du tust.</p>
+        ${top.length ? html`<ol class="items">${top.map((l: any) => html`<li><div class="row"><b class="grow"><a href="/leads/${l.id}">${l.company_name}</a></b><span class="badge ${l.action_priority >= 70 ? 'b-ok' : 'b-info'}">Handlung ${l.action_priority}</span></div>
+          <small>${l.city ?? NA} · ${l.growth_scores?.reasons?.slice(1).join(' · ') || 'Basiswerte'}</small>
+          <div class="quick">${l.phone ? html`<a class="btn primary" href="tel:${String(l.phone).replace(/[^\d+]/g, '')}">ANRUFEN</a>` : ''}<a class="btn" href="/leads/${l.id}?tab=demo#demo-stufe">DEMO</a><a class="btn" href="/leads/${l.id}?tab=angebot#angebot">ANGEBOT</a><a class="btn" href="/leads/${l.id}?tab=partner#partner">PARTNER</a></div></li>`)}</ol>` : html`<p class="mute">Nichts mit Handlungsbedarf.</p>`}</div>
       <div class="grid">${data.map(({ v, res }) => html`<a class="kpi" href="#${v.key}" style="text-decoration:none;color:inherit"><b>${res.total}</b><span>${v.title}</span></a>`)}</div>
       ${data.map(({ v, res }) => html`<div class="card" id="${v.key}"><div class="row"><h2 class="grow">${v.title} <small class="mute">(${res.total})</small></h2><a class="btn" href="/leads?quick=${v.key}">Alle anzeigen</a></div><p class="mute">${v.hint}</p>
         ${res.rows.length ? html`<ul class="items">${res.rows.map((l) => html`<li><div class="row">${prioBadge(l.priority)}<a class="grow" href="/leads/${l.id}"><b>${l.company_name}</b><br><small>${l.city ?? NA} · ${l.sub_industry ?? l.industry ?? NA}</small></a>

@@ -19,7 +19,8 @@
     "acceptance": "node src/acceptance/run.ts",
     "enrich:check": "bash scripts/enrich-check.sh",
     "demo:stop": "node scripts/demo.ts stop",
-    "demo:status": "node scripts/demo.ts status"
+    "demo:status": "node scripts/demo.ts status",
+    "ops": "node scripts/ops.ts"
   },
   "dependencies": {
     "pg": "^8.23.1",

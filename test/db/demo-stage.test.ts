@@ -30,5 +30,5 @@ test('Schnelle Standard-Demo: nur mit Bestätigung und gültigem Grundtemplate, 
   assert.equal((await app.pool.query('select demo_family from leads where id=$1', [a.id])).rows[0].demo_family, 'APPOINTMENT'); assert.equal(await app.ctx.demoStages.effective(a.id), 'DEMO_CREATED'); assert.equal(await app.ctx.pipeline.approvals.stateOf(a.id, 'DEMO_CREATE'), 'COMPLETED');
   await app.pool.query('update leads set contact_blocked=true where id=$1', [b.id]); await app.post(`/leads/${b.id}/demo/quick`, { family: 'SERVICE', confirm: '1' }); assert.equal(await demos(), 1, 'gesperrter Lead: keine Demo');
   assert.equal((await app.post(`/leads/${c.id}/demo/quick`, { family: 'GASTRO_RETAIL', confirm: '1' })).status, 303); assert.equal(await demos(), 2);
-  assert.equal((await app.pool.query('select count(*)::int n from outbox')).rows[0].n, 0, 'nichts gesendet');
+  assert.equal((await app.pool.query('select count(*)::int n from outbox where owner_id = $1', [app.ctx.repo.ownerId])).rows[0].n, 0, 'nichts gesendet');
 });

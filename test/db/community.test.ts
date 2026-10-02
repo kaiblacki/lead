@@ -26,7 +26,7 @@ test('Mitglied aus Partner: Opt-in Pflicht, Gebühr/kostenlos je Partnerstatus, 
   await app.ctx.partners.setStatus(pa, 'PAUSED_PARTNER'); assert.equal((await app.ctx.community.get(ma)).feeCents, 2900, 'nicht mehr aktiver Partner → normaler Beitrag');
   const st = await app.ctx.community.stats(); assert.equal(st.members, 2); assert.equal(st.paying, 2);
   const pg = await page(app, '/community'); for (const t of ['eigenständiges Angebot', 'für aktive Partner kostenlos', 'nichts wird abgebucht', 'Verzeichnis-Vorschau']) assert.ok(pg.includes(t), t);
-  assert.equal((await app.pool.query('select count(*)::int n from outbox')).rows[0].n, 0);
+  assert.equal((await app.pool.query('select count(*)::int n from outbox where owner_id = $1', [app.ctx.repo.ownerId])).rows[0].n, 0);
 });
 
 test('Community-Vorteile nie an Versicherung gekoppelt (Text-Guard); Kunde als Mitglied; Beenden nimmt aus Verzeichnis', { skip, timeout: 300_000 }, async () => {

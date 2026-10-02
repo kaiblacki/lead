@@ -38,7 +38,7 @@ test('Automatisch für interessante Leads (A/B, Verkaufschance, Demo empfohlen) 
   // DATA_NEEDED
   const needed = all.find((l) => l.work_status === 'DATA_NEEDED')!; assert.ok(needed);
   const c = (await app.ctx.copilot.ensure(needed.id, { force: true }))!.copilot; assert.equal(c.nextAction.code, 'MANUAL_RESEARCH'); assert.equal(c.goal.code, 'RESEARCH');
-  assert.equal((await app.pool.query('select count(*)::int n from outbox')).rows[0].n, 0, 'nichts gesendet');
+  assert.equal((await app.pool.query('select count(*)::int n from outbox where owner_id = $1', [app.ctx.repo.ownerId])).rows[0].n, 0, 'nichts gesendet');
 });
 
 test('Cache: gleiche Daten → kein Neuberechnen; geänderte Daten (Anruf-Ergebnis) → neu. Overrides, Notizen und Module bleiben bestehen', { skip, timeout: 300_000 }, async () => {
@@ -85,7 +85,7 @@ test('Anruf-Ergebnisse: Bedarfsanalyse, Kooperation, mehrere Themen – mit Noti
   const res = await app.post(`/leads/${ok[5].id}/call`, { result: 'PARTNERSHIP', note: 'x', next_step: 'Kaffee mit dem Inhaber' }); assert.equal(res.status, 303);
   assert.equal((await topics(ok[5].id)).next_step, 'Kaffee mit dem Inhaber');
   const calls = await page(app, '/calls'); assert.ok(calls.includes('Gesprächsziel') || calls.includes('Keine Calls offen') || calls.includes('Nächster Schritt'));
-  assert.equal((await app.pool.query('select count(*)::int n from outbox')).rows[0].n, 0, 'nichts gesendet');
+  assert.equal((await app.pool.query('select count(*)::int n from outbox where owner_id = $1', [app.ctx.repo.ownerId])).rows[0].n, 0, 'nichts gesendet');
 });
 
 test('Verkaufsassistent vertiefen (DEEP): nur geprüfte KI-Ausgabe, Cache, Mock ohne Kosten', { skip, timeout: 300_000 }, async () => {

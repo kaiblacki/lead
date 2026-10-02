@@ -30,5 +30,5 @@ test('Angebot angenommen → Auftrag → Anzahlung manuell bestätigt (mit Refer
   const pg3 = await page(app, `/orders/${orderId}`); assert.ok(pg3.includes('Bereit zur Veröffentlichung') && pg3.includes('DEPLOY_APPROVAL'));
   const noAppr = await app.post(`/orders/${orderId}/deploy`, {}); assert.match(flashOf(noAppr.headers.get('location')), /ausdrücklich freigeben|f=/); assert.equal((await app.pool.query('select count(*)::int n from deployments where order_id=$1', [orderId])).rows[0].n, 0);
   assert.equal((await app.pool.query('select deploy_approved_at from orders where id=$1', [orderId])).rows[0].deploy_approved_at, null, 'ohne Freigabe kein Vermerk');
-  assert.equal((await app.pool.query('select count(*)::int n from outbox')).rows[0].n, 0, 'nichts gesendet');
+  assert.equal((await app.pool.query('select count(*)::int n from outbox where owner_id = $1', [app.ctx.repo.ownerId])).rows[0].n, 0, 'nichts gesendet');
 });

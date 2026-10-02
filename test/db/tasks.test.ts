@@ -22,7 +22,7 @@ test('Anruf-Ergebnis → Folgeaufgaben: nicht erreicht, Rückruf, interessiert, 
   await call(e.id, 'PARTNERSHIP'); assert.deepEqual((await tasksOf(app, e.id)).map((t: any) => t.type), ['PARTNER_CONVERSATION']);
   await app.ctx.calls.applyResult(f.id, 'MULTIPLE', { note: 'alles', topics: ['website', 'needs', 'partner'] } as never); assert.deepEqual((await tasksOf(app, f.id)).map((t: any) => t.type).sort(), ['NEEDS_ANALYSIS_APPOINTMENT', 'PARTNER_CONVERSATION', 'PREPARE_DEMO']);
   await call(g.id, 'NO_ANSWER'); await call(g.id, 'NO_INTEREST'); assert.ok((await tasksOf(app, g.id)).every((t: any) => t.status === 'CANCELLED'), 'kein Interesse → offene Aufgaben abgebrochen');
-  assert.equal((await app.pool.query('select count(*)::int n from outbox')).rows[0].n, 0, 'nichts gesendet');
+  assert.equal((await app.pool.query('select count(*)::int n from outbox where owner_id = $1', [app.ctx.repo.ownerId])).rows[0].n, 0, 'nichts gesendet');
   // „Demo gewünscht“ ist eine ausdrückliche Aktion von Kai (bestehende Logik) – darüber hinaus entsteht durch die Follow-up-Regeln keine Demo
   assert.equal((await app.pool.query('select count(*)::int n from demos where owner_id=$1', ['00000000-0000-0000-0000-000000000481'])).rows[0].n, 1, 'nur die Demo aus „Demo gewünscht“');
 });

@@ -143,6 +143,14 @@ const PROBES: Record<string, string> = {
   '0012_enrichment_approvals.sql': "exists (select 1 from information_schema.columns where table_schema='public' and table_name='leads' and column_name='work_status')",
   '0013_provider_cost_currency.sql': "exists (select 1 from information_schema.columns where table_schema='public' and table_name='enrichment_log' and column_name='provider_cost_currency')",
   '0014_sales_copilot.sql': "to_regclass('public.sales_copilot') is not null",
+  '0015_partners_strategy.sql': "to_regclass('public.partners') is not null",
+  '0016_tasks.sql': "to_regclass('public.tasks') is not null",
+  '0017_demo_stage.sql': "exists (select 1 from information_schema.columns where table_schema='public' and table_name='leads' and column_name='demo_stage')",
+  '0018_quotes_offers.sql': "to_regclass('public.quotes') is not null",
+  '0019_manual_payments.sql': "exists (select 1 from information_schema.columns where table_schema='public' and table_name='payments' and column_name='reference')",
+  '0020_growth_scores.sql': "exists (select 1 from information_schema.columns where table_schema='public' and table_name='leads' and column_name='growth_scores')",
+  '0021_customers.sql': "to_regclass('public.customers') is not null",
+  '0022_community.sql': "to_regclass('public.community_members') is not null",
 };
 export const migrationFiles = (root: string) => readdirSync(join(root, 'supabase', 'migrations')).filter((f) => /^\d+.*\.sql$/.test(f)).sort();
 
@@ -162,7 +170,7 @@ export async function ensureSchema(url: string, root: string): Promise<MigrateRe
     // Altbestand ohne Protokoll: vorhandene Struktur erkennen, nichts doppelt einspielen
     if (!done.size && (await cl.query("select to_regclass('public.leads') as t")).rows[0].t) {
       for (const f of files) {
-        const probe = PROBES[f]; const present = probe ? !!(await cl.query(`select ${probe} as ok`)).rows[0].ok : true;
+        const probe = PROBES[f]; const present = probe ? !!(await cl.query(`select ${probe} as ok`)).rows[0].ok : Number(f.slice(0, 4)) <= 10;  // ohne Erkennungs-Abfrage: nur die ältesten (≤ 0010) gelten als vorhanden
         if (present) { await cl.query('insert into public.demo_migrations(file) values ($1) on conflict do nothing', [f]); done.add(f); res.baselined.push(f); }
       }
     }

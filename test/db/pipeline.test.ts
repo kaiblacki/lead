@@ -183,10 +183,12 @@ test('Dashboard: Leadliste (Spalten, Filter A–D/NO_WEBSITE/Website/Demo/heute 
   // Lead-Seite: Reihenfolge der Bereiche
   const id = (await q(app, "select id from leads where owner_id=$1 and website_state='none' and phone is not null and demo_decision is null limit 1"))[0]?.id ?? (await q(app, 'select id from leads where owner_id=$1 limit 1'))[0].id;
   const d = await page(app, `/leads/${id}`); const at = (s: string) => { const i = d.indexOf(s); assert.ok(i >= 0, s); return i; };
-  // Der Verkaufsassistent steht direkt unter dem Unternehmenskopf (vor „Priorität überschreiben“); danach gilt die bisherige Reihenfolge (Suche ab dort, damit Wörter wie „Bedarfsanalyse“ im Assistenten nicht stören)
-  const prio = at('Priorität überschreiben'); const after = (s: string) => { const i = d.indexOf(s, prio); assert.ok(i >= 0, s); return i; };
-  const order = [at('Quelle'), at('Verkaufsassistent'), prio, ...['Analyse', 'Layout und Website-Funktionen', 'Was soll ich am Telefon sagen?', 'Kontaktstrategie', 'Kontaktvorlagen', 'Meine Notizen', 'KI-Kosten dieses Leads'].map(after)];
-  assert.deepEqual([...order].sort((x, y) => x - y), order, 'Reihenfolge: Unternehmen → Verkaufsassistent → Priorität → Analyse → Demo → Telefon → Kontakt → Vorlagen → Notizen → Kosten');
+  // Lead-Seite in Reitern (Phase J): Unternehmenskopf → Übersicht (Kontaktstrategie, Kontakt) → Verkauf (Assistent, Telefon, Priorität, Vorlagen, Notizen) → Website (Analyse, Kosten) → Demo → Partner → Bedarfsanalyse → Angebot → Verlauf
+  const rawD = await (await app.get(`/leads/${id}?tab=alle`)).text(); const sec = (k: string) => { const i = rawD.indexOf(`data-tab="${k}"`); assert.ok(i >= 0, k); const j = rawD.indexOf('</section>', i); return app.text(rawD.slice(i, j)); };
+  const idx = (k: string) => rawD.indexOf(`data-tab="${k}"`); const tabs = ['uebersicht', 'verkauf', 'website', 'demo', 'partner', 'bedarf', 'angebot', 'verlauf'];
+  assert.deepEqual(tabs.map(idx), [...tabs.map(idx)].sort((x, y) => x - y), 'Reihenfolge der Reiter');
+  assert.ok(rawD.indexOf('Quelle') < idx('uebersicht'), 'Unternehmenskopf zuerst');
+  for (const [k, words] of Object.entries({ uebersicht: ['Kontaktstrategie'], verkauf: ['Verkaufsassistent', 'Was soll ich am Telefon sagen?', 'Priorität überschreiben', 'Kontaktvorlagen', 'Meine Notizen'], website: ['Analyse', 'KI-Kosten dieses Leads'], demo: ['Layout und Website-Funktionen'] }) as [string, string[]][]) for (const w of words) assert.ok(sec(k).includes(w), `${k}: ${w}`);
   for (const w of ['Website-Score (100 = sehr gute Website)', 'Verkaufschance (100 = sehr interessant)', 'Positiv', 'Auffälligkeiten', 'Manuell prüfen', 'Gesprächseinstieg']) assert.ok(d.includes(w), w);
   assert.doesNotMatch(d, /undefined|NaN|\[object/);
   // keine externen Benachrichtigungen, nichts gesendet

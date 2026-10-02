@@ -21,7 +21,7 @@ test('Konfigurator speichern (HTTP): Paket, Add-ons mit Preis-/Mengenüberschrei
   const bad = await app.post(`/leads/${a.id}/quote`, { package: 'NOPE' } as never); assert.equal(bad.status, 303); assert.equal((await app.ctx.quotes.get(a.id))!.package, 'BUSINESS', 'ungültiges Paket ändert nichts');
   await app.post(`/leads/${a.id}/quote`, { package: 'PRO', manual_percent: '10', manual_reason: 'Bei Abschluss einer Versicherung' } as never); assert.equal((await app.ctx.quotes.get(a.id))!.package, 'BUSINESS', 'Versicherungsbezug im Rabattgrund wird abgelehnt');
   await app.post(`/leads/${a.id}/quote`, { package: 'PRO', manual_percent: '10', manual_reason: 'Kulanz nach Gespräch' } as never); const m = (await app.ctx.quotes.get(a.id))!.computed; assert.equal(m.partner_discount.reason, 'MANUAL'); assert.equal(m.oneTimeCents, 224100);
-  assert.equal((await app.pool.query('select count(*)::int n from outbox')).rows[0].n, 0);
+  assert.equal((await app.pool.query('select count(*)::int n from outbox where owner_id = $1', [app.ctx.repo.ownerId])).rows[0].n, 0);
 });
 
 test('Partnerpreis: nur bei aktivem Partner und nach Freigabe (separat als partner_discount mit Grund ACTIVE_PARTNER); fällt weg, wenn der Partner pausiert/beendet wird', { skip, timeout: 300_000 }, async () => {
@@ -55,7 +55,7 @@ test('Angebot: Entwurf → Zur Prüfung → Freigabe (Preise bestätigen, Partne
   // Ablehnen und Ablaufen
   const { offerId: o3 } = await app.ctx.offerFlow.createFromQuote(c.id); await app.ctx.offerFlow.approve(o3, { confirmPrices: true }); await app.ctx.sales.markOfferSent(o3); await app.ctx.offerFlow.decline(o3); assert.equal((await app.ctx.offerFlow.get(o3)).status, 'DECLINED'); await assert.rejects(app.ctx.offerFlow.decline(o3), /Nur ein freigegebenes/);
   await app.pool.query("update offers set valid_until = '2020-01-01' where id=$1", [o2]); assert.ok((await app.ctx.offerFlow.expireDue()) >= 1); assert.equal((await app.ctx.offerFlow.get(o2)).status, 'EXPIRED'); await assert.rejects(app.ctx.offerFlow.approve(o2, { confirmPrices: true }), /Nur ein Entwurf bzw./);
-  assert.equal((await app.pool.query('select count(*)::int n from outbox')).rows[0].n, 0, 'nichts gesendet');
+  assert.equal((await app.pool.query('select count(*)::int n from outbox where owner_id = $1', [app.ctx.repo.ownerId])).rows[0].n, 0, 'nichts gesendet');
 });
 
 test('Angebotsfreigabe blockiert bei Platzhaltern (config/pricing.json) und bei nicht mehr aktivem Partner', { skip, timeout: 300_000 }, async () => {

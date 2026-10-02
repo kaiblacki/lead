@@ -27,7 +27,7 @@ export const routes: Route[] = [
     const g = await r.ctx.taskEngine.groups(); const lead = r.url.searchParams.get('lead') ?? '';
     const tomorrow = nextBusinessDay(r.ctx.now()); const p = (d: Date) => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Berlin', dateStyle: 'short', timeStyle: 'short' }).format(d).replace(' ', 'T');
     const sec = (title: string, key: 'OVERDUE' | 'TODAY' | 'WEEK' | 'LATER' | 'SNOOZED', note?: string) => html`<div class="card" id="${key.toLowerCase()}"><h2>${title} <small class="mute">(${g[key].length})</small></h2>${note ? html`<p class="mute">${note}</p>` : ''}${taskList(g[key], r.app.csrf)}</div>`;
-    return render(r, { title: 'Aufgaben', nav: 'today', body: html`
+    return render(r, { title: 'Aufgaben', nav: 'tasks', body: html`
       <div class="grid">${([['Überfällig', g.OVERDUE.length, '#overdue'], ['Heute', g.TODAY.length, '#today'], ['Diese Woche', g.WEEK.length, '#week'], ['Später', g.LATER.length, '#later']] as const).map(([l, n, h]) => html`<a class="kpi" href="${h}" style="text-decoration:none;color:inherit"><b>${n}</b><span>${l}</span></a>`)}</div>
       ${sec('Überfällig', 'OVERDUE')}${sec('Heute', 'TODAY')}${sec('Diese Woche', 'WEEK')}${sec('Später', 'LATER')}${g.SNOOZED.length ? sec('Zurückgestellt', 'SNOOZED', 'Kommen automatisch zurück, wenn die Zurückstellung endet.') : ''}
       <details class="card"><summary>Aufgabe anlegen</summary>${postForm(r.app.csrf, '/tasks', html`<label>Titel<input name="title" required maxlength="300"></label>

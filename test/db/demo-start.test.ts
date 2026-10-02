@@ -8,6 +8,7 @@ import net from 'node:net';
 import pg from 'pg';
 import { skip, DB_URL } from './helpers.ts';
 import { parseEnv, readState } from '../../scripts/demo/lib.ts';
+const migTotal = readdirSync('supabase/migrations').filter((f) => f.endsWith('.sql')).length;
 
 /**
  * Start-Launcher gegen einen echten PostgreSQL-Server (dem Test-Server): vollständiger Ablauf über `node scripts/demo.ts start|status|stop`.
@@ -43,11 +44,11 @@ test('demo:start/status/stop: neue Datenbank + Demo-Benutzer + Migrationen, Serv
   // zweiter Start: derselbe Prozess, kein zweiter Server
   const b = cli('start', home, db, port); assert.equal(b.code, 0, b.out); assert.match(b.out, /DEMO LÄUFT BEREITS/); assert.equal(readState(home)!.pid, st.pid);
   // Status
-  const s1 = cli('status', home, db, port); assert.equal(s1.code, 0, s1.out); for (const t of ['PostgreSQL:', 'Database:', 'Migrations:', 'OK – 14/14', 'Demo-Benutzer:', 'RUNNING', `${port}`, st.url]) assert.ok(s1.out.includes(t), `${t}\n${s1.out}`);
+  const s1 = cli('status', home, db, port); assert.equal(s1.code, 0, s1.out); for (const t of ['PostgreSQL:', 'Database:', 'Migrations:', `OK – ${migTotal}/${migTotal}`, 'Demo-Benutzer:', 'RUNNING', `${port}`, st.url]) assert.ok(s1.out.includes(t), `${t}\n${s1.out}`);
   assert.match(s1.out, /Brave:\s+nicht gesetzt/);
   // Stop → Status zeigt STOPPED; Neustart: Datenbank/Migrationen/Benutzer vorhanden, nichts wird wiederholt
   const stop = cli('stop', home, db, port); assert.match(stop.out, /Demo-Server beendet/); assert.equal(cli('status', home, db, port).code, 1);
-  const c = cli('start', home, db, port); assert.equal(c.code, 0, c.out); assert.ok(c.out.includes(`„${db}“ vorhanden`) && c.out.includes('alle 14 aktuell') && c.out.includes('✓ vorhanden'), c.out); assert.ok(!c.out.includes('neu angelegt'));
+  const c = cli('start', home, db, port); assert.equal(c.code, 0, c.out); assert.ok(c.out.includes(`„${db}“ vorhanden`) && c.out.includes(`alle ${migTotal} aktuell`) && c.out.includes('✓ vorhanden'), c.out); assert.ok(!c.out.includes('neu angelegt'));
   assert.notEqual(readState(home)!.pid, st.pid); cli('stop', home, db, port);
   // Zugangsdaten werden nie ausgegeben außer dem Demo-Passwort; der Datenbank-Schlüssel steht nicht in der Ausgabe
   assert.ok(!(a.out + c.out).includes(pgEnv.PGPASSWORD || '\u0000'));

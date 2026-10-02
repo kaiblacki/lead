@@ -63,7 +63,7 @@ test('Referral: Vorschlag → Prüfung/Bestätigung mit Rechtsgrundlage → manu
   await app.ctx.partners.cancel(ref3); assert.equal((await app.ctx.partners.referralById(ref3)).status, 'CANCELLED');
   // eingehende Empfehlung
   await app.ctx.partners.recordIncoming(pid, { companyName: 'Bäckerei Schmitt', notes: 'Kennt uns durch Herrn Meier', estimatedValueCents: 79000 }); assert.equal((await app.ctx.partners.stats(pid)).incoming, 1);
-  assert.equal((await app.pool.query('select count(*)::int n from outbox')).rows[0].n, 0, 'nichts gesendet');
+  assert.equal((await app.pool.query('select count(*)::int n from outbox where owner_id = $1', [app.ctx.repo.ownerId])).rows[0].n, 0, 'nichts gesendet');
   assert.match(await page(app, '/referrals'), /Referrals/);
 });
 
@@ -91,5 +91,5 @@ test('Kontaktstrategie: Empfehlung des Systems, Kai entscheidet (setzen/zurücks
   await app.ctx.docs.demoFor(d.id, 'auto'); const q3 = await app.ctx.calls.queue(); assert.ok(q3.items.some((x: any) => x.id === d.id), 'CALL_AND_DEMO mit Demo');
   void inQ; await app.ctx.copilot.setContactStrategy(a.id, null); assert.equal((await lead(a.id)).contact_strategy, null); assert.ok((await app.ctx.calls.queue()).items.some((x: any) => x.id === a.id), 'Empfehlung gilt wieder');
   const calls = await page(app, '/calls'); assert.ok(calls.includes('Hauptstrategie') && calls.includes('Websiteargumente'), 'Telefonansicht zeigt Hauptstrategie und Argumente');
-  assert.equal((await app.pool.query('select count(*)::int n from outbox')).rows[0].n, 0, 'nichts gesendet');
+  assert.equal((await app.pool.query('select count(*)::int n from outbox where owner_id = $1', [app.ctx.repo.ownerId])).rows[0].n, 0, 'nichts gesendet');
 });
