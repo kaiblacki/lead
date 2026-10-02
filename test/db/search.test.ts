@@ -27,7 +27,10 @@ test('Beispielsuche: Völklingen + 30 km + Nagelstudios + Website fehlt oder ver
     assert.ok(r.score !== null && r.digital_need !== null && r.category);
     assert.equal(r.is_mock, true);
   }
-  const scores = rows.map((r) => r.score); assert.deepEqual(scores, [...scores].sort((a, b) => b - a), 'nach Sales Opportunity sortiert');
+  // Standardreihenfolge (Schritt 2): kontaktierbare Leads zuerst, DATA_NEEDED getrennt am Ende; innerhalb nach Priorität/Verkaufschance
+  const firstNeeded = rows.findIndex((r) => r.work_status === 'DATA_NEEDED'); assert.ok(firstNeeded < 0 || rows.slice(firstNeeded).every((r) => r.work_status === 'DATA_NEEDED'), 'DATA_NEEDED steht am Ende');
+  // reine Sortierung nach Sales Opportunity (Option „Nur Verkaufschance“)
+  const byScore = (await ctx.leads.list({ runId: id, matchedOnly: true, limit: 100, sort: 'score' })).rows; const scores = byScore.map((r) => r.score); assert.deepEqual(scores, [...scores].sort((a, b) => b - a), 'nach Sales Opportunity sortiert');
   const ranks = (await ctx.pool.query('select rank from run_results where run_id=$1 and matched order by rank', [id])).rows.map((r) => r.rank);
   assert.deepEqual(ranks, ranks.map((_, i) => i + 1));
   const usage = (await ctx.pool.query('select provider, sum(requests)::int n from provider_usage where run_id=$1 group by 1', [id])).rows;
