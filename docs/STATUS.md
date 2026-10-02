@@ -169,3 +169,15 @@ Aus den vorhandenen Lead-Daten entsteht automatisch eine persönliche Gesprächs
 
 ## Echter Durchlauf ohne Brave-Key (Praxistest)
 Zwei echte SMALL-Läufe über das Dashboard (OSM, ohne Web-Enrichment): Trier 5 km Friseur → 11 von 50 mit Telefonnummer (39 DATA_NEEDED); Saarbrücken 4 km Friseur → 42 von 50 mit Telefonnummer. Die Datenlage in OpenStreetMap schwankt stark nach Region; ohne Web-Enrichment (Brave) bleibt „keine Website gefunden“ nur „in den verfügbaren Quellen“. Nach Freigabe der Telefonakquise rechnet das System alle vorhandenen Verkaufsassistenten neu (`CopilotService.refreshAll`), damit „Heute bearbeiten“/„Heute anrufen“ sofort „Anrufen“ statt „Daten beschaffen“ zeigen.
+
+## Agency Growth OS (Stand dieser Version)
+Aufbauend auf dem bestehenden System, nichts ersetzt. Alles regelbasiert, nichts wird gesendet, bezahlt oder veröffentlicht ohne deine ausdrückliche Bestätigung.
+- **A Partner/Kontaktstrategie** (`/partners`, Migr. 0015): Partnerstatus als eigenständiges Kooperationsmodell, Lead-Weitergabe nur manuell nach Prüfung (Daten, Rechtsgrundlage, Empfänger) und Bestätigung; Textwächter gegen Kopplung an Versicherung (`src/core/compliance.ts`).
+- **B Aufgaben/Follow-up** (`/tasks`, 0016) · **C Demo-Stufen** (0017) · **D Preise/Konfigurator** (`config/packages.json`, INTERNAL_DRAFT_PRICE, Partnerrabatt 50 % nur auf Paketpreis, separat als `partner_discount`, Marktrichtwert nur intern) · **E Angebote** (0018) · **F Auftragspipeline** mit manueller Zahlungsbestätigung und Veröffentlichungsfreigabe (0019).
+- **G Scoring/Analytics** (0020, `config/growth.json`): Dimensionen + Handlungspriorität; Analytics-Ansichten Branchen/Regionen/Strategien/Partner/Kosten.
+- **H Kunden** (`/customers`, 0021): Profil aus bezahltem Auftrag, Wartungsübersicht mit Änderungsbudget, Änderungswünsche (Freigabe nötig), Portal per Token-Link (`/c/<token>`, wird nicht automatisch versendet).
+- **I Community** (`/community`, 0022): Opt-in Pflicht, 29 €/Monat bzw. 290 €/Jahr (Entwurf), aktive Partner kostenlos, Verzeichnis nur als interne Vorschau.
+- **J UX**: Navigationsgruppen, Lead-Reiter (ÜBERSICHT … VERLAUF, `?tab=`), Schnellaktionen (nur Links), „Heute“ nach Handlungspriorität.
+- **K Betrieb**: `npm run ops -- backup | restore-check | migrate:plan | migrate:approve | migrate:apply`, siehe `docs/PRODUKTION.md`.
+- Tests: `npx tsc -p . && npm test && bash test/run-db-tests.sh`; Browser-Abnahme `test/db/e2e-browser.test.ts` (Screenshots mit `SHOTS_DIR=…`).
+- Offen: finale Preise freigeben; Partner-/Angebots-/Vertragstexte rechtlich prüfen; echte Zahlungs-/Domain-Anbindung später; Brave-Echttest separat.
