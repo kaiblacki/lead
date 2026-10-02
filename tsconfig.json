@@ -3,5 +3,5 @@
     "target": "ES2023", "module": "nodenext", "moduleResolution": "nodenext", "strict": true, "noEmit": true,
     "allowImportingTsExtensions": true, "erasableSyntaxOnly": true, "skipLibCheck": true, "types": ["node"]
   },
-  "include": ["src", "test"]
+  "include": ["src", "test", "scripts"]
 }

@@ -13,11 +13,13 @@
     "typecheck": "tsc -p .",
     "test:db": "bash test/run-db-tests.sh",
     "demo": "node src/demo.ts",
-    "demo:start": "bash scripts/demo-start.sh",
+    "demo:start": "node scripts/demo.ts start",
     "demo:db": "bash scripts/setup-local-db.sh",
     "test:all": "npm run typecheck && npm test && npm run test:db",
     "acceptance": "node src/acceptance/run.ts",
-    "enrich:check": "bash scripts/enrich-check.sh"
+    "enrich:check": "bash scripts/enrich-check.sh",
+    "demo:stop": "node scripts/demo.ts stop",
+    "demo:status": "node scripts/demo.ts status"
   },
   "dependencies": {
     "pg": "^8.23.1",

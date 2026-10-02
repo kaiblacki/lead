@@ -1,36 +1,32 @@
-# Demo lokal starten (ein Befehl)
+# Agency Lead OS lokal starten
 
-Im Projektordner: `npm run demo:start` → Browser: **http://127.0.0.1:3055** (Passwort: `mein-demo-passwort-123`, änderbar in `.env.local`).
-Voraussetzung: PostgreSQL (z. B. Postgres.app) installiert und gestartet; das Skript meldet sonst genau, was fehlt.
-
----
-
-# Agency Lead OS – Demo starten
-
-Echte öffentliche Firmendaten (OpenStreetMap). Es wird nichts gesendet, gewählt oder bezahlt. Voraussetzungen: Node ≥ 22.18, lokales PostgreSQL, `psql`.
-
-## Starten
+## Start
 ```
-cd ~/Projekte/lead
-git pull origin claude/supabase-vercel-setup-17lr75
-npm install
-bash scripts/setup-local-db.sh agency_demo          # einmalig (bei Fehler: PGUSER/PGPASSWORD setzen, siehe SETUP.md)
-psql -d agency_demo -c "insert into auth.users(id) values ('00000000-0000-0000-0000-00000000b002') on conflict do nothing"
-APP_MODE=live DATABASE_URL=postgres://postgres:postgres@localhost:5432/agency_demo \
-  OWNER_ID=00000000-0000-0000-0000-00000000b002 DASHBOARD_PASSWORD=mein-demo-passwort-123 PORT=3055 node src/serve.ts
+cd ~/lead
+npm run demo:start
 ```
-`DATABASE_URL` anpassen, falls dein PostgreSQL andere Zugangsdaten hat (Homebrew: `postgres://DEIN_MAC_BENUTZER@localhost:5432/agency_demo`).
-Browser: **http://127.0.0.1:3055** (Benutzername beliebig, Passwort = `DASHBOARD_PASSWORD`).
+Das Skript findet PostgreSQL selbst (Postgres.app, Homebrew oder `psql` im PATH), startet es falls nötig, legt die Datenbank `agency_demo`, die Migrationen und den Demo-Benutzer an, wählt einen freien Port (bevorzugt 3055), startet den Server, prüft per HTTP und öffnet den Browser. Am Ende steht **DEMO BEREIT** und die genaue Adresse im Terminal.
 
-## Ausprobieren
-1. **Suche starten:** auf der Startseite Ort, Radius, Branche(n) und SMALL/MEDIUM/LARGE wählen → „Leads suchen“. (Ist der Ortsname mehrdeutig, z. B. „Neunkirchen“, kommt eine Meldung: Bundesland ergänzen.)
-2. **Lead auswählen:** `Leads` – kontaktierbare Leads stehen oben, „Daten beschaffen“ getrennt; Arbeitsbereiche auf der Startseite.
-3. **Telefonansicht:** im Lead „Was soll ich am Telefon sagen?“ (Einstieg, Argumente, Ziel). Es wird nie automatisch gewählt.
-4. **Telefonakquise freigeben:** `Heute anrufen` → „Einstellungen öffnen“ → Telefonakquise freigeben (bewusst, mit Bestätigung) → die Anrufliste füllt sich.
-5. **Notiz/Status:** im Lead Status setzen, Notiz speichern (bleibt nach Reload).
-6. **Demo-Empfehlung:** Ansicht „Demo empfohlen“ – mit Begründung.
-7. **Demo bestätigen:** „Demo erstellen“ → Bestätigungsseite (Layout, Module; „Funktionen ändern“) → „Ja, Demo erstellen“.
-8. **Demo öffnen:** „Demo ansehen“ (Desktop und Handy; immer „Unverbindliche Demo“).
+## Status
+```
+npm run demo:status
+```
+Zeigt PostgreSQL, Datenbank, Migrationen, Demo-Benutzer, Server, Port und URL.
 
-## Optional: Web-Anreicherung (Brave)
-Ohne Schlüssel zeigt das Dashboard „Web-Anreicherung nicht aktiviert“ – alles andere läuft. Später: im selben Terminal `export BRAVE_SEARCH_API_KEY=…` (nie ins Repository), Server neu starten; Echttest: `npm run enrich:check -- --ensure-run` (siehe CLAUDE.md).
+## Stop
+```
+npm run demo:stop
+```
+Beendet nur den Demo-Server. PostgreSQL bleibt unberührt. Neustart: wieder `npm run demo:start` (Daten bleiben erhalten).
+
+## Browser und Login
+Die URL steht nach dem Start im Terminal (normalerweise http://127.0.0.1:3055). Login: beliebiger Benutzername; das Passwort steht im Terminal und in der Datei `.env.local` (Zeile `DASHBOARD_PASSWORD=`, lokal, nicht im Repository – dort änderbar). Danach: **Neue Suche** auf der Startseite (Ort, Radius, Branche, Größe, „Leads suchen“).
+
+## Optional: Brave (Web-Anreicherung)
+Ohne Schlüssel läuft alles mit OpenStreetMap-Daten. Mit Schlüssel in `.env.local` eine Zeile `BRAVE_SEARCH_API_KEY=…` ergänzen (nie ins Repository) und `npm run demo:stop && npm run demo:start`. Der Schlüssel wird nie angezeigt.
+
+## Wenn etwas nicht klappt
+- **„PostgreSQL ist auf diesem Rechner nicht installiert“:** Postgres.app von https://postgresapp.com installieren, einmal öffnen, „Initialize“ klicken, dann `npm run demo:start`.
+- **„PostgreSQL ist installiert, aber es läuft kein Server“:** Postgres.app öffnen und auf „Start“ klicken (oder `brew services start postgresql@16`).
+- **„keine Anmeldung klappt“:** in `.env.local` eine Zeile `DATABASE_URL=postgres://BENUTZER:PASSWORT@127.0.0.1:5432/agency_demo` ergänzen (Postgres.app: Benutzer = dein Mac-Benutzername, ohne Passwort).
+- **Server startet nicht:** Log in `.demo/server.log`; `npm run demo:status` zeigt, was fehlt.
