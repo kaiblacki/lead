@@ -49,8 +49,8 @@ details>summary{cursor:pointer;min-height:44px;display:flex;align-items:center;f
 @media(min-width:720px){.resgrid{grid-template-columns:repeat(4,1fr)}main{padding-top:20px}}
 `;
 
-export type NavKey = 'home' | 'today' | 'enrichment' | 'search' | 'leads' | 'calls' | 'pipeline' | 'orders' | 'maintenance' | 'customers' | 'analytics' | 'partners' | 'settings' | '';
-const NAV: [NavKey, string, string][] = [['home', '/', 'Start'], ['today', '/today', 'Heute'], ['enrichment', '/enrichment', 'Daten'], ['search', '/search', 'Suche'], ['leads', '/leads', 'Leads'], ['calls', '/calls', 'Calls'], ['pipeline', '/pipeline', 'Pipeline'], ['orders', '/orders', 'Aufträge'], ['customers', '/customers', 'Kunden'], ['maintenance', '/maintenance', 'Wartung'], ['partners', '/partners', 'Partner'], ['analytics', '/analytics', 'Analytics'], ['settings', '/settings', 'Einstellungen']];
+export type NavKey = 'home' | 'today' | 'enrichment' | 'search' | 'leads' | 'calls' | 'pipeline' | 'orders' | 'maintenance' | 'customers' | 'community' | 'analytics' | 'partners' | 'settings' | '';
+const NAV: [NavKey, string, string][] = [['home', '/', 'Start'], ['today', '/today', 'Heute'], ['enrichment', '/enrichment', 'Daten'], ['search', '/search', 'Suche'], ['leads', '/leads', 'Leads'], ['calls', '/calls', 'Calls'], ['pipeline', '/pipeline', 'Pipeline'], ['orders', '/orders', 'Aufträge'], ['customers', '/customers', 'Kunden'], ['maintenance', '/maintenance', 'Wartung'], ['community', '/community', 'Community'], ['partners', '/partners', 'Partner'], ['analytics', '/analytics', 'Analytics'], ['settings', '/settings', 'Einstellungen']];
 
 export type Flash = { kind: 'ok' | 'err'; text: string } | null;
 
