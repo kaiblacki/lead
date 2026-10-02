@@ -1,3 +1,10 @@
+# Demo lokal starten (ein Befehl)
+
+Im Projektordner: `npm run demo:start` → Browser: **http://127.0.0.1:3055** (Passwort: `mein-demo-passwort-123`, änderbar in `.env.local`).
+Voraussetzung: PostgreSQL (z. B. Postgres.app) installiert und gestartet; das Skript meldet sonst genau, was fehlt.
+
+---
+
 # Agency Lead OS – Demo starten
 
 Echte öffentliche Firmendaten (OpenStreetMap). Es wird nichts gesendet, gewählt oder bezahlt. Voraussetzungen: Node ≥ 22.18, lokales PostgreSQL, `psql`.
