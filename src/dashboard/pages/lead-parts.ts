@@ -13,7 +13,7 @@ import { STATUS_ICON, type CheckCategory } from '../../audit/types.ts';
 
 const CAT_LABEL: Record<string, string> = { technical: 'Technik', mobile: 'Mobil & responsiv', design: 'Design & Struktur', content: 'Inhalt', conversion: 'Kontakt & Conversion', seo: 'SEO-Grundlagen', social: 'Social Links', trust: 'Vertrauen & Rechtliches' };
 const QUALITY_TEXT: Record<string, string> = { high: 'hoch', medium: 'mittel', low: 'niedrig' };
-const WEB_STATE: Record<string, string> = { none: 'Website fehlt', exists: 'Website vorhanden', needs_improvement: 'Website verbesserungswürdig', fine: 'Website in Ordnung', unknown: 'Website nicht prüfbar' };
+const WEB_STATE: Record<string, string> = { none: 'Keine Website gefunden', exists: 'Website vorhanden', needs_improvement: 'Website verbesserungswürdig', fine: 'Website in Ordnung', unknown: 'Website nicht prüfbar' };
 const CHANNEL_TEXT: Record<string, string> = { PHONE: 'Telefon', EMAIL: 'E-Mail', WHATSAPP: 'WhatsApp', MANUAL: 'Manuell', DO_NOT_CONTACT: 'Nicht kontaktieren' };
 
 /** Einklappbarer Abschnitt – hält die Detailseite auf dem Smartphone übersichtlich. */
@@ -21,12 +21,20 @@ const fold = (title: string, body: Safe, open = false, id?: string) => html`<det
 
 export const webStateText = (s: string | null | undefined) => WEB_STATE[s ?? ''] ?? '–';
 
+/** Kurze, belegbare Zusammenfassung – „keine Website gefunden“ heißt: in den verfügbaren Daten nicht hinterlegt. */
+export function whyText(d: any): string {
+  const l = d.lead, o = d.opportunity, q = d.audit?.overall_quality; const hasMail = l.email || (d.factsT ?? d.facts ?? []).some((f: any) => f.key === 'email');
+  const parts = [l.website_url ? `Website vorhanden${l.website_state !== 'none' && q !== undefined && q !== null ? ` (Score ${q}/100)` : ''}` : 'Keine Website in den verfügbaren Daten gefunden',
+    l.phone ? 'Telefonnummer vorhanden' : hasMail ? 'E-Mail vorhanden' : 'noch keine Kontaktdaten (Daten beschaffen)', l.sub_industry || l.industry ? `Branche: ${l.sub_industry ?? l.industry}` : '', o?.score !== undefined && o?.score !== null ? `Verkaufschance ${o.score}/100` : '', l.effective_priority ? `Priorität ${l.effective_priority}` : ''].filter(Boolean);
+  return parts.join('. ') + '.';
+}
 export function header(d: any, csrf: string): Safe {
   const l = d.lead, o = d.opportunity;
   return html`<div class="card">
     <div class="row"><h2 class="grow" style="margin:0">${l.company_name}</h2>${l.is_mock ? mockBadge : ''}</div>
     <p>${l.address && l.postal_code && String(l.address).includes(l.postal_code) ? l.address : [l.address, [l.postal_code, l.city].filter(Boolean).join(' ')].filter(Boolean).join(', ')} ${l.distance_km ? html`<small>· ${Number(l.distance_km).toFixed(1).replace('.', ',')} km</small>` : ''}</p>
     <div class="row">${categoryBadge(o?.category)}${statusBadge(l.status)}${readinessBadge(l.contact_readiness)}<span class="badge">${webStateText(l.website_state)}</span>${l.paused ? html`<span class="badge b-warn">pausiert</span>` : ''}</div>
+    <div class="note"><b>Warum ist dieser Lead interessant?</b><br>${whyText(d)}</div>
     <div class="grid" style="margin-top:10px"><div class="kpi"><b>${o?.score ?? '–'}</b><span>Sales Opportunity</span></div><div class="kpi"><b>${o?.digital_need ?? '–'}</b><span>Digital Need</span></div>
       <div class="kpi"><b>${l.effective_priority ?? d.sales?.brief?.priority ?? '–'}</b><span>Priorität</span></div><div class="kpi"><b>${l.call_count}</b><span>Anrufe</span></div></div>
     ${(() => { const en = enrichment(l); const dq = o?.dimensions?.dataQuality?.value; return html`<dl class="facts"><dt>Telefon</dt><dd>${l.phone ? html`<a class="tel" href="tel:${String(l.phone).replace(/[^\d+]/g, '')}">${l.phone}</a>` : NA}</dd>

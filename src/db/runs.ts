@@ -38,6 +38,6 @@ export class RunStore {
     const r = await this.pool.query("update lead_runs set status='STOPPED', phase='partial', error='Durch Neustart unterbrochen', finished_at=now() where owner_id=$1 and status='RUNNING' returning id", [this.owner]);
     return r.rowCount ?? 0;
   }
-  async list(limit = 20) { return (await this.pool.query('select id, created_at, started_at, finished_at, status, phase, size, requested_count, found_count, raw_count, sources, costs, errors, description, counters, summary, error from lead_runs where owner_id=$1 order by created_at desc limit $2', [this.owner, limit])).rows; }
+  async list(limit = 20) { return (await this.pool.query('select id, region, search_term, industry, created_at, started_at, finished_at, status, phase, size, requested_count, found_count, raw_count, sources, costs, errors, description, counters, summary, error from lead_runs where owner_id=$1 order by created_at desc limit $2', [this.owner, limit])).rows; }
   async get(id: string) { return (await this.pool.query('select * from lead_runs where id=$1 and owner_id=$2', [id, this.owner])).rows[0] ?? null; }
 }

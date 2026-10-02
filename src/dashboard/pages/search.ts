@@ -1,7 +1,7 @@
 import type { Route } from '../types.ts';
 import { UserError } from '../types.ts';
 import { html, raw, categoryBadge, fmt, prioBadge, readinessBadge, mockBadge, postBtn, postForm } from '../ui.ts';
-import { render, redirect, okFlash, uuid } from './_page.ts';
+import { render, redirect, okFlash, uuid, webNotice } from './_page.ts';
 import { EXAMPLE_SEARCHES } from '../../search/examples.ts';
 import { CriteriaError, EMPLOYEE_BUCKETS, READINESS, SORTS, WEBSITE_FILTERS, WEBSITE_LABEL, criteriaFromForm, normalizeCriteria, parseQuickSearch } from '../../search/criteria.ts';
 import { leadsFromCsv } from '../../connectors/csv.ts';
@@ -27,6 +27,7 @@ export const routes: Route[] = [
     const cb = (name: string, label: string, on: boolean) => html`<label class="inline"><input type="checkbox" name="${name}" value="1" ${on ? raw('checked') : ''}> ${label}</label>`;
     const formMode = q.has('location');
     return render(r, { title: 'Lead-Suche', nav: 'search', body: html`
+      ${webNotice(r)}
       <div class="card"><h2>Schnellsuche</h2>
         ${postForm(r.app.csrf, '/search/quick', html`<label>Suchsatz, Teile mit „+“ trennen<input name="q" value="${v('qs')}" placeholder="Völklingen + 30 km + Nagelstudios + Website fehlt oder verbesserungswürdig" maxlength="300" required></label>
         ${sizePicker(ctx.cfg.pipeline.sizes, 'SMALL')}
@@ -96,6 +97,7 @@ export const routes: Route[] = [
       <div class="card"><div class="row"><span class="badge ${run.status === 'DONE' ? 'b-ok' : run.status === 'RUNNING' ? 'b-info' : 'b-bad'}">${run.status === 'RUNNING' ? (PHASE_LABEL[run.phase] ?? 'läuft …') : (PHASE_LABEL[run.phase] ?? run.status)}</span><b class="grow">${run.description}</b></div>
         <p class="mute">${fmt(run.created_at)}${run.finished_at ? ` – ${fmt(run.finished_at)}` : ''}</p>
         <div class="grid"><div class="kpi"><b>${c.found ?? 0}</b><span>Kandidaten gefunden</span></div><div class="kpi"><b>${c.prefiltered ?? 0}</b><span>vorab aussortiert</span></div><div class="kpi"><b>${c.analyzed ?? 0}</b><span>analysiert</span></div><div class="kpi"><b>${c.matched ?? 0}</b><span>Treffer</span></div></div>
+        ${(() => { const L = matched.rows as any[]; const n = (f: (l: any) => boolean) => L.filter(f).length; return html`<div class="note"><b>${c.analyzed ?? 0} Leads analysiert</b><ul><li>A-Leads: ${n((l) => l.priority === 'A')} · B-Leads: ${n((l) => l.priority === 'B')}</li><li>Telefonnummer vorhanden: ${n((l) => l.phone)} · E-Mail vorhanden: ${n((l) => l.has_email)}</li><li>Keine Website gefunden: ${n((l) => !l.website_url)} · Demo empfohlen: ${n((l) => l.demo_recommendation === 'DEMO_RECOMMENDED')} · Daten beschaffen: ${n((l) => l.work_status === 'DATA_NEEDED')}</li></ul>${ctx.enrichment.available ? '' : html`<small>Web-Anreicherung ist nicht aktiviert: „Keine Website gefunden“ bedeutet nur, dass in den aktuell verfügbaren Daten (OpenStreetMap) keine hinterlegt ist – nicht, dass der Betrieb keine besitzt.</small>`}</div>`; })()}
         <details open><summary>Lauf-Protokoll</summary><dl class="facts">
           <dt>Suche-ID</dt><dd><code>${run.id}</code></dd><dt>Status</dt><dd><b>${PHASE_LABEL[run.phase] ?? run.status}</b></dd>
           <dt>Branche / Suchbegriff</dt><dd>${run.search_term ?? run.industry ?? '–'}</dd><dt>Ort · Radius</dt><dd>${run.region} · ${run.radius_km ?? '–'} km</dd>
@@ -108,7 +110,7 @@ export const routes: Route[] = [
           <dt>Web-Enrichment</dt><dd>${s.pipeline?.enrichment?.attempted !== undefined ? `${s.pipeline.enrichment.attempted} Leads abgefragt · ${s.pipeline.enrichment.requests ?? 0} Anfragen${s.pipeline.enrichment.counts ? ' · ' + Object.entries(s.pipeline.enrichment.counts).map(([k, v]) => `${k}: ${v}`).join(', ') : ''}` : '–'}</dd>
           <dt>Fehler</dt><dd>${(run.errors ?? []).length ? html`<ul>${(run.errors as string[]).map((e) => html`<li>${e}</li>`)}</ul>` : 'keine'}</dd></dl></details>
         ${run.error ? html`<div class="errbox">${run.error}</div>` : ''}${s.stoppedReason ? html`<div class="warnbox">Lauf gestoppt: ${s.stoppedReason}. Bereits analysierte Leads sind gespeichert.</div>` : ''}
-        ${(s.warnings ?? []).map((w: string) => html`<div class="warnbox">${w}</div>`)}${c.errors ? html`<div class="errbox">${c.errors} Fehler: ${(s.errorSamples ?? []).join(' | ')}</div>` : ''}
+        ${(s.warnings ?? []).filter((w: string) => !/^Web-Enrichment (übersprungen|vorzeitig)/.test(w)).map((w: string) => html`<div class="warnbox">${w}</div>`)}${(s.warnings ?? []).some((w: string) => /^Web-Enrichment (übersprungen|vorzeitig)/.test(w)) ? webNotice(r) : ''}${c.errors ? html`<div class="errbox">${c.errors} Fehler: ${(s.errorSamples ?? []).join(' | ')}</div>` : ''}
         ${Object.keys(s.skipped ?? {}).length ? html`<details><summary>Vorab aussortiert (${c.prefiltered})</summary><ul>${Object.entries(s.skipped).map(([k, n]) => html`<li>${k}: ${n as number}</li>`)}</ul></details>` : ''}</div>
       <div class="card"><h2>Qualifizierte Leadliste (${matched.total}) – nach Sales Opportunity sortiert</h2>
         ${matched.rows.length ? html`<ul class="items">${matched.rows.map((l, i) => html`<li><div class="row"><b>${i + 1}.</b>${prioBadge(l.priority)}<a class="grow" href="/leads/${l.id}"><b>${l.company_name}</b> ${l.is_mock ? mockBadge : ''}<br><small>${l.city ?? ''} · ${l.distance_km ? `${Number(l.distance_km).toFixed(1).replace('.', ',')} km · ` : ''}Website: ${({ none: 'fehlt', needs_improvement: 'verbesserungswürdig', fine: 'in Ordnung', unknown: 'nicht prüfbar', exists: 'vorhanden' } as Record<string, string>)[l.website_state] ?? '–'}</small></a>

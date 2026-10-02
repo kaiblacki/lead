@@ -81,14 +81,23 @@ export class OsmPlacesProvider implements PlacesProvider {
 
   async geocode(query: string): Promise<GeocodeResult | null> {
     const base = this.o.nominatimUrl && !this.isPublic ? this.o.nominatimUrl.replace(/\/$/, '') : 'https://nominatim.openstreetmap.org';
-    const url = `${base}/search?q=${encodeURIComponent(query)}&format=jsonv2&limit=1&countrycodes=de&accept-language=de`;
-    let d = this.cacheGet<{ lat: string; lon: string; display_name: string }[]>(url);
+    const url = `${base}/search?q=${encodeURIComponent(query)}&format=jsonv2&limit=5&addressdetails=1&countrycodes=de&accept-language=de`;
+    type Hit = { lat: string; lon: string; display_name: string; importance?: number; name?: string; address?: { state?: string } };
+    let d = this.cacheGet<Hit[]>(url);
     if (!d) {
       const res = await this.call(url, { headers: { 'user-agent': this.ua, ...this.authHeaders() } }, 'Nominatim');
       if (!res.ok) throw new Error(`Nominatim ${res.status}`);
-      d = (await res.json()) as { lat: string; lon: string; display_name: string }[]; this.cachePut(url, d);
+      d = (await res.json()) as Hit[]; this.cachePut(url, d);
     }
-    return d[0] ? { query, name: d[0].display_name, point: { lat: Number(d[0].lat), lng: Number(d[0].lon) }, source: this.name } : null;
+    const top = d[0]; if (!top) return null;
+    // Mehrdeutiger Ortsname („Neunkirchen“, „Neustadt“): gleicher Name in anderem Bundesland mit vergleichbarer Bedeutung → nicht stillschweigend irgendeinen Ort nehmen
+    const nameOf = (h: Hit) => (h.name ?? h.display_name.split(',')[0]).trim().toLowerCase();
+    const rival = d.slice(1).filter((h) => nameOf(h) === nameOf(top) && h.address?.state && top.address?.state && h.address.state !== top.address.state && (h.importance ?? 0) >= 0.5 * (top.importance ?? 0));
+    if (rival.length) {
+      const states = [...new Set([top, ...rival].map((h) => h.address!.state!))];
+      throw new Error(`Der Ort „${query}“ ist mehrdeutig (${states.join(', ')}). Bitte das Bundesland ergänzen, z. B. „${query}, ${states[0]}“.`);
+    }
+    return { query, name: top.display_name, point: { lat: Number(top.lat), lng: Number(top.lon) }, source: this.name };
   }
 
   private map(e: El): PlaceCandidate | null {

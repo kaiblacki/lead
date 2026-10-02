@@ -220,3 +220,23 @@ test('Anschrift auf Websites: Straße + Hausnummer vor „PLZ Ort“; Telefonnum
   ];
   for (const [text, want] of cases) { const r = findAddressIn(text); assert.equal(r ? [r.street, r.postalCode, r.city].join('|') : null, want, text); }
 });
+
+test('Branchenzuordnung: „Heike Kiefer Hairprofessionals“ ist kein Zahnarzt (Namensanfang „Kiefer“ ≠ Kieferorthopädie); OSM-Kategorie hairdresser → Friseur', () => {
+  const t = loadConfig().taxonomy;
+  assert.equal(t.match('Heike Kiefer Hairprofessionals hairdresser')?.key, 'friseur'); assert.equal(t.match('Heike Kiefer')?.key, undefined);
+  assert.equal(t.match('Zahnarzt Dr. Weber')?.key, 'zahnarzt'); assert.equal(t.match('Nagelstudios')?.key, 'nagelstudio'); assert.equal(t.match('Friseure')?.key, 'friseur');
+});
+
+test('Mehrdeutiger Ortsname („Neunkirchen“): nicht stillschweigend irgendein Ort – verständliche Meldung mit Bundesland-Hinweis; eindeutige Orte funktionieren', async () => {
+  const orig = globalThis.fetch; let body: unknown[] = [];
+  globalThis.fetch = (async () => new Response(JSON.stringify(body), { status: 200 })) as typeof fetch;
+  try {
+    const p = new OsmPlacesProvider('a@b.example', undefined, { mode: 'PUBLIC_DEMO' });
+    body = [{ lat: '49.35', lon: '7.18', display_name: 'Neunkirchen, Saarland, Deutschland', name: 'Neunkirchen', importance: 0.55, address: { state: 'Saarland' } }, { lat: '50.9', lon: '10.9', display_name: 'Neunkirchen, Thüringen, Deutschland', name: 'Neunkirchen', importance: 0.45, address: { state: 'Thüringen' } }];
+    await assert.rejects(p.geocode('Neunkirchen'), /„Neunkirchen“ ist mehrdeutig \(Saarland, Thüringen\).*Bundesland ergänzen/);
+    body = [{ lat: '49.35', lon: '7.18', display_name: 'Neunkirchen, Saarland, Deutschland', name: 'Neunkirchen', importance: 0.55, address: { state: 'Saarland' } }, { lat: '50.9', lon: '10.9', display_name: 'Neunkirchen, Thüringen', name: 'Neunkirchen', importance: 0.1, address: { state: 'Thüringen' } }];
+    assert.equal((await new OsmPlacesProvider('a@b.example', undefined, { mode: 'PUBLIC_DEMO' }).geocode('Neunkirchen Saar'))!.point.lat, 49.35);   // klar bedeutendster Treffer
+    body = [{ lat: '49.2', lon: '6.9', display_name: 'Völklingen, Saarland', name: 'Völklingen', importance: 0.6, address: { state: 'Saarland' } }];
+    assert.equal((await new OsmPlacesProvider('a@b.example', undefined, { mode: 'PUBLIC_DEMO' }).geocode('Völklingen'))!.point.lng, 6.9);
+  } finally { globalThis.fetch = orig; }
+});

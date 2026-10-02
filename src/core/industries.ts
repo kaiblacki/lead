@@ -25,7 +25,7 @@ export class Taxonomy {
       for (const k of [s.key, s.label, ...s.keywords]) {
         const nk = norm(k);
         if (!nk) continue;
-        const hit = words.some((w) => w === nk || (nk.length >= 5 && w.startsWith(nk)) || (w.length >= 5 && nk.startsWith(w)));
+        const hit = words.some((w) => w === nk || (nk.length >= 5 && w.startsWith(nk)) || (w.length >= 5 && nk.startsWith(w) && nk.length - w.length <= 2));
         if (hit && (!best || nk.length > best.len)) best = { s, len: nk.length };
       }
     }

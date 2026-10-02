@@ -12,7 +12,8 @@
             "friseursalon",
             "haarstudio",
             "haarsalon",
-            "hairstyling"
+            "hairstyling",
+            "hairdresser"
           ],
           "template": "friseur",
           "booking": true,

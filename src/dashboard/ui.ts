@@ -11,6 +11,7 @@ export const fmtDate = (d: unknown) => (d ? new Date(d as string).toLocaleDateSt
 export const pct = (n: number | null | undefined) => (n === null || n === undefined ? '–' : `${String(n).replace('.', ',')} %`);
 
 export const CSS = `
+.tbl{width:100%;border-collapse:collapse}.tbl th,.tbl td{text-align:left;padding:6px 8px;border-bottom:1px solid #ddd;font-size:14px}
 :root{--bg:#f4f5f7;--card:#fff;--ink:#14181f;--mute:#5b6472;--line:#e3e6eb;--brand:#0b5cad;--ok:#1e7f3a;--warn:#b25e09;--bad:#c92a2a;--hot:#d6336c}
 *{box-sizing:border-box}html{-webkit-text-size-adjust:100%}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 main{max-width:1000px;margin:0 auto;padding:12px 12px 90px;overflow-wrap:anywhere}h1{font-size:24px;margin:8px 0 12px}h2{font-size:19px;margin:0 0 8px}h3{font-size:16px;margin:12px 0 4px}p{margin:6px 0}
@@ -59,7 +60,7 @@ export function layout(o: { title: string; nav: NavKey; body: Safe; csrf: string
 <nav aria-label="Hauptnavigation">${NAV.map(([k, href, label]) => html`<a href="${href}" class="${o.nav === k ? 'on' : ''}">${label}</a>`)}</nav>
 <form method="post" action="/killswitch"><input type="hidden" name="csrf" value="${o.csrf}"><input type="hidden" name="on" value="${o.killSwitch ? '0' : '1'}"><button class="${o.killSwitch ? 'ok' : 'danger'}" title="${o.killSwitch ? 'Automatisierung wieder erlauben' : 'Alle automatischen Läufe stoppen'}">${o.killSwitch ? 'Fortsetzen' : 'STOP'}</button></form></div>
 ${o.killSwitch ? html`<div class="banner kill">KILL SWITCH AKTIV – keine Suchläufe, Analysen oder Wartungsprüfungen</div>` : ''}
-${o.mock ? (o.liveData ? html`<div class="banner mock">ECHTE FIRMENDATEN – KI, Zahlung, E-Mail und WhatsApp sind Mock: es wird nichts gesendet oder bezahlt</div>` : html`<div class="banner mock">MOCK-MODUS – Testdaten, keine echten Unternehmen, Zahlungen oder Nachrichten</div>`) : ''}</header>
+${o.mock ? (o.liveData ? html`<div class="banner mock"><b>DEMO-MODUS</b> · ECHTE FIRMENDATEN (öffentlich, OpenStreetMap) – Web-Enrichment, KI, Zahlung, E-Mail und WhatsApp können deaktiviert bzw. Mock sein: es wird nichts gesendet oder bezahlt</div>` : html`<div class="banner mock"><b>DEMO-MODUS</b> · MOCK-MODUS – Testdaten, keine echten Unternehmen, Zahlungen oder Nachrichten</div>`) : ''}</header>
 <main>${o.flash ? html`<div class="flash ${o.flash.kind}" role="status">${o.flash.text}</div>` : ''}<h1>${o.title}</h1>${o.body}</main>${o.attribution ? html`<footer class="attrib">${o.attribution} · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">openstreetmap.org/copyright</a></footer>` : ''}</body></html>`;
 }
 

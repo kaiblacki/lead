@@ -14,7 +14,7 @@ export const routes: Route[] = [{
     const pct = Math.min(100, Math.round((q.done / q.target) * 100));
     return render(r, { title: 'Heute anrufen', nav: 'calls', body: html`
       <div class="card"><div class="row"><b class="grow">${q.done} von ${q.target} Leads bearbeitet</b><small>${q.calls} Anrufe · ${q.open} offen</small></div><div class="bar" role="img" aria-label="${pct} Prozent"><i style="width:${pct}%"></i></div></div>
-      ${!q.phoneEnabled ? html`<div class="warnbox"><b>Telefonakquise nicht freigegeben.</b> Ohne Freigabe erscheinen keine Leads in dieser Liste. <a class="btn" href="/settings#telefon">Einstellungen öffnen</a></div>` : ''}
+      ${!q.phoneEnabled ? html`<div class="warnbox"><b>Telefon-Leads vorhanden, Telefonakquise aber noch nicht aktiviert.</b> Ohne bewusste Freigabe erscheinen keine Leads in dieser Liste (es wird nie automatisch gewählt). <a class="btn" href="/settings#telefon">Einstellungen öffnen</a></div>` : ''}
       <div class="note">${LEGAL.phone}</div>
       ${q.items.length ? q.items.map((it, i) => {
         const b = it.brief; const [kc, kl] = KIND[it.kind];

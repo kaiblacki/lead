@@ -21,7 +21,7 @@ test('Ohne Freigabe der Telefonakquise bleibt die Anrufliste leer und erklärt w
   const ready = await leadsWhere(app, "contact_readiness = 'READY_FOR_MANUAL_CALL'");
   assert.equal(ready.length, 0, 'ohne Freigabe nie bereit für Anruf');
   const page = app.text(await (await app.get('/calls')).text());
-  assert.match(page, /Telefonakquise nicht freigegeben/);
+  assert.match(page, /Telefon-Leads vorhanden, Telefonakquise aber noch nicht aktiviert/);
   assert.match(page, /0 von \d+ Leads bearbeitet/);
   // Freigabe ohne Bestätigung wird abgelehnt
   const bad = await flash(app, await app.post('/settings/phone', { enable: '1', dailyCallTarget: '30' }));
