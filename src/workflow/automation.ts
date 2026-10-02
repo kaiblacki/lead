@@ -3,18 +3,21 @@ import type { SalesDocs } from '../sales/docs.ts';
 import type { AppConfig } from '../core/config.ts';
 import type { AnalysisService } from '../analysis/service.ts';
 import type { PipelineStore } from '../db/pipeline.ts';
+import type { CopilotService } from '../sales/copilot-service.ts';
 import { familyFor, recommendModules } from '../site/modules.ts';
 
 
 /** Was nach einer Analyse bzw. nach einem Suchlauf automatisch passiert. Mit Website: nie automatisch eine Demo. Nichts wird gesendet. */
 export class Automation {
-  repo: Repo; docs: SalesDocs; cfg: AppConfig; analysis: AnalysisService; pipeline: PipelineStore;
-  constructor(d: { repo: Repo; docs: SalesDocs; cfg: AppConfig; analysis: AnalysisService; pipeline: PipelineStore }) { this.repo = d.repo; this.docs = d.docs; this.cfg = d.cfg; this.analysis = d.analysis; this.pipeline = d.pipeline; }
+  repo: Repo; docs: SalesDocs; cfg: AppConfig; analysis: AnalysisService; pipeline: PipelineStore; copilot?: CopilotService;
+  constructor(d: { repo: Repo; docs: SalesDocs; cfg: AppConfig; analysis: AnalysisService; pipeline: PipelineStore; copilot?: CopilotService }) { this.repo = d.repo; this.docs = d.docs; this.cfg = d.cfg; this.analysis = d.analysis; this.pipeline = d.pipeline; this.copilot = d.copilot; }
 
   /** Pro Lead: strukturierte Analyse (MASS, kostenlos) speichern und Layout-Familie samt empfohlenen Modulen festlegen (nur wenn Kai noch nichts gewählt hat). */
   async afterAnalysis(leadId: string, _info: { matched: boolean; noWebsite: boolean; opportunity: number | null; blocked: boolean }) {
     await this.analysis.saveBase(leadId);
     await this.recommend(leadId);
+    // Verkaufsassistent (regelbasiert, kostenlos) für interessante Leads: A/B, hohe Verkaufschance oder empfohlene Demo
+    await this.copilot?.ensure(leadId, { onlyIfEligible: true });
   }
 
   async recommend(leadId: string) {

@@ -4,6 +4,7 @@ import { html, raw, categoryBadge, mockBadge, prioBadge, readinessBadge, statusB
 import { render, redirect, okFlash, uuid } from './_page.ts';
 import { enrichment, orNA, NA, sourceLabel } from '../../core/enrichment.ts';
 import * as P from './lead-parts.ts';
+import { copilotCard, potentialBadges } from './copilot.ts';
 import { STATUSES, type Status } from '../../core/status.ts';
 import { CALL_RESULTS, type CallResult } from '../../calls/service.ts';
 import { reanalyzeLead } from '../../search/reanalyze.ts';
@@ -25,7 +26,7 @@ export const routes: Route[] = [
     const nextQs = (o: number) => { const u = new URLSearchParams(q); u.set('offset', String(o)); return u.toString(); };
     return render(r, { title: 'Leads', nav: 'leads', body: html`
       <div class="row chips" style="margin:6px 0">${(['A', 'B', 'C', 'D'] as const).map((pr) => html`<a class="btn ${q.get('priority') === pr ? 'primary' : ''}" href="/leads?priority=${pr}" title="Priorität ${pr}">${prioBadge(pr)}</a>`)}
-        ${([['', 'Alle'], ['now_work', 'Jetzt bearbeiten'], ['no_website', 'Keine Website'], ['has_website', 'Website vorhanden'], ['worst_websites', 'Schlechteste Websites'], ['top', 'Höchste Verkaufschance'], ['demo_ready', 'Demo fertig'], ['demo_recommended', 'Demo empfohlen'], ['demo_open', 'Demo offen'], ['data_needed', 'Daten beschaffen'], ['ready_contact', 'Bereit zum Kontakt'], ['not_contacted', 'Noch nicht kontaktiert'], ['call_today', 'Heute anrufen'], ['manual_check', 'Manuell prüfen'], ['has_email', 'E-Mail vorhanden'], ['has_phone', 'Telefon vorhanden'], ['called', 'Angerufen'], ['interested', 'Interessiert'], ['later', 'Später'], ['no_interest', 'Kein Interesse']] as [string, string][]).map(([k, label]) => html`<a class="btn ${(q.get('quick') ?? '') === k && !q.get('tier') && !q.get('priority') && (k !== 'top' || q.get('sort') === 'score') && (k === 'top' || q.get('sort') !== 'score') ? 'primary' : ''}" href="/leads?${k && k !== 'top' ? `quick=${k}` : k === 'top' ? 'sort=score' : ''}">${label}</a>`)}
+        ${([['', 'Alle'], ['now_work', 'Jetzt bearbeiten'], ['no_website', 'Keine Website'], ['has_website', 'Website vorhanden'], ['worst_websites', 'Schlechteste Websites'], ['top', 'Höchste Verkaufschance'], ['demo_ready', 'Demo fertig'], ['website_high', 'Website-Potenzial hoch'], ['needs_interesting', 'Bedarfsanalyse interessant'], ['partner_high', 'Partnerpotenzial hoch'], ['demo_exists', 'Demo vorhanden'], ['call_today', 'Anrufen'], ['callback', 'Rückruf'], ['demo_recommended', 'Demo empfohlen'], ['demo_open', 'Demo offen'], ['data_needed', 'Daten beschaffen'], ['ready_contact', 'Bereit zum Kontakt'], ['not_contacted', 'Noch nicht kontaktiert'], ['call_today', 'Heute anrufen'], ['manual_check', 'Manuell prüfen'], ['has_email', 'E-Mail vorhanden'], ['has_phone', 'Telefon vorhanden'], ['called', 'Angerufen'], ['interested', 'Interessiert'], ['later', 'Später'], ['no_interest', 'Kein Interesse']] as [string, string][]).map(([k, label]) => html`<a class="btn ${(q.get('quick') ?? '') === k && !q.get('tier') && !q.get('priority') && (k !== 'top' || q.get('sort') === 'score') && (k === 'top' || q.get('sort') !== 'score') ? 'primary' : ''}" href="/leads?${k && k !== 'top' ? `quick=${k}` : k === 'top' ? 'sort=score' : ''}">${label}</a>`)}
         ${(['MASS', 'DEEP', 'PREMIUM'] as const).map((t) => html`<a class="btn ${q.get('tier') === t ? 'primary' : ''}" href="/leads?tier=${t}">${t}</a>`)}</div>
       <form class="card" method="get" action="/leads"><div class="row"><label class="grow">Suche<input name="q" value="${q.get('q') ?? ''}" placeholder="Name, Ort, Branche"></label></div>
         <div class="row">${sel('Status', [['', 'alle'], ...STATUSES.map((s) => [s, s] as [string, string])])}${sel('Kategorie', [['', 'alle'], ['HOT', 'HOT'], ['HIGH POTENTIAL', 'HIGH POTENTIAL'], ['MEDIUM', 'MEDIUM'], ['LOW', 'LOW'], ['IGNORE', 'IGNORE'], ['UNRATED', 'nicht bewertet']])}
@@ -44,7 +45,7 @@ export const routes: Route[] = [
           <dt>Demo</dt><dd>${l.has_demo ? html`<span class="badge b-ok">vorhanden</span>` : l.demo_decision === 'skipped' ? 'übersprungen' : l.demo_decision === 'recommended' ? html`<span class="badge b-info">Demo empfohlen</span>` : 'keine'}</dd><dt>KI-Stufe</dt><dd><span class="badge b-info">${l.ai_tier}</span></dd>
           <dt>Quelle</dt><dd>${sourceLabel(l.source)} · Datenqualität ${l.dq !== null && l.dq !== undefined ? `${Math.round(l.dq)}/100` : NA}</dd>
           <dt>Nächste Aktion</dt><dd><b>${P.nextActionText(l)}</b></dd></dl>
-        <div class="row" style="margin-top:4px">${statusBadge(l.status)}${readinessBadge(l.contact_readiness)}${l.paused ? html`<span class="badge b-warn">pausiert</span>` : ''}${l.review_flag ? html`<span class="badge b-warn">mögliche Dublette</span>` : ''}${en.needed ? html`<span class="badge b-warn" title="${en.missing.join(', ')}">${en.label}</span>` : ''}${l.demo_ready_call ? html`<span class="badge b-ok">Demo fertig – anrufen</span>` : ''}</div>
+        ${potentialBadges(l)}<div class="row" style="margin-top:4px">${statusBadge(l.status)}${readinessBadge(l.contact_readiness)}${l.paused ? html`<span class="badge b-warn">pausiert</span>` : ''}${l.review_flag ? html`<span class="badge b-warn">mögliche Dublette</span>` : ''}${en.needed ? html`<span class="badge b-warn" title="${en.missing.join(', ')}">${en.label}</span>` : ''}${l.demo_ready_call ? html`<span class="badge b-ok">Demo fertig – anrufen</span>` : ''}</div>
         ${en.needed ? html`<small class="mute">Fehlt: ${en.missing.join(' · ')}</small>` : ''}</li>`; })}</ul>
         ${!res.rows.length ? html`<p class="mute">Keine Leads für diese Filter. <a href="/search">Neue Suche</a></p>` : ''}</div>
       <div class="row">${offset > 0 ? html`<a class="btn" href="/leads?${nextQs(Math.max(0, offset - limit))}">← Zurück</a>` : ''}${offset + limit < res.total ? html`<a class="btn" href="/leads?${nextQs(offset + limit)}">Weiter →</a>` : ''}</div>` });
@@ -67,12 +68,15 @@ export const routes: Route[] = [
     const autoFam = familyFor(ctx.cfg, { subIndustry: d.lead.sub_industry, industry: d.lead.industry });
     const recMods: string[] = (d.lead.modules_recommended as string[])?.length ? d.lead.modules_recommended : recommendModules(ctx.cfg, { family: fam as Family, subIndustry: d.lead.sub_industry });
     const modView = { family: fam, autoFamily: autoFam, families: FAMILIES.map((k) => ({ key: k, label: ctx.cfg.pipeline.demo.families[k].label as string })), modules: Object.entries(moduleDefs(ctx.cfg)).map(([k, v]) => ({ key: k, label: v.label })), recommended: recMods, selected: d.lead.modules_selected as string[] | null, hasDemo: !!liveDemo, demoUrl };
+    // Verkaufsassistent: für interessante Leads automatisch (regelbasiert, kostenlos, gecacht über den Hash der Eingabe)
+    await ctx.copilot.ensure(leadId, { onlyIfEligible: true });
+    const cop = await ctx.copilot.stored(leadId);
     const en = enrichment(d.lead);
     const hints = [d.lead.priority_reason, en.needed ? `${en.label}: ${en.missing.join(', ')}` : '', analysis?.recommended_contact_angle ? `Empfohlener Ansatz: ${analysis.recommended_contact_angle}` : '',
       ...((analysis?.manual_checks ?? []) as string[]).slice(0, 4).map((m) => `Manuell prüfen: ${m}`), ...d.factsT.filter((f: any) => f.key === 'websiteCandidate').map((f: any) => `Mögliche Website (ungeprüft): ${f.value} – ${f.note ?? ''}`),
       dupes.length ? `${dupes.length} mögliche Dublette(n) – bitte prüfen.` : ''].filter(Boolean) as string[];
     return render(r, { title: d.lead.company_name, nav: 'leads', body: html`
-      ${P.header(d, r.app.csrf)}${P.duplicatesCard(dupes, { csrf: r.app.csrf, leadId })}${P.profile(d)}${P.priorityCard(d, { csrf: r.app.csrf, leadId })}${P.enrichmentCard(d, { csrf: r.app.csrf, leadId, facts: d.factsT, budgetLeftCents: Math.min(bstat.monthLeftCents, bstat.todayLeftCents), available: ctx.enrichment.available, log: elog })}${P.analysisCard(d, analysis, { csrf: r.app.csrf, leadId, costs, demoLive: !!liveDemo })}${P.demoDecision(d, { csrf: r.app.csrf, leadId, hasDemo: !!liveDemo, approval })}${P.modulesCard(d, { csrf: r.app.csrf, leadId, v: modView })}${P.phoneView(d, analysis, { sender, demoUrl, contactPerson, csrf: r.app.csrf, leadId })}
+      ${P.header(d, r.app.csrf)}${copilotCard(d, cop, { csrf: r.app.csrf, leadId, eligible: ctx.copilot.isEligible({ ...d.lead, opportunity: d.opportunity?.score ?? null }), aiAvailable: !ctx.registry.providers.ai.isMock })}${P.duplicatesCard(dupes, { csrf: r.app.csrf, leadId })}${P.profile(d)}${P.priorityCard(d, { csrf: r.app.csrf, leadId })}${P.enrichmentCard(d, { csrf: r.app.csrf, leadId, facts: d.factsT, budgetLeftCents: Math.min(bstat.monthLeftCents, bstat.todayLeftCents), available: ctx.enrichment.available, log: elog })}${P.analysisCard(d, analysis, { csrf: r.app.csrf, leadId, costs, demoLive: !!liveDemo })}${P.demoDecision(d, { csrf: r.app.csrf, leadId, hasDemo: !!liveDemo, approval })}${P.modulesCard(d, { csrf: r.app.csrf, leadId, v: modView })}${P.phoneView(d, analysis, { sender, demoUrl, contactPerson, csrf: r.app.csrf, leadId })}
       ${P.contact(d, r.app.csrf, leadId, settings, r.app.mock)}${P.templatesCard(d, { sender: settings.callerName || ctx.cfg.agency.callerName || undefined, demoUrl, csrf: r.app.csrf, leadId, emailStatus: ctx.contact.effective(d.lead), hasEmail })}${P.notesCard(d, note, { csrf: r.app.csrf, leadId, hints })}${P.costsCard(costs)}
       ${P.why(d)}${P.sales(d, r.app.csrf, leadId)}${P.statusCard(d, r.app.csrf, leadId)}${P.docs(d, r.app.csrf, leadId, { demos, offer, order, templates: allTemplates().map((t) => ({ key: t.key, label: t.label })), recommended: rec, baseUrl: r.app.baseUrl })}
       ${P.dimensions(d)}${P.audit(d)}
@@ -126,7 +130,15 @@ export const routes: Route[] = [
     const v = (r.form.get('priority') ?? '').trim();
     if (v && !['A', 'B', 'C', 'D'].includes(v)) throw new UserError('Priorität muss A, B, C oder D sein.');
     await r.ctx.pipeline.setManualPriority(r.params[0], (v || null) as never);
+    await r.ctx.copilot.ensure(r.params[0], { onlyIfEligible: true });
     return back(r.params[0], v ? `Priorität manuell auf ${v} gesetzt.` : 'Automatische Priorität gilt wieder.', '#prioritaet');
+  } },
+  { method: 'POST', path: new RegExp(`^/leads/${id}/copilot$`), h: async (r) => {
+    if (!(await r.ctx.leads.rowToEntry(r.params[0]))) throw new UserError('Lead nicht gefunden.');
+    await r.ctx.copilot.ensure(r.params[0], { force: true }); return back(r.params[0], 'Verkaufsassistent neu berechnet (regelbasiert, keine Kosten).', '#verkaufsassistent');
+  } },
+  { method: 'POST', path: new RegExp(`^/leads/${id}/copilot/deepen$`), h: async (r) => {
+    const out = await r.ctx.copilot.deepen(r.params[0]); return redirect(`/leads/${r.params[0]}#verkaufsassistent`, out.used ? okFlash(out.note) : { kind: 'err', text: out.note });
   } },
   { method: 'POST', path: new RegExp(`^/leads/${id}/notes$`), h: async (r) => {
     const body = (r.form.get('body') ?? '').replace(/\r\n/g, '\n'); if (body.length > 20000) throw new UserError('Notiz ist zu lang (max. 20.000 Zeichen).');
@@ -169,7 +181,8 @@ export const routes: Route[] = [
     const cb = (r.form.get('callback') ?? '').trim();
     const callbackAt = cb ? parseBerlinLocal(cb) : null;
     if (cb && !callbackAt) throw new UserError('Rückruf-Datum ungültig.');
-    const out = await r.ctx.calls.applyResult(r.params[0], result, { note: r.form.get('note') ?? '', callbackAt });
+    let out; try { out = await r.ctx.calls.applyResult(r.params[0], result, { note: r.form.get('note') ?? '', callbackAt, nextStep: r.form.get('next_step') ?? '', topics: r.form.getAll('topic') }); } catch (e) { throw new UserError(e instanceof Error ? e.message : String(e)); }
+    await r.ctx.copilot.ensure(r.params[0]);   // nächste Aktion/Gesprächsziel nach dem Gespräch aktualisieren
     const next = r.form.get('next');
     return redirect(next === 'calls' ? '/calls' : `/leads/${r.params[0]}`, okFlash([`Ergebnis gespeichert: ${result}.`, ...out.messages, out.demoUrl ? `Demo: ${out.demoUrl}` : ''].filter(Boolean).join(' ')));
   } },

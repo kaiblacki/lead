@@ -8,9 +8,11 @@ import type { Status } from '../core/status.ts';
 import type { TaskStore } from '../db/tasks.ts';
 import { startOfBerlinDay, endOfBerlinDay } from '../core/time.ts';
 
-export const CALL_RESULTS = ['NO_ANSWER', 'NO_INTEREST', 'CALL_BACK', 'INTERESTED', 'DEMO', 'OFFER', 'BOUGHT', 'DO_NOT_CONTACT'] as const;
+export const CALL_RESULTS = ['NO_ANSWER', 'NO_INTEREST', 'CALL_BACK', 'INTERESTED', 'DEMO', 'NEEDS_ANALYSIS', 'PARTNERSHIP', 'MULTIPLE', 'OFFER', 'BOUGHT', 'DO_NOT_CONTACT'] as const;
+export const TOPICS = ['website', 'needs', 'partner'] as const;
+export const TOPIC_LABEL: Record<(typeof TOPICS)[number], string> = { website: 'Website', needs: 'Bedarfsanalyse', partner: 'Kooperation' };
 export type CallResult = (typeof CALL_RESULTS)[number];
-export const CALL_LABEL: Record<CallResult, string> = { NO_ANSWER: 'Nicht erreicht', NO_INTEREST: 'Kein Interesse', CALL_BACK: 'Rückruf', INTERESTED: 'Interessiert', DEMO: 'Demo gewünscht', OFFER: 'Angebot gewünscht', BOUGHT: 'Gekauft', DO_NOT_CONTACT: 'Nicht mehr kontaktieren' };
+export const CALL_LABEL: Record<CallResult, string> = { NO_ANSWER: 'Nicht erreicht', NO_INTEREST: 'Kein Interesse', CALL_BACK: 'Rückruf', INTERESTED: 'Interessiert Website', DEMO: 'Demo gewünscht', NEEDS_ANALYSIS: 'Bedarfsanalyse interessant', PARTNERSHIP: 'Kooperation interessant', MULTIPLE: 'Mehrere Themen interessant', OFFER: 'Angebot gewünscht', BOUGHT: 'Gekauft', DO_NOT_CONTACT: 'Nicht mehr kontaktieren' };
 const PRE_SALE: Status[] = ['QUALIFIED', 'DEMO_CREATED', 'CONTACTED', 'REPLIED', 'INTERESTED', 'OFFER_SENT'];
 /** Absteigend nach Wert; fehlende Werte zuletzt. Reihenfolge der Anrufliste: Sales Opportunity → Datenqualität → Contactability → Digital Need. */
 const cmp = (a: number | null | undefined, b: number | null | undefined) => (a ?? -1) - (b ?? -1);
@@ -33,7 +35,7 @@ export class CallService {
     const dayStart = startOfBerlinDay(now), dayEnd = endOfBerlinDay(now);
     const settings = await this.repo.getSettings();
     const base = `select l.id, l.company_name, l.city, l.sub_industry, l.status, l.phone, l.website_url, l.website_state, l.distance_km, l.callback_at, l.last_contact_at, l.call_count, l.is_mock, l.contact_reason,
-        o.score, o.category, o.digital_need, (o.dimensions->'dataQuality'->>'value')::float as dq, (o.dimensions->'contactability'->>'value')::float as contactability, l.address, l.source, l.effective_priority, sp.brief, sp.opener, sp.approved_at,
+        o.score, o.category, o.digital_need, (o.dimensions->'dataQuality'->>'value')::float as dq, (o.dimensions->'contactability'->>'value')::float as contactability, l.address, l.source, l.effective_priority, l.website_potential, l.needs_analysis_potential, l.partnership_potential, l.recommended_next_action, l.call_goal, l.interest_topics, l.next_step, sp.brief, sp.opener, sp.approved_at,
         (select note from contact_history h where h.lead_id = l.id and h.note is not null order by at desc limit 1) as last_note,
         (select result from contact_history h where h.lead_id = l.id and h.channel='PHONE' order by at desc limit 1) as last_result
       from leads l
@@ -58,7 +60,7 @@ export class CallService {
   }
 
   /** Ergebnis eines Anrufs erfassen und den Lead automatisch in die passende Pipeline-Stufe bewegen. */
-  async applyResult(leadId: string, result: CallResult, o: { note?: string; callbackAt?: Date | null } = {}): Promise<CallOutcome> {
+  async applyResult(leadId: string, result: CallResult, o: { note?: string; callbackAt?: Date | null; nextStep?: string; topics?: string[] } = {}): Promise<CallOutcome> {
     if (!CALL_RESULTS.includes(result)) throw new Error('Unbekanntes Anruf-Ergebnis');
     const lead = await this.leads.rowToEntry(leadId);
     if (!lead) throw new Error('Lead nicht gefunden');
@@ -67,6 +69,11 @@ export class CallService {
     if (result === 'CALL_BACK' && (!o.callbackAt || Number.isNaN(o.callbackAt.getTime()))) throw new Error('Für „Rückruf“ bitte Datum und Uhrzeit angeben.');
     if (result === 'CALL_BACK' && o.callbackAt!.getTime() < now.getTime() - 60_000) throw new Error('Der Rückruf-Termin liegt in der Vergangenheit.');
     if ((o.note ?? '').length > 4000) throw new Error('Notiz ist zu lang (max. 4000 Zeichen).');
+    if ((o.nextStep ?? '').length > 300) throw new Error('„Nächster Schritt“ ist zu lang (max. 300 Zeichen).');
+    // Themen, an denen Interesse besteht – getrennt: Website, Bedarfsanalyse, Kooperation
+    const picked = [...new Set((o.topics ?? []).filter((t): t is (typeof TOPICS)[number] => (TOPICS as readonly string[]).includes(t)))];
+    if (result === 'MULTIPLE' && picked.length < 2) throw new Error('Für „Mehrere Themen interessant“ bitte mindestens zwei Themen wählen (Website, Bedarfsanalyse, Kooperation).');
+    const topics: string[] = result === 'MULTIPLE' ? picked : ['INTERESTED', 'DEMO', 'OFFER', 'BOUGHT'].includes(result) ? ['website'] : result === 'NEEDS_ANALYSIS' ? ['needs'] : result === 'PARTNERSHIP' ? ['partner'] : [];
     const out: CallOutcome = { result, moved: [], messages: [] };
 
     // Vorprüfung, damit „Gekauft“ nicht halb ausgeführt wird
@@ -85,8 +92,9 @@ export class CallService {
     // 1) Anruf protokollieren, Zähler, Learning-Loop-Ergebnis
     const callbackAt = result === 'CALL_BACK' ? o.callbackAt! : result === 'NO_ANSWER' && (lead.call_count ?? 0) + 1 < MAX_ATTEMPTS ? new Date(now.getTime() + 86400000) : null;
     await this.repo.tx(async (c) => {
-      await this.leads.recordContact(c, leadId, { channel: 'PHONE', direction: 'outbound', result, note: o.note ?? null, callbackAt });
-      await c.query('update leads set call_count = call_count + 1, last_contact_at = $3, callback_at = $4 where id=$1 and owner_id=$2', [leadId, this.owner, now, callbackAt]);
+      await this.leads.recordContact(c, leadId, { channel: 'PHONE', direction: 'outbound', result, note: o.note ?? null, callbackAt, nextStep: o.nextStep ?? null, topics });
+      await c.query(`update leads set call_count = call_count + 1, last_contact_at = $3, callback_at = $4,
+          interest_topics = (select coalesce(array_agg(distinct t), '{}') from unnest(interest_topics || $5::text[]) t), next_step = coalesce(nullif($6, ''), next_step) where id=$1 and owner_id=$2`, [leadId, this.owner, now, callbackAt, topics, (o.nextStep ?? '').trim()]);
       await recordOutcome(this.repo, c, leadId, 'call', result, { attempt: (lead.call_count ?? 0) + 1 });
       await this.repo.event(c, leadId, 'call_result', { result, note: o.note ? true : false, actor: 'user' });
     });
@@ -103,7 +111,10 @@ export class CallService {
         break;
       case 'NO_INTEREST': await move('IGNORED', 'Anruf: kein Interesse'); await this.repo.tx((c) => recordOutcome(this.repo, c, leadId, 'final', 'LOST', { reason: 'no_interest' })); break;
       case 'CALL_BACK': if (status === 'QUALIFIED' || status === 'DEMO_CREATED') await move('CONTACTED', 'Anruf: Rückruf vereinbart'); out.messages.push(`Rückruf am ${o.callbackAt!.toLocaleString('de-DE')} in der Anrufliste.`); break;
-      case 'INTERESTED': await ensureInterested('Anruf: interessiert'); break;
+      case 'INTERESTED': await ensureInterested('Anruf: interessiert an der Website'); break;
+      case 'NEEDS_ANALYSIS': await ensureInterested('Anruf: Bedarfsanalyse interessant'); out.messages.push('Bedarfsanalyse ist ein eigenes Thema – separaten Termin vereinbaren; nichts wird automatisch gesendet.'); break;
+      case 'PARTNERSHIP': await ensureInterested('Anruf: Kooperation interessant'); out.messages.push('Kooperation vermerkt – Gespräch dazu separat vereinbaren.'); break;
+      case 'MULTIPLE': await ensureInterested(`Anruf: mehrere Themen (${picked.join(', ')})`); out.messages.push(`Interesse an: ${picked.map((t) => TOPIC_LABEL[t as (typeof TOPICS)[number]]).join(', ')}. Themen getrennt weiterverfolgen.`); break;
       case 'DEMO': {
         await ensureInterested('Anruf: Demo gewünscht');
         const d = await this.docs.demoFor(leadId, 'auto'); out.demoUrl = d.url; out.moved.push('DEMO_CREATED' as Status); out.messages.push('Demo erstellt – Link an den Kunden weitergeben.');

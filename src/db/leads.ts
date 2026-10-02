@@ -123,6 +123,7 @@ export class LeadStore {
       no_interest: "exists (select 1 from contact_history ch where ch.lead_id = l.id and ch.result = 'NO_INTEREST')",
       // „Jetzt bearbeiten“: kontaktierbare A/B-Leads, die noch nicht abgeschlossen sind
       now_work: "l.work_status = 'CONTACTABLE' and l.effective_priority in ('A','B') and not l.paused and l.contact_readiness <> 'DO_NOT_CONTACT' and l.status in ('QUALIFIED','DEMO_CREATED','CONTACTED','REPLIED')",
+      website_high: "l.website_potential = 'HIGH'", needs_interesting: "(l.needs_analysis_potential = 'HIGH' or 'needs' = any(l.interest_topics))", partner_high: "l.partnership_potential = 'HIGH'", demo_exists: hasDemo, callback: 'l.callback_at is not null',
       has_email: hasEmail, has_phone: 'l.phone is not null',
       has_website: 'l.website_url is not null',
       demo_recommended: `l.demo_decision = 'recommended' and not ${hasDemo}`,
@@ -155,7 +156,7 @@ export class LeadStore {
          (o.dimensions->'dataQuality'->>'value')::float as dq, (o.dimensions->'contactability'->>'value')::float as contactability,
          case when l.website_state = 'none' then null else au.overall_quality end as website_score, au.audit_status,
          ${hasDemo} as has_demo, ${openCall} as demo_ready_call, ${hasEmail} as has_email,
-         coalesce(l.effective_priority, sp.brief->>'priority') as priority, l.effective_priority, l.auto_priority, l.manual_priority, l.priority_reason, l.review_flag, l.work_status, l.contactability, l.preferred_contact_channel, l.demo_recommendation, l.demo_recommendation_reason, l.enrichment_status, l.last_enrichment_at, l.official_website_candidate, l.official_website_confidence, l.official_website_verified, sp.approved_at ${base} order by ${order} limit $${p.length - 1} offset $${p.length}`, p)).rows;
+         coalesce(l.effective_priority, sp.brief->>'priority') as priority, l.effective_priority, l.auto_priority, l.manual_priority, l.priority_reason, l.review_flag, l.work_status, l.website_potential, l.needs_analysis_potential, l.partnership_potential, l.recommended_next_action, l.call_goal, l.interest_topics, l.contactability, l.preferred_contact_channel, l.demo_recommendation, l.demo_recommendation_reason, l.enrichment_status, l.last_enrichment_at, l.official_website_candidate, l.official_website_confidence, l.official_website_verified, sp.approved_at ${base} order by ${order} limit $${p.length - 1} offset $${p.length}`, p)).rows;
     return { total, rows };
   }
 
@@ -265,9 +266,9 @@ export class LeadStore {
     });
   }
 
-  async recordContact(c: pg.PoolClient, leadId: string, e: { channel: string; direction?: string; result?: string | null; note?: string | null; callbackAt?: Date | null; actor?: string }) {
-    await c.query('insert into contact_history(owner_id, lead_id, channel, direction, result, note, callback_at, actor) values ($1,$2,$3,$4,$5,$6,$7,$8)',
-      [this.owner, leadId, e.channel, e.direction ?? 'outbound', e.result ?? null, e.note ? e.note.slice(0, 4000) : null, e.callbackAt ?? null, e.actor ?? 'user']);
+  async recordContact(c: pg.PoolClient, leadId: string, e: { channel: string; direction?: string; result?: string | null; note?: string | null; callbackAt?: Date | null; actor?: string; nextStep?: string | null; topics?: string[] }) {
+    await c.query('insert into contact_history(owner_id, lead_id, channel, direction, result, note, callback_at, actor, next_step, topics) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
+      [this.owner, leadId, e.channel, e.direction ?? 'outbound', e.result ?? null, e.note ? e.note.slice(0, 4000) : null, e.callbackAt ?? null, e.actor ?? 'user', e.nextStep ? e.nextStep.slice(0, 300) : null, e.topics ?? []]);
   }
 
   async rowToEntry(id: string) { return (await this.pool.query('select * from leads where id=$1 and owner_id=$2', [id, this.owner])).rows[0] ?? null; }

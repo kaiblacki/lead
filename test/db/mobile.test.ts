@@ -90,7 +90,7 @@ test('Mobile: Bedienbarkeit – Schnellsuche, Anruf-Ergebnisse und Freigabe-Butt
   assert.ok(await first.evaluate((d) => (d as HTMLDetailsElement).open), 'erster Call ist aufgeklappt');
   const second = page.locator('details.card').nth(1);
   if (await second.count()) { await second.locator(':scope > summary').tap(); assert.ok(await second.evaluate((d) => (d as HTMLDetailsElement).open), 'Antippen klappt den Call auf'); }
-  for (const label of ['Nicht erreicht', 'Kein Interesse', 'Rückruf', 'Interessiert', 'Demo gewünscht', 'Angebot gewünscht', 'Gekauft', 'Nicht mehr kontaktieren']) {
+  for (const label of ['Nicht erreicht', 'Kein Interesse', 'Rückruf', 'Interessiert Website', 'Demo gewünscht', 'Bedarfsanalyse interessant', 'Kooperation interessant', 'Mehrere Themen interessant', 'Angebot gewünscht', 'Gekauft', 'Nicht mehr kontaktieren']) {
     const b = first.getByRole('button', { name: label, exact: true });
     await b.scrollIntoViewIfNeeded();
     const box = await b.boundingBox(); assert.ok(box && box.height >= 44 && box.width >= 44 && box.x >= 0 && box.x + box.width <= 390, `${label}: ${JSON.stringify(box)}`);

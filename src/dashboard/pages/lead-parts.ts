@@ -6,6 +6,7 @@ import { FACT_LABELS, FACT_ORDER, findConflicts, type Fact, type FactKey } from 
 import { DIM_LABELS, DIM_ORDER } from '../../scoring/intelligence.ts';
 import { STATUSES, nextStatuses, type Status } from '../../core/status.ts';
 import { CALL_LABEL, CALL_RESULTS } from '../../calls/service.ts';
+import { callExtras } from './copilot.ts';
 import { CONTACTABILITY_LABEL, WORK_STATUS_LABEL } from '../../contact/contactability.ts';
 import { ENRICH_LABEL, VERIFY_LABEL } from '../../enrich/service.ts';
 import { APPROVAL_LABEL } from '../../workflow/approvals.ts';
@@ -114,8 +115,8 @@ export function contact(d: any, csrf: string, id: string, settings: { phoneEnabl
     ${l.contact_readiness === 'DO_NOT_CONTACT' ? html`<p class="errbox">Gesperrt. Anruf-Ergebnisse und Nachrichten sind deaktiviert.</p>` : html`
       <h3>Anruf-Ergebnis erfassen</h3>
       ${postForm(csrf, `/leads/${id}/call`, html`<label>Notiz<textarea name="note" rows="2" maxlength="4000" placeholder="Kurze Notiz zum Gespräch"></textarea></label>
-        <label>Rückruf am (nur bei „Rückruf“)<input type="datetime-local" name="callback"></label>
-        <div class="resgrid" style="margin-top:8px">${CALL_RESULTS.map((r) => html`<button name="result" value="${r}" class="${r === 'DO_NOT_CONTACT' ? 'danger' : r === 'BOUGHT' ? 'ok' : r === 'INTERESTED' || r === 'DEMO' || r === 'OFFER' ? 'primary' : ''}">${CALL_LABEL[r]}</button>`)}</div>`, { style: 'display:block' })}`}
+        <label>Rückruf am (nur bei „Rückruf“)<input type="datetime-local" name="callback"></label>${callExtras()}
+        <div class="resgrid" style="margin-top:8px">${CALL_RESULTS.map((r) => html`<button name="result" value="${r}" class="${r === 'DO_NOT_CONTACT' ? 'danger' : r === 'BOUGHT' ? 'ok' : ['INTERESTED', 'DEMO', 'OFFER', 'NEEDS_ANALYSIS', 'PARTNERSHIP', 'MULTIPLE'].includes(r) ? 'primary' : ''}">${CALL_LABEL[r]}</button>`)}</div>`, { style: 'display:block' })}`}
     <h3>Nachricht (nur wenn zulässig)</h3>
     <p class="mute">Nachrichten werden nur gesendet, wenn der Kanal aktiviert, eine Einwilligung dokumentiert und kein Sperrvermerk vorhanden ist. Sonst: „Manuelle Kontaktaufnahme erforderlich.“</p>
     <div class="row">${['EMAIL', 'WHATSAPP'].map((ch) => html`${postForm(csrf, `/leads/${id}/consent`, html`<input type="hidden" name="channel" value="${ch}"><input name="note" placeholder="Einwilligung ${ch === 'EMAIL' ? 'E-Mail' : 'WhatsApp'}: Nachweis" maxlength="500" required><button>Einwilligung erfasst</button>`, { style: 'display:block;width:100%' })}`)}</div>

@@ -1,0 +1,172 @@
+{
+  "version": 1,
+  "auto": { "priorities": ["A", "B"], "minSalesOpportunity": 60, "includeDemoRecommended": true },
+  "potential": {
+    "websiteScoreWeak": 45,
+    "partnerMinReviews": 30, "partnerMinRating": 4,
+    "needsEmployeeBuckets": ["10-49", "50+"], "needsMinReviews": 60
+  },
+  "introduction": "Ich unterstütze kleinere und mittelständische Unternehmen in mehreren Bereichen. Einerseits beschäftige ich mich mit Digitalisierung und modernen Online-Auftritten{branchPhrase}. Zusätzlich bin ich im Versicherungsbereich tätig und arbeite gerne langfristig mit lokalen Unternehmen und Kooperationspartnern zusammen.",
+  "flow": [
+    "Vorstellung (kurz, siehe „So kannst du dich vorstellen“)",
+    "Grund des Anrufs nennen: {reason}",
+    "Eine offene Frage stellen: „{question}“",
+    "Bedarf verstehen – zuhören, nachfragen, Notizen machen",
+    "Passende Möglichkeit vorstellen (nur das Hauptthema: {topic})",
+    "Interesse prüfen – ohne Druck",
+    "Nächste Aktion vereinbaren: {goal}"
+  ],
+  "goals": {
+    "CHECK_INTEREST": "Interesse prüfen",
+    "DEMO_PERMISSION": "Interesse prüfen und Erlaubnis für einen unverbindlichen Demo-Entwurf erhalten",
+    "DEMO_APPOINTMENT": "Demo-Termin vereinbaren (die Demo liegt bereits vor)",
+    "LEARN_NEEDS": "Bedarf kennenlernen",
+    "CALLBACK": "Rückruf-Gespräch: Stand klären und nächsten Schritt vereinbaren",
+    "NEEDS_ANALYSIS_APPOINTMENT": "Separaten Bedarfsanalyse-Termin vereinbaren (eigenes Thema, nicht im selben Atemzug mit der Website)",
+    "PARTNERSHIP_CHECK": "Kooperationsinteresse prüfen",
+    "RESEARCH": "Erst Daten beschaffen bzw. Voraussetzungen klären – noch kein Gespräch",
+    "NONE": "Kein Gespräch – Lead ist abgeschlossen oder gesperrt"
+  },
+  "goalNote": "Ein erstes Telefonat soll normalerweise nicht gleichzeitig alle drei Themen (Website, Bedarfsanalyse, Kooperation) abschließen – ein Hauptziel genügt.",
+  "moduleWhy": {
+    "contact_form": { "claim": "Eine direkte Anfrage über die Website könnte sinnvoll sein.", "benefit": "Interessenten könnten auch außerhalb der Öffnungszeiten Anfragen hinterlassen." },
+    "whatsapp": { "claim": "Ein WhatsApp-Kontakt könnte den Einstieg für Kunden erleichtern.", "benefit": "Kurze Fragen lassen sich ohne Anruf stellen." },
+    "booking": { "claim": "Eine Online-Terminanfrage könnte Anrufe außerhalb der Öffnungszeiten ersetzen.", "benefit": "Kunden können jederzeit einen Wunschtermin anfragen." },
+    "reservation": { "claim": "Eine Reservierungsmöglichkeit online könnte sinnvoll sein.", "benefit": "Gäste können auch außerhalb der Öffnungszeiten anfragen." },
+    "menu": { "claim": "Eine aktuelle Speisekarte online könnte Gästen die Entscheidung erleichtern.", "benefit": "Gäste sehen vorab, was angeboten wird." },
+    "gallery": { "claim": "Eine Galerie könnte die Arbeit des Betriebs sichtbar machen.", "benefit": "Interessenten bekommen einen ersten Eindruck, bevor sie anrufen." },
+    "services": { "claim": "Eine klare Leistungsübersicht könnte Nachfragen reduzieren.", "benefit": "Interessenten sehen sofort, was angeboten wird." },
+    "price_list": { "claim": "Eine Preis-/Leistungsliste könnte Rückfragen vermeiden.", "benefit": "Weniger Telefonate für Standardfragen." },
+    "map": { "claim": "Eine Standortkarte könnte die Anfahrt erleichtern.", "benefit": "Kunden finden den Betrieb schneller." },
+    "social": { "claim": "Verlinkte Social-Media-Kanäle könnten eine Website ergänzen.", "benefit": "Besucher finden aktuelle Beiträge an einer Stelle." },
+    "newsletter": { "claim": "Eine Newsletter-Anmeldung könnte Stammkunden binden.", "benefit": "Aktionen erreichen Interessenten direkt." },
+    "quote": { "claim": "Eine Angebotsanfrage online könnte sinnvoll sein.", "benefit": "Anfragen kommen strukturiert mit den wichtigsten Angaben an." },
+    "callback": { "claim": "Ein Rückrufwunsch könnte Interessenten den Kontakt erleichtern.", "benefit": "Interessenten hinterlassen Nummer und Wunschzeit." },
+    "jobs": { "claim": "Ein Bewerbungsbereich könnte bei der Personalsuche helfen.", "benefit": "Bewerber finden den Kontaktweg sofort." }
+  },
+  "checkArguments": {
+    "CONTACT_FORM": { "module": "contact_form", "claim": "Eine direkte Angebots-/Kontaktanfrage könnte sinnvoll sein.", "benefit": "Interessenten könnten auch außerhalb der Öffnungszeiten Anfragen hinterlassen." },
+    "WHATSAPP": { "module": "whatsapp", "claim": "Ein WhatsApp-Kontakt könnte den Einstieg erleichtern.", "benefit": "Kurze Fragen lassen sich ohne Anruf stellen." },
+    "RESERVATION": { "module": "booking", "claim": "Eine Online-Terminanfrage bzw. Reservierung könnte sinnvoll sein.", "benefit": "Kunden können jederzeit eine Anfrage senden." },
+    "GALLERY": { "module": "gallery", "claim": "Eine Galerie könnte die Arbeit sichtbarer machen.", "benefit": "Interessenten bekommen einen ersten Eindruck vorab." },
+    "MENU": { "module": "menu", "claim": "Eine Speisekarte online könnte Gästen helfen.", "benefit": "Gäste sehen vorab das Angebot." },
+    "MAPS": { "module": "map", "claim": "Eine Standortkarte könnte die Anfahrt erleichtern.", "benefit": "Kunden finden den Betrieb schneller." },
+    "QUOTE_REQUEST": { "module": "quote", "claim": "Eine Angebotsanfrage online könnte sinnvoll sein.", "benefit": "Anfragen kommen strukturiert an." },
+    "MOBILE_NAV": { "claim": "Die mobile Bedienung der Website könnte verbessert werden.", "benefit": "Besucher mit Smartphone finden Kontakt und Leistungen schneller." },
+    "VIEWPORT": { "claim": "Die Darstellung auf dem Smartphone könnte verbessert werden.", "benefit": "Besucher mit Smartphone können die Seite besser lesen." },
+    "RESPONSIVE_CSS": { "claim": "Die Darstellung auf dem Smartphone könnte verbessert werden.", "benefit": "Besucher mit Smartphone können die Seite besser lesen." },
+    "HTTPS": { "claim": "Die Website könnte auf eine sichere Verbindung (HTTPS) umgestellt werden.", "benefit": "Besucher sehen keine Browser-Warnung." },
+    "IMPRINT": { "claim": "Das Impressum ist auf der Website nicht auffindbar – das sollte man prüfen.", "benefit": "Klare Angaben für Besucher (rechtliche Prüfung bleibt Sache des Betriebs)." },
+    "OLD_TECH": { "claim": "Die Website nutzt veraltete Technik und könnte modernisiert werden.", "benefit": "Schnellere, besser bedienbare Seite." },
+    "LOAD_TIME": { "claim": "Die Ladezeit der Website könnte verbessert werden.", "benefit": "Besucher springen seltener vorzeitig ab." }
+  },
+  "insuranceQuestions": {
+    "always": [
+      "Wie ist das Unternehmen aktuell abgesichert?",
+      "Gibt es bereits einen festen Ansprechpartner für Versicherungen?",
+      "Wann wurde die Absicherung zuletzt geprüft?"
+    ],
+    "staff": "Gibt es Mitarbeiter?",
+    "premises": "Gibt es betrieblich genutzte Räume?",
+    "vehicles": "Gibt es Fahrzeuge, die betrieblich genutzt werden?",
+    "equipment": "Gibt es teure Maschinen oder Inventar?",
+    "owner": "Wie abhängig ist der Betrieb von der Arbeitskraft des Inhabers?"
+  },
+  "companyQuestions": [
+    "Wie gewinnen Sie aktuell die meisten Kunden?",
+    "Wie melden sich neue Interessenten hauptsächlich?",
+    "Was funktioniert aktuell besonders gut?",
+    "Wo verlieren Sie momentan Zeit?"
+  ],
+  "defaultProfile": {
+    "label": "lokaler Betrieb",
+    "branchPhrase": "",
+    "customerFacing": true,
+    "insurance": ["premises", "staff", "owner"],
+    "online": ["Wie erfahren neue Kunden aktuell von Ihrem Betrieb?", "Wie erreichen Kunden Sie bei Fragen – eher telefonisch oder über andere Wege?", "Würde eine einfache Anfrage über die Website helfen?"],
+    "customerGroups": ["lokale Privat- und Geschäftskunden"],
+    "referral": ["Empfehlungen an Kunden mit passendem Bedarf aus anderen Bereichen"],
+    "partnerQuestion": "Arbeiten Sie bereits mit anderen lokalen Dienstleistern zusammen oder empfehlen Sie Ihren Kunden gelegentlich Ansprechpartner aus anderen Bereichen?"
+  },
+  "profiles": {
+    "beauty": {
+      "label": "Beauty-/Pflegebetrieb", "branchPhrase": " für lokale Dienstleister", "customerFacing": true,
+      "insurance": ["premises", "staff", "equipment", "owner"],
+      "online": ["Wie buchen Kunden aktuell Termine?", "Kommen viele Anfragen über Instagram oder WhatsApp?", "Würde eine direkte Online-Terminbuchung helfen?", "Zeigen Sie Ihre Arbeiten bereits online (Galerie)?"],
+      "customerGroups": ["lokale Stammkundschaft", "Kundinnen und Kunden rund um besondere Anlässe (Annahme – im Gespräch prüfen)"],
+      "referral": ["Empfehlungen zwischen Beauty- und Wellness-Betrieben", "gemeinsame Aktionen mit Nachbarbetrieben"],
+      "partnerQuestion": "Arbeiten Sie bereits mit anderen lokalen Dienstleistern zusammen oder empfehlen Sie Ihren Kunden gelegentlich Ansprechpartner aus anderen Bereichen?"
+    },
+    "gesundheit": {
+      "label": "Praxis", "branchPhrase": " für Praxen und Gesundheitsdienstleister", "customerFacing": true,
+      "insurance": ["premises", "staff", "equipment", "owner"],
+      "online": ["Wie vereinbaren Patienten aktuell Termine?", "Welche Informationen fragen Patienten am häufigsten telefonisch ab?", "Wären Leistungsübersicht und Terminanfrage online hilfreich?"],
+      "customerGroups": ["lokale Patientinnen und Patienten"],
+      "referral": ["Empfehlungen zwischen Praxen und Gesundheitsdienstleistern"],
+      "partnerQuestion": "Arbeiten Sie bereits mit anderen Praxen oder Dienstleistern zusammen und empfehlen Sie Patienten bei Bedarf weiter?"
+    },
+    "handwerk": {
+      "label": "Handwerksbetrieb", "branchPhrase": " für Handwerksbetriebe", "customerFacing": true,
+      "insurance": ["staff", "vehicles", "equipment", "premises", "owner"],
+      "online": ["Wie kommen Angebotsanfragen aktuell herein?", "Müssen Kunden oft telefonisch nach Leistungen fragen?", "Wären Referenzprojekte online hilfreich?", "Wie finden Sie neue Mitarbeiter oder Auszubildende?"],
+      "customerGroups": ["Privat- und Gewerbekunden in der Region", "Bauherren und Eigentümer (Annahme – im Gespräch prüfen)"],
+      "referral": ["Empfehlungen zwischen Gewerken (z. B. bei Renovierungen)", "Empfehlungen an Kunden mit Bau- oder Renovierungsvorhaben"],
+      "partnerQuestion": "Arbeiten Sie bei Projekten bereits mit anderen Gewerken oder Dienstleistern zusammen und empfehlen Sie sich gegenseitig?"
+    },
+    "gastro": {
+      "label": "Gastronomiebetrieb", "branchPhrase": " für Gastronomie", "customerFacing": true,
+      "insurance": ["premises", "staff", "equipment", "owner"],
+      "online": ["Wie laufen Reservierungen?", "Ist die Speisekarte online aktuell?", "Welche Plattformen nutzen Gäste, um Sie zu finden?"],
+      "customerGroups": ["Stammgäste und Laufkundschaft", "Gruppen und Feiern (Annahme – im Gespräch prüfen)"],
+      "referral": ["Empfehlungen für Feiern und Veranstaltungen", "gemeinsame Angebote mit Nachbarbetrieben"],
+      "partnerQuestion": "Arbeiten Sie bereits mit anderen lokalen Anbietern zusammen, z. B. für Feiern oder Veranstaltungen?"
+    },
+    "immobilien": {
+      "label": "Immobilienbetrieb", "branchPhrase": " für Immobilienunternehmen", "customerFacing": true,
+      "insurance": ["premises", "staff", "owner"],
+      "online": ["Wie gewinnen Sie aktuell neue Objekte und Interessenten?", "Wie präsentieren Sie Objekte online?"],
+      "customerGroups": ["Eigentümer, Käufer und Mieter in der Region"],
+      "referral": ["Empfehlungen zu Handwerkern, Finanzierern und weiteren Dienstleistern rund um Immobilien"],
+      "partnerQuestion": "Arbeiten Sie bereits mit lokalen Dienstleistern rund um Immobilien zusammen und empfehlen Kunden bei Bedarf weiter?"
+    },
+    "auto": {
+      "label": "Autobetrieb", "branchPhrase": " für Autohäuser und Werkstätten", "customerFacing": true,
+      "insurance": ["premises", "staff", "equipment", "vehicles", "owner"],
+      "online": ["Wie vereinbaren Kunden aktuell Werkstatt-Termine?", "Wie präsentieren Sie Ihr Leistungsangebot online?"],
+      "customerGroups": ["Privat- und Firmenfahrzeuge in der Region"],
+      "referral": ["Empfehlungen zwischen Werkstatt, Autohaus und Dienstleistern rund ums Fahrzeug"],
+      "partnerQuestion": "Arbeiten Sie bereits mit anderen Betrieben rund ums Fahrzeug zusammen und empfehlen Kunden bei Bedarf weiter?"
+    },
+    "fitness": {
+      "label": "Fitnessbetrieb", "branchPhrase": " für Studios", "customerFacing": true,
+      "insurance": ["premises", "staff", "equipment", "owner"],
+      "online": ["Wie melden sich Interessenten für ein Probetraining?", "Wie informieren Sie Mitglieder über Kurse und Zeiten?"],
+      "customerGroups": ["Mitglieder aus der Region"],
+      "referral": ["Empfehlungen zu Physiotherapie, Ernährung und Gesundheitsangeboten (Annahme – im Gespräch prüfen)"],
+      "partnerQuestion": "Arbeiten Sie bereits mit anderen Anbietern aus Gesundheit oder Wellness zusammen?"
+    },
+    "beratung": {
+      "label": "Beratungsbetrieb", "branchPhrase": "", "customerFacing": true,
+      "insurance": ["premises", "staff", "owner"],
+      "online": ["Wie finden Interessenten Ihr Angebot aktuell?", "Wie vereinbaren Interessenten ein Erstgespräch?"],
+      "customerGroups": ["lokale Privat- und Geschäftskunden"],
+      "referral": ["Empfehlungen zwischen Beratern und Dienstleistern"],
+      "partnerQuestion": "Arbeiten Sie bereits mit anderen Beratern oder Dienstleistern zusammen und empfehlen sich gegenseitig?"
+    }
+  },
+  "objections": [
+    { "key": "no_interest", "objection": "„Kein Interesse.“", "answer": "Das ist völlig in Ordnung. Darf ich kurz fragen, ob es an der Website grundsätzlich liegt oder ob der Zeitpunkt gerade nicht passt? Wenn es nicht passt, bedanke ich mich und störe nicht weiter." },
+    { "key": "no_time", "objection": "„Dafür habe ich keine Zeit.“", "answer": "Verstehe, deshalb nur kurz: Wann wäre ein besserer Zeitpunkt für zwei Minuten? Dann rufe ich gern zurück." },
+    { "key": "too_expensive", "objection": "„Das ist mir zu teuer.“", "answer": "Konkrete Zahlen nenne ich erst, wenn ich Ihren Bedarf kenne – vorher wäre das nicht seriös. Es gibt keinen Zwang; wir schauen zuerst, was für Sie überhaupt sinnvoll wäre." },
+    { "key": "no_website_needed", "objection": "„Wir brauchen keine Website.“", "answerNoSite": "Das kann sein. Viele Betriebe sehen es so. Mich interessiert, wie neue Kunden Sie heute finden – wenn das gut klappt, ist das ein starkes Zeichen. Wenn Sie möchten, zeige ich unverbindlich, wie ein Auftritt aussehen könnte.", "answerHasSite": "Verstehe. Dann geht es eher darum, ob die bestehende Seite das leistet, was Sie sich wünschen. Darf ich zwei, drei Beobachtungen dazu nennen?" },
+    { "key": "already_someone", "objection": "„Wir haben schon jemanden.“", "answer": "Das ist gut zu hören. Ich möchte niemanden verdrängen. Wenn Sie mögen, kann ich unverbindlich eine zweite Sicht anbieten – ohne Verpflichtung." },
+    { "key": "referrals", "objection": "„Unsere Kunden kommen über Empfehlungen.“", "answer": "Das spricht für Ihre Arbeit. Viele Empfohlene prüfen vor dem ersten Kontakt trotzdem kurz online. Darf ich fragen, ob Ihnen das schon einmal aufgefallen ist?" },
+    { "key": "instagram", "objection": "„Wir nutzen Instagram.“", "answer": "Das ist eine gute Basis. Eine eigene Seite kann sie ergänzen: Adresse, Leistungen und Kontakt bleiben dauerhaft an einem Ort auffindbar. Wie läuft Instagram für Sie aktuell?" },
+    { "key": "send_info", "objection": "„Schicken Sie mir Informationen.“", "answer": "Gern – ich schicke aber nichts ungefragt. Darf ich Ihnen das per E-Mail zusenden, und an welche Adresse? Bis dahin: Was soll darin unbedingt stehen?" },
+    { "key": "later", "objection": "„Melden Sie sich später.“", "answer": "Gern. Wann passt es Ihnen besser – nächste Woche oder in einem Monat? Dann trage ich mir den Rückruf ein." }
+  ],
+  "demoPitch": {
+    "exists": "Ich habe Ihnen keine fertige Website gebaut, sondern bewusst einen unverbindlichen Entwurf. Damit sehen Sie direkt, wie Leistungen, Kontakt, Standort und eine Anfrage auf einer modernen Seite aussehen könnten.",
+    "missing": "Wenn es interessant ist, kann ich Ihnen unverbindlich einen Entwurf vorbereiten."
+  }
+}
