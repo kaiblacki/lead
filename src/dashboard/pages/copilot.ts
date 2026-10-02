@@ -1,4 +1,7 @@
 import { html, raw, fmt, postForm, type Safe } from '../ui.ts';
+import { CONTACT_STRATEGIES, CONTACT_STRATEGY_HELP, CONTACT_STRATEGY_LABEL, STRATEGY_LABEL, type ContactStrategy } from '../../sales/copilot.ts';
+import type { EmailDraft } from '../../sales/email-draft.ts';
+import { PARTNER_LABEL, REFERRAL_STATUS_LABEL, type PartnerStatus } from '../../partners/model.ts';
 import { NEXT_ACTION_LABEL, POTENTIAL_LABEL, NEEDS_LABEL, type Copilot, type Potential } from '../../sales/copilot.ts';
 import { TOPICS, TOPIC_LABEL } from '../../calls/service.ts';
 import type { StoredCopilot } from '../../sales/copilot-service.ts';
@@ -69,5 +72,31 @@ export function copilotCard(d: any, s: StoredCopilot | null, o: { csrf: string; 
     <div class="row">${postForm(o.csrf, `/leads/${o.leadId}/copilot`, html`<button>Neu berechnen</button>`, { style: 'display:inline' })}
       ${postForm(o.csrf, `/leads/${o.leadId}/copilot/deepen`, html`<button ${o.aiAvailable ? raw('') : raw('title="Keine KI konfiguriert – es entstehen keine Kosten, der Regeltext bleibt"')}>Verkaufsassistent vertiefen (DEEP)</button>`, { style: 'display:inline' })}
       <small class="mute">Vertiefen nutzt die KI nur für Einstieg und Zusammenfassung, mit Kostenprotokoll; gleiche Daten → kein erneuter Aufruf.</small></div>
+  </div>`;
+}
+
+/** Kontaktstrategie prominent oben auf der Lead-Seite: Das System empfiehlt, Kai entscheidet. */
+export function strategyCard(d: any, c: Copilot | null | undefined, o: { csrf: string; leadId: string; draft?: EmailDraft | null; hasEmail: boolean; emailStatus?: string }): Safe {
+  const manual = d.lead.contact_strategy as ContactStrategy | null; const rec = (c?.contactStrategy.code ?? d.lead.recommended_contact_strategy) as ContactStrategy | null;
+  const eff = manual ?? rec;
+  return html`<div class="card" id="kontaktstrategie" style="border-left:6px solid var(--brand)"><div class="row"><h2 class="grow" style="margin:0">Kontaktstrategie</h2>
+      <span class="badge ${eff === 'NO_CONTACT' ? 'b-bad' : eff === 'MANUAL_RESEARCH' ? 'b-warn' : 'b-ok'}" title="contact_strategy">${eff ? CONTACT_STRATEGY_LABEL[eff] : 'noch keine Empfehlung'}</span><small class="mute">${manual ? 'von dir gewählt' : 'Empfehlung des Systems'}</small></div>
+    ${rec ? html`<p><b>Empfehlung:</b> ${CONTACT_STRATEGY_LABEL[rec]} – ${c?.contactStrategy.reason ?? ''}</p>` : ''}
+    ${c ? html`<p><b>Gesprächsstrategie:</b> ${c.strategy.label} <small class="mute">(${c.strategy.reason})</small>${c.strategy.secondary.length ? html`<br><small>Nebenthemen: ${c.strategy.secondary.map((x) => `${x.topic === 'WEBSITE' ? 'Website' : x.topic === 'BEDARFSANALYSE' ? 'Bedarfsanalyse' : 'Partnerschaft'} – ${x.text}`).join(' · ')}</small>` : ''}</p>` : ''}
+    ${postForm(o.csrf, `/leads/${o.leadId}/strategy`, html`<div class="resgrid">${CONTACT_STRATEGIES.map((s) => html`<button name="strategy" value="${s}" class="${manual === s ? 'primary' : ''}" title="${CONTACT_STRATEGY_HELP[s]}">${CONTACT_STRATEGY_LABEL[s]}</button>`)}</div>
+      <p><button name="strategy" value="">Empfehlung des Systems übernehmen</button> <small class="mute">${eff ? CONTACT_STRATEGY_HELP[eff] : ''} Es wird nichts automatisch ausgeführt oder gesendet.</small></p>`, { style: 'display:block' })}
+    ${eff === 'EMAIL_DRAFT' && o.draft ? html`<div class="note"><b>E-Mail-Entwurf</b> <small class="mute">(${o.hasEmail ? `E-Mail-Status: ${o.emailStatus ?? '–'}` : 'keine E-Mail-Adresse bekannt'})</small><br><b>Betreff:</b> ${o.draft.subject}<pre style="white-space:pre-wrap;font:inherit;margin:6px 0">${o.draft.body}</pre>${o.draft.notices.map((n) => html`<small class="mute">• ${n}</small><br>`)}</div>` : ''}
+  </div>`;
+}
+
+/** Partner-Bereich auf der Lead-Seite: Status, passender aktiver Partner (nur Vorschlag), Weitergabe nur nach Bestätigung. */
+export function partnerLeadCard(d: any, o: { csrf: string; leadId: string; partner: any | null; matches: any[]; referrals: any[]; talk: Copilot['partnerTalk'] }): Safe {
+  return html`<div class="card" id="partner"><h2>Partner</h2>
+    <p class="mute">Partnerschaft ist ein eigenständiges Kooperationsmodell – unabhängig von Website-Kauf und Bedarfsanalyse.</p>
+    ${o.partner ? html`<p><b>Status:</b> <span class="badge b-info">${PARTNER_LABEL[o.partner.status as PartnerStatus]}</span> <a class="btn" href="/partners/${o.partner.id}">Partnerprofil öffnen</a></p>`
+      : html`<p>Kein Partnerprofil. ${postForm(o.csrf, `/leads/${o.leadId}/partner/candidate`, html`<button>Als Partner-Kandidat vormerken</button>`)}</p>`}
+    ${o.matches.length ? html`<div class="note"><b>Passender Partner vorhanden.</b> ${o.matches.map((m) => html`${m.company_name}`).join(', ')} (aktiver Partner, passende Branche/Region).<br>${o.matches.map((m) => postForm(o.csrf, `/leads/${o.leadId}/referral`, html`<input type="hidden" name="partner" value="${m.id}"><button class="primary">Lead an ${m.company_name} weiterleiten …</button>`))}<br><small class="mute">Es wird nichts automatisch weitergeleitet: Du prüfst Empfänger, Daten und Rechtsgrundlage und bestätigst.</small></div>` : html`<p class="mute">Kein passender aktiver Partner gefunden.</p>`}
+    ${o.referrals.length ? html`<b>Referrals zu diesem Lead</b><ul>${o.referrals.map((r) => html`<li><a href="/referrals/${r.id}">${r.destination_name ?? r.source_name ?? 'Partner'}</a> – ${REFERRAL_STATUS_LABEL[r.status] ?? r.status}</li>`)}</ul>` : ''}
+    ${o.talk ? html`<details open><summary>Partnergespräch (Vorschlag)</summary><p>${o.talk.intro}</p><b>Fragen</b><ul>${o.talk.questions.map((q) => html`<li>${q}</li>`)}</ul><small class="mute">${o.talk.note}</small></details>` : ''}
   </div>`;
 }

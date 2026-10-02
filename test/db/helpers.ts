@@ -114,3 +114,15 @@ export async function makeCustomer(app: App, leadId: string, o: { maintenance?: 
     if (o.maintenance !== false) { await ctx.orders.startCheckout(orderId, 'maintenance', pay, app.base); const m = (await ctx.orders.payments(orderId)).find((p: any) => p.kind === 'maintenance')!; await ctx.orders.simulatePayment(m.id, pay); } }
   return { orderId, token, url };
 }
+
+/** Test-App mit 12 synthetischen Leads (Nagelstudios, ohne/mit Website, teils ohne Telefon). `phone: false` lässt die Telefonakquise gesperrt. */
+export async function seededApp(owner: string, o: { phone?: boolean; n?: number } = {}) {
+  const { SyntheticPlaces, StubCrawler } = await import('../synthetic.ts');
+  const app = await appSetup(owner, { autoDemo: false });
+  const { limits } = await app.repo.getLimits(); await app.repo.saveLimits({ ...limits, maxLeadsPerRun: 1000, maxAuditsPerRun: 1000, maxCrawlPagesPerRun: 20000 });
+  if (o.phone !== false) await enablePhone(app);
+  const live = createProviders({ APP_MODE: 'live' }, { baseUrl: app.base });
+  Object.assign(app.ctx.registry.providers, { places: new SyntheticPlaces({ n: o.n ?? 12, noSiteEvery: 2, noPhoneEvery: 4 }), crawler: new StubCrawler(), directory: live.providers.directory, social: live.providers.social });
+  await app.ctx.runner.start(normalizeCriteria({ location: 'Völklingen', radiusKm: '30', subIndustries: ['nagelstudio'], maxLeads: '50' }, app.ctx.cfg.taxonomy, app.ctx.cfg.pipeline.sizes)); await app.ctx.runner.idle();
+  return app;
+}

@@ -7,6 +7,7 @@ import { moveLead, recordOutcome } from '../db/lead-status.ts';
 import type { Status } from '../core/status.ts';
 import type { TaskStore } from '../db/tasks.ts';
 import { startOfBerlinDay, endOfBerlinDay } from '../core/time.ts';
+import type { TaskEngine } from '../tasks/engine.ts';
 
 export const CALL_RESULTS = ['NO_ANSWER', 'NO_INTEREST', 'CALL_BACK', 'INTERESTED', 'DEMO', 'NEEDS_ANALYSIS', 'PARTNERSHIP', 'MULTIPLE', 'OFFER', 'BOUGHT', 'DO_NOT_CONTACT'] as const;
 export const TOPICS = ['website', 'needs', 'partner'] as const;
@@ -24,8 +25,8 @@ export type CallOutcome = { result: CallResult; moved: Status[]; messages: strin
 /** „Meine heutigen Calls“ und die Pipeline-Logik hinter den Ergebnis-Buttons. Es wird nie automatisch angerufen oder gesendet. */
 const prioRank = (r: any) => ({ A: 3, B: 2, C: 1, D: 0 } as Record<string, number>)[r.effective_priority ?? r.brief?.priority ?? 'D'] ?? 0;
 export class CallService {
-  repo: Repo; leads: LeadStore; sales: SalesStore; docs: SalesDocs; orders: OrderService; now: () => Date; tasks?: TaskStore;
-  constructor(d: { repo: Repo; leads: LeadStore; sales: SalesStore; docs: SalesDocs; orders: OrderService; now?: () => Date; tasks?: TaskStore }) { this.tasks = d.tasks; this.repo = d.repo; this.leads = d.leads; this.sales = d.sales; this.docs = d.docs; this.orders = d.orders; this.now = d.now ?? (() => new Date()); }
+  repo: Repo; leads: LeadStore; sales: SalesStore; docs: SalesDocs; orders: OrderService; now: () => Date; tasks?: TaskStore; engine?: TaskEngine;
+  constructor(d: { repo: Repo; leads: LeadStore; sales: SalesStore; docs: SalesDocs; orders: OrderService; now?: () => Date; tasks?: TaskStore; engine?: TaskEngine }) { this.tasks = d.tasks; this.engine = d.engine; this.repo = d.repo; this.leads = d.leads; this.sales = d.sales; this.docs = d.docs; this.orders = d.orders; this.now = d.now ?? (() => new Date()); }
   private get pool() { return this.repo.pool; }
   private get owner() { return this.repo.ownerId; }
 
@@ -35,13 +36,14 @@ export class CallService {
     const dayStart = startOfBerlinDay(now), dayEnd = endOfBerlinDay(now);
     const settings = await this.repo.getSettings();
     const base = `select l.id, l.company_name, l.city, l.sub_industry, l.status, l.phone, l.website_url, l.website_state, l.distance_km, l.callback_at, l.last_contact_at, l.call_count, l.is_mock, l.contact_reason,
-        o.score, o.category, o.digital_need, (o.dimensions->'dataQuality'->>'value')::float as dq, (o.dimensions->'contactability'->>'value')::float as contactability, l.address, l.source, l.effective_priority, l.website_potential, l.needs_analysis_potential, l.partnership_potential, l.recommended_next_action, l.call_goal, l.interest_topics, l.next_step, sp.brief, sp.opener, sp.approved_at,
+        o.score, o.category, o.digital_need, (o.dimensions->'dataQuality'->>'value')::float as dq, (o.dimensions->'contactability'->>'value')::float as contactability, l.address, l.source, l.effective_priority, l.website_potential, l.needs_analysis_potential, l.partnership_potential, l.recommended_next_action, l.call_goal, l.interest_topics, l.next_step, l.contact_strategy, l.recommended_contact_strategy, l.conversation_strategy, (select content from sales_copilot sc where sc.lead_id = l.id and sc.tier = 'MASS') as copilot, sp.brief, sp.opener, sp.approved_at,
         (select note from contact_history h where h.lead_id = l.id and h.note is not null order by at desc limit 1) as last_note,
         (select result from contact_history h where h.lead_id = l.id and h.channel='PHONE' order by at desc limit 1) as last_result
       from leads l
       left join lateral (select score, category, digital_need, dimensions from opportunities where lead_id = l.id order by created_at desc, id desc limit 1) o on true
       left join lateral (select brief, opener, approved_at from sales_packages where lead_id = l.id order by created_at desc, id desc limit 1) sp on true
-      where l.owner_id = $1 and l.contact_readiness = 'READY_FOR_MANUAL_CALL' and not l.paused and not l.contact_blocked and l.phone is not null`;
+      where l.owner_id = $1 and l.contact_readiness = 'READY_FOR_MANUAL_CALL' and not l.paused and not l.contact_blocked and l.phone is not null
+        and (l.contact_strategy is null or l.contact_strategy in ('CALL','FOLLOW_UP') or (l.contact_strategy = 'CALL_AND_DEMO' and exists (select 1 from demos dm where dm.lead_id = l.id and not dm.revoked)))`;
     const doneToday = (await this.pool.query("select count(*)::int n, count(distinct lead_id)::int leads from contact_history where owner_id=$1 and channel='PHONE' and at >= $2 and at < $3", [this.owner, dayStart, dayEnd])).rows[0];
     const handledIds = new Set((await this.pool.query("select distinct lead_id from contact_history where owner_id=$1 and channel='PHONE' and at >= $2 and at < $3", [this.owner, dayStart, dayEnd])).rows.map((r) => r.lead_id));
     const callbacks = (await this.pool.query(`${base} and l.callback_at < $2 and l.status = any($3) order by l.callback_at`, [this.owner, dayEnd, PRE_SALE])).rows;
@@ -140,6 +142,9 @@ export class CallService {
       }
       case 'DO_NOT_CONTACT': await this.leads.markDoNotContact(leadId, o.note || 'Wunsch im Telefonat', 'user'); out.moved.push('IGNORED' as Status); out.messages.push('Auf die Sperrliste gesetzt.'); break;
     }
+    // Folgeaufgaben (nur Aufgaben für Kai – es wird nichts gesendet oder erstellt)
+    const fu = await this.engine?.applyCallResult(leadId, result, { callbackAt: o.callbackAt, topics, nextStep: o.nextStep });
+    if (fu?.created.length) out.messages.push(`Folgeaufgabe angelegt: ${fu.created.length} (siehe Aufgaben).`);
     return out;
   }
 }

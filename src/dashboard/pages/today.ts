@@ -3,6 +3,7 @@ import { html, categoryBadge, prioBadge } from '../ui.ts';
 import { render } from './_page.ts';
 import { nextActionText } from './lead-parts.ts';
 import { NA } from '../../core/enrichment.ts';
+import { taskList } from './tasks.ts';
 import { NEXT_ACTION_LABEL, POTENTIAL_LABEL, type NextAction, type Potential } from '../../sales/copilot.ts';
 
 const VIEWS: { key: string; title: string; hint: string }[] = [
@@ -18,8 +19,10 @@ const VIEWS: { key: string; title: string; hint: string }[] = [
 
 export const routes: Route[] = [{
   method: 'GET', path: /^\/today$/, h: async (r) => {
+    const tg = await r.ctx.taskEngine.groups();
     const data = await Promise.all(VIEWS.map(async (v) => ({ v, res: await r.ctx.leads.list({ quick: v.key, limit: 8 }) })));
     return render(r, { title: 'Heute', nav: 'today', body: html`
+      <div class="card" id="aufgaben"><div class="row"><h2 class="grow">Aufgaben</h2><a class="btn" href="/tasks">Alle Aufgaben</a></div><b>Überfällig (${tg.OVERDUE.length})</b>${taskList(tg.OVERDUE, r.app.csrf, { empty: 'Nichts überfällig.', back: '/today' })}<b>Heute (${tg.TODAY.length})</b>${taskList(tg.TODAY, r.app.csrf, { empty: 'Heute nichts fällig.', back: '/today' })}</div>
       <div class="grid">${data.map(({ v, res }) => html`<a class="kpi" href="#${v.key}" style="text-decoration:none;color:inherit"><b>${res.total}</b><span>${v.title}</span></a>`)}</div>
       ${data.map(({ v, res }) => html`<div class="card" id="${v.key}"><div class="row"><h2 class="grow">${v.title} <small class="mute">(${res.total})</small></h2><a class="btn" href="/leads?quick=${v.key}">Alle anzeigen</a></div><p class="mute">${v.hint}</p>
         ${res.rows.length ? html`<ul class="items">${res.rows.map((l) => html`<li><div class="row">${prioBadge(l.priority)}<a class="grow" href="/leads/${l.id}"><b>${l.company_name}</b><br><small>${l.city ?? NA} · ${l.sub_industry ?? l.industry ?? NA}</small></a>

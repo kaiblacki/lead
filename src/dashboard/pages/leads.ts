@@ -4,7 +4,9 @@ import { html, raw, categoryBadge, mockBadge, prioBadge, readinessBadge, statusB
 import { render, redirect, okFlash, uuid } from './_page.ts';
 import { enrichment, orNA, NA, sourceLabel } from '../../core/enrichment.ts';
 import * as P from './lead-parts.ts';
-import { copilotCard, potentialBadges } from './copilot.ts';
+import { copilotCard, partnerLeadCard, potentialBadges, strategyCard } from './copilot.ts';
+import { buildEmailDraft } from '../../sales/email-draft.ts';
+import { taskList } from './tasks.ts';
 import { STATUSES, type Status } from '../../core/status.ts';
 import { CALL_RESULTS, type CallResult } from '../../calls/service.ts';
 import { reanalyzeLead } from '../../search/reanalyze.ts';
@@ -71,12 +73,15 @@ export const routes: Route[] = [
     // Verkaufsassistent: für interessante Leads automatisch (regelbasiert, kostenlos, gecacht über den Hash der Eingabe)
     await ctx.copilot.ensure(leadId, { onlyIfEligible: true });
     const cop = await ctx.copilot.stored(leadId);
+    const [partnerRow, partnerMatches, leadRefs, leadTasks] = await Promise.all([ctx.partners.forLead(leadId), ctx.partners.matchesForLead(leadId), ctx.partners.referrals({ leadId }), ctx.taskEngine.forLead(leadId)]);
+    const effStrategy = d.lead.contact_strategy ?? cop.mass?.contactStrategy.code;
+    const emailDraft = cop.mass && (effStrategy === 'EMAIL_DRAFT' || d.lead.recommended_contact_strategy === 'EMAIL_DRAFT') ? buildEmailDraft(cop.mass, { company: d.lead.company_name, city: d.lead.city, subLabel: ctx.cfg.taxonomy.sub(d.lead.sub_industry)?.label, contactPerson, callerName: sender, demoUrl }) : null;
     const en = enrichment(d.lead);
     const hints = [d.lead.priority_reason, en.needed ? `${en.label}: ${en.missing.join(', ')}` : '', analysis?.recommended_contact_angle ? `Empfohlener Ansatz: ${analysis.recommended_contact_angle}` : '',
       ...((analysis?.manual_checks ?? []) as string[]).slice(0, 4).map((m) => `Manuell prüfen: ${m}`), ...d.factsT.filter((f: any) => f.key === 'websiteCandidate').map((f: any) => `Mögliche Website (ungeprüft): ${f.value} – ${f.note ?? ''}`),
       dupes.length ? `${dupes.length} mögliche Dublette(n) – bitte prüfen.` : ''].filter(Boolean) as string[];
     return render(r, { title: d.lead.company_name, nav: 'leads', body: html`
-      ${P.header(d, r.app.csrf)}${copilotCard(d, cop, { csrf: r.app.csrf, leadId, eligible: ctx.copilot.isEligible({ ...d.lead, opportunity: d.opportunity?.score ?? null }), aiAvailable: !ctx.registry.providers.ai.isMock })}${P.duplicatesCard(dupes, { csrf: r.app.csrf, leadId })}${P.profile(d)}${P.priorityCard(d, { csrf: r.app.csrf, leadId })}${P.enrichmentCard(d, { csrf: r.app.csrf, leadId, facts: d.factsT, budgetLeftCents: Math.min(bstat.monthLeftCents, bstat.todayLeftCents), available: ctx.enrichment.available, log: elog })}${P.analysisCard(d, analysis, { csrf: r.app.csrf, leadId, costs, demoLive: !!liveDemo })}${P.demoDecision(d, { csrf: r.app.csrf, leadId, hasDemo: !!liveDemo, approval })}${P.modulesCard(d, { csrf: r.app.csrf, leadId, v: modView })}${P.phoneView(d, analysis, { sender, demoUrl, contactPerson, csrf: r.app.csrf, leadId })}
+      ${P.header(d, r.app.csrf)}${strategyCard(d, cop.mass, { csrf: r.app.csrf, leadId, draft: emailDraft, hasEmail, emailStatus: ctx.contact.effective(d.lead) })}${html`<div class="card" id="aufgaben"><div class="row"><h2 class="grow" style="margin:0">Aufgaben</h2><a class="btn" href="/tasks?lead=${leadId}">Aufgabe anlegen</a></div>${taskList(leadTasks, r.app.csrf, { empty: 'Keine offenen Aufgaben zu diesem Lead.', back: `/leads/${leadId}#aufgaben` })}</div>`}${partnerLeadCard(d, { csrf: r.app.csrf, leadId, partner: partnerRow, matches: partnerMatches, referrals: leadRefs, talk: cop.mass?.partnerTalk ?? null })}${copilotCard(d, cop, { csrf: r.app.csrf, leadId, eligible: ctx.copilot.isEligible({ ...d.lead, opportunity: d.opportunity?.score ?? null }), aiAvailable: !ctx.registry.providers.ai.isMock })}${P.duplicatesCard(dupes, { csrf: r.app.csrf, leadId })}${P.profile(d)}${P.priorityCard(d, { csrf: r.app.csrf, leadId })}${P.enrichmentCard(d, { csrf: r.app.csrf, leadId, facts: d.factsT, budgetLeftCents: Math.min(bstat.monthLeftCents, bstat.todayLeftCents), available: ctx.enrichment.available, log: elog })}${P.analysisCard(d, analysis, { csrf: r.app.csrf, leadId, costs, demoLive: !!liveDemo })}${P.demoDecision(d, { csrf: r.app.csrf, leadId, hasDemo: !!liveDemo, approval })}${P.modulesCard(d, { csrf: r.app.csrf, leadId, v: modView })}${P.phoneView(d, analysis, { sender, demoUrl, contactPerson, csrf: r.app.csrf, leadId })}
       ${P.contact(d, r.app.csrf, leadId, settings, r.app.mock)}${P.templatesCard(d, { sender: settings.callerName || ctx.cfg.agency.callerName || undefined, demoUrl, csrf: r.app.csrf, leadId, emailStatus: ctx.contact.effective(d.lead), hasEmail })}${P.notesCard(d, note, { csrf: r.app.csrf, leadId, hints })}${P.costsCard(costs)}
       ${P.why(d)}${P.sales(d, r.app.csrf, leadId)}${P.statusCard(d, r.app.csrf, leadId)}${P.docs(d, r.app.csrf, leadId, { demos, offer, order, templates: allTemplates().map((t) => ({ key: t.key, label: t.label })), recommended: rec, baseUrl: r.app.baseUrl })}
       ${P.dimensions(d)}${P.audit(d)}
@@ -132,6 +137,18 @@ export const routes: Route[] = [
     await r.ctx.pipeline.setManualPriority(r.params[0], (v || null) as never);
     await r.ctx.copilot.ensure(r.params[0], { onlyIfEligible: true });
     return back(r.params[0], v ? `Priorität manuell auf ${v} gesetzt.` : 'Automatische Priorität gilt wieder.', '#prioritaet');
+  } },
+  { method: 'POST', path: new RegExp(`^/leads/${id}/strategy$`), h: async (r) => {
+    const v = r.form.get('strategy') ?? ''; try { await r.ctx.copilot.setContactStrategy(r.params[0], v === '' ? null : v); } catch (e) { throw new UserError(e instanceof Error ? e.message : String(e)); }
+    return back(r.params[0], v ? `Kontaktstrategie gesetzt. Es wurde nichts gesendet oder erstellt.` : 'Empfehlung des Systems gilt wieder.', '#kontaktstrategie');
+  } },
+  { method: 'POST', path: new RegExp(`^/leads/${id}/partner/candidate$`), h: async (r) => {
+    try { await r.ctx.partners.fromLead(r.params[0]); } catch (e) { throw new UserError(e instanceof Error ? e.message : String(e)); }
+    await r.ctx.copilot.ensure(r.params[0], { force: true }); return back(r.params[0], 'Als Partner-Kandidat vorgemerkt.', '#partner');
+  } },
+  { method: 'POST', path: new RegExp(`^/leads/${id}/referral$`), h: async (r) => {
+    let refId: string; try { refId = await r.ctx.partners.proposeOutgoing(r.params[0], r.form.get('partner') ?? ''); } catch (e) { throw new UserError(e instanceof Error ? e.message : String(e)); }
+    return redirect(`/referrals/${refId}`);
   } },
   { method: 'POST', path: new RegExp(`^/leads/${id}/copilot$`), h: async (r) => {
     if (!(await r.ctx.leads.rowToEntry(r.params[0]))) throw new UserError('Lead nicht gefunden.');

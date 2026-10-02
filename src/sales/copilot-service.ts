@@ -3,7 +3,7 @@ import type { Repo } from '../db/repo.ts';
 import type { LeadStore } from '../db/leads.ts';
 import type { AppConfig } from '../core/config.ts';
 import type { AiRequest, AiResponse } from '../providers/types.ts';
-import { buildCopilot, copilotViolation, type Copilot, type CopilotInput } from './copilot.ts';
+import { CONTACT_STRATEGIES, buildCopilot, copilotViolation, type Copilot, type CopilotInput } from './copilot.ts';
 import { effectiveModules, moduleDefs } from '../site/modules.ts';
 import { sourceLabel } from '../core/enrichment.ts';
 
@@ -34,7 +34,7 @@ export class CopilotService {
   async input(leadId: string): Promise<{ input: CopilotInput; row: any; opportunity: number | null } | null> {
     const l = await this.leads.rowToEntry(leadId); if (!l) return null;
     const q = (sql: string, p: unknown[] = [leadId, this.owner]) => this.pool.query(sql, p).then((r) => r.rows);
-    const [facts, opp, audit, demos, note, call, ana] = await Promise.all([
+    const [facts, opp, audit, demos, note, call, ana, partner] = await Promise.all([
       this.leads.factsOf(leadId),
       q('select score from opportunities where lead_id=$1 and owner_id=$2 order by created_at desc, id desc limit 1'),
       q('select id, status, overall_quality from audits where lead_id=$1 and owner_id=$2 order by created_at desc, id desc limit 1'),
@@ -42,6 +42,7 @@ export class CopilotService {
       q('select body from lead_notes where lead_id=$1 and owner_id=$2'),
       q("select result, note, callback_at, at from contact_history where lead_id=$1 and owner_id=$2 and channel='PHONE' order by at desc limit 1"),
       q('select manual_checks from lead_analysis where lead_id=$1 and owner_id=$2 order by created_at desc, id desc limit 1'),
+      q('select status from partners where lead_id=$1 and owner_id=$2'),
     ]);
     const findings = audit[0] ? await q('select code, severity, summary, evidence from findings where audit_id=$1 and owner_id=$2', [audit[0].id, this.owner]) : [];
     const sub = this.cfg.taxonomy.sub(l.sub_industry); const ind = this.cfg.taxonomy.industry(sub?.industryKey ?? l.industry);
@@ -64,6 +65,7 @@ export class CopilotService {
       demo: { exists: demos.length > 0, modules: mods.map((k) => ({ key: k, label: defs[k].label, demoLabel: defs[k].demo })), familyLabel: l.demo_family ? this.cfg.pipeline.demo.families[l.demo_family]?.label ?? null : null },
       demoRecommended: l.demo_recommendation === 'DEMO_RECOMMENDED' && l.demo_decision !== 'skipped',
       recommendedModules: rec.filter((k) => defs[k]).map((k) => ({ key: k, label: defs[k].label })),
+      partnerStatus: partner[0]?.status ?? null, contactStrategyManual: l.contact_strategy ?? null,
       manualChecks: (ana[0]?.manual_checks as string[] | undefined) ?? [], interestTopics: l.interest_topics ?? [], callCount: l.call_count ?? 0,
       lastCall: call[0] ? { result: call[0].result, note: call[0].note, callbackAt: call[0].callback_at ? new Date(call[0].callback_at).toLocaleString('de-DE', { timeZone: 'Europe/Berlin' }) : null, at: new Date(call[0].at).toISOString() } : null,
       note: note[0]?.body ?? null, callerName: settings.callerName || this.cfg.agency.callerName || this.cfg.agency.ownerName || 'Ihr Ansprechpartner',
@@ -85,8 +87,8 @@ export class CopilotService {
     await this.pool.query(`insert into sales_copilot(owner_id, lead_id, tier, input_hash, content, cost_cents) values ($1,$2,'MASS',$3,$4,0)
       on conflict (lead_id, tier) do update set input_hash=$3, content=$4, created_at=now()`, [this.owner, leadId, hash, JSON.stringify(c)]);
     // nur Kennzahlen/Anzeige-Spalten – Priorität, manuelle Entscheidungen, Module und Notizen bleiben unberührt
-    await this.pool.query('update leads set website_potential=$3, needs_analysis_potential=$4, partnership_potential=$5, recommended_next_action=$6, call_goal=$7 where id=$1 and owner_id=$2',
-      [leadId, this.owner, c.website.potential, c.needsAnalysis.potential, c.partnership.potential, c.nextAction.code, c.goal.text]);
+    await this.pool.query('update leads set website_potential=$3, needs_analysis_potential=$4, partnership_potential=$5, recommended_next_action=$6, call_goal=$7, recommended_contact_strategy=$8, conversation_strategy=$9 where id=$1 and owner_id=$2',
+      [leadId, this.owner, c.website.potential, c.needsAnalysis.potential, c.partnership.potential, c.nextAction.code, c.goal.text, c.contactStrategy.code, c.strategy.main]);
     return { copilot: c, cached: false };
   }
 
@@ -95,6 +97,15 @@ export class CopilotService {
     const ids = (await this.pool.query("select lead_id from sales_copilot where owner_id=$1 and tier='MASS'", [this.owner])).rows.map((r) => r.lead_id as string);
     let n = 0; for (const id of ids) { const r = await this.ensure(id); if (r && !r.cached) n++; }
     return n;
+  }
+
+  /** Kontaktstrategie: Das System empfiehlt, Kai entscheidet (null = Empfehlung gilt wieder). Nichts wird dadurch gesendet oder erstellt. */
+  async setContactStrategy(leadId: string, code: string | null) {
+    if (code !== null && !(CONTACT_STRATEGIES as readonly string[]).includes(code)) throw new Error('Unbekannte Kontaktstrategie.');
+    const r = await this.pool.query('update leads set contact_strategy=$3, contact_strategy_set_at = case when $3::text is null then null else now() end where id=$1 and owner_id=$2', [leadId, this.owner, code]);
+    if (!r.rowCount) throw new Error('Lead nicht gefunden');
+    await this.repo.event(this.pool, leadId, 'contact_strategy_set', { strategy: code, actor: 'user' });
+    await this.ensure(leadId, { force: true });
   }
 
   async stored(leadId: string): Promise<StoredCopilot> {

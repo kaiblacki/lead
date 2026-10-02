@@ -5,7 +5,7 @@ import { CALL_LABEL, CALL_RESULTS } from '../../calls/service.ts';
 import { LEGAL } from '../../contact/strategy.ts';
 import { webStateText } from './lead-parts.ts';
 import { callExtras, potentialBadges } from './copilot.ts';
-import { NEXT_ACTION_LABEL, type NextAction } from '../../sales/copilot.ts';
+import { NEXT_ACTION_LABEL, STRATEGY_LABEL, CONTACT_STRATEGY_LABEL, type NextAction, type Strategy, type ContactStrategy } from '../../sales/copilot.ts';
 import { NA, orNA, sourceLabel } from '../../core/enrichment.ts';
 
 const KIND: Record<string, [string, string]> = { demo_ready: ['b-ok', 'Demo fertig – anrufen'], callback: ['b-warn', 'Rückruf fällig'], new: ['b-info', 'Neu'], follow_up: ['b-ok', 'Nachfassen'] };
@@ -28,10 +28,16 @@ export const routes: Route[] = [{
             <dl class="facts"><dt>Website</dt><dd>${it.website_url ? html`<code>${it.website_url}</code>` : NA}</dd><dt>Adresse</dt><dd>${orNA(it.address)}</dd><dt>Quelle</dt><dd>${sourceLabel(it.source)}</dd><dt>Datenqualität</dt><dd>${it.dq !== null && it.dq !== undefined ? `${Math.round(it.dq)}/100` : NA}</dd>
               <dt>Empfohlene Leistung</dt><dd>${b?.service?.name ?? NA}</dd><dt>Opportunity Score</dt><dd>${it.score ?? NA}</dd></dl>
             ${it.contact_reason ? html`<p><small class="mute">${it.contact_reason}</small></p>` : ''}
+            ${it.conversation_strategy ? html`<p><b>Hauptstrategie:</b> ${STRATEGY_LABEL[it.conversation_strategy as Strategy] ?? it.conversation_strategy}${it.contact_strategy ? html` · Kontaktstrategie: <span class="badge b-info">${CONTACT_STRATEGY_LABEL[it.contact_strategy as ContactStrategy]}</span>` : ''}</p>` : ''}
             ${potentialBadges(it)}<p>${it.call_goal ? html`<b>Gesprächsziel:</b> ${it.call_goal}${it.recommended_next_action ? html` · <span class="badge b-info">${NEXT_ACTION_LABEL[it.recommended_next_action as NextAction] ?? it.recommended_next_action}</span>` : ''} ` : ''}<a href="/leads/${it.id}#verkaufsassistent">Verkaufsassistent öffnen</a></p>
             <div><b>Die wichtigsten Verkaufsgründe</b><ol>${(b?.reasons ?? []).slice(0, 3).map((x: any) => html`<li>${x.text}</li>`)}</ol></div>
             ${b ? html`<div class="note"><b>Gesprächseinstieg</b><br>${it.opener ?? b.opener}</div>
               <p><small>Schätzung möglicher Auftragswert: ${eur(b.valueRange.lowCents)} – ${eur(b.valueRange.highCents)} (unverbindlich)</small></p>
+              ${it.copilot ? html`<details><summary>Websiteargumente · Partnerargument · Bedarfsanalyse-Fragen</summary>
+                <b>Websiteargumente</b><ul>${(it.copilot.arguments ?? []).slice(0, 3).map((a: any) => html`<li>${a.claim}<br><small class="mute">Beleg: ${a.evidence}</small></li>`)}</ul>
+                ${it.copilot.partnerTalk ? html`<b>Partnerargument</b><p>${it.copilot.partnerTalk.intro}</p>` : ''}
+                <b>Bedarfsanalyse-Fragen (nur vorbereiten)</b><ul>${(it.copilot.needsAnalysis?.questions ?? []).map((q: string) => html`<li>${q}</li>`)}</ul>
+                <p><b>Ziel:</b> ${it.copilot.goal?.text}</p></details>` : ''}
               <details><summary>Mögliche Einwände</summary><ul>${b.objections.map((o: any) => html`<li><b>${o.objection}</b><br>${o.response}</li>`)}</ul></details>` : ''}
             ${it.last_note ? html`<p class="mute"><small>Letzte Notiz: ${it.last_note}${it.last_result ? ` (${CALL_LABEL[it.last_result as keyof typeof CALL_LABEL] ?? it.last_result})` : ''}</small></p>` : ''}
             ${postForm(r.app.csrf, `/leads/${it.id}/call`, html`<input type="hidden" name="next" value="calls">

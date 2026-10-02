@@ -14,6 +14,14 @@ export const NEXT_ACTION_LABEL: Record<NextAction, string> = { CALL: 'Anrufen', 
 export const POTENTIAL_LABEL: Record<Potential, string> = { HIGH: 'HOCH', MEDIUM: 'MITTEL', LOW: 'NIEDRIG', UNKNOWN: 'NICHT GENUG DATEN' };
 export const NEEDS_LABEL: Record<Potential, string> = { HIGH: 'INTERESSANT', MEDIUM: 'SPÄTER', LOW: 'SPÄTER', UNKNOWN: 'NICHT GENUG DATEN' };
 
+export const STRATEGIES = ['WEBSITE_FIRST', 'PARTNER_FIRST', 'NEEDS_ANALYSIS_FIRST', 'WEBSITE_AND_PARTNER', 'GENERAL_DISCOVERY', 'FOLLOW_UP', 'NO_ACTION'] as const;
+export type Strategy = (typeof STRATEGIES)[number];
+export const STRATEGY_LABEL: Record<Strategy, string> = { WEBSITE_FIRST: 'Website zuerst', PARTNER_FIRST: 'Partnerschaft zuerst', NEEDS_ANALYSIS_FIRST: 'Bedarfsanalyse zuerst', WEBSITE_AND_PARTNER: 'Website und Partnerschaft', GENERAL_DISCOVERY: 'Allgemeines Kennenlernen', FOLLOW_UP: 'Nachfassen', NO_ACTION: 'Keine Aktion' };
+export const CONTACT_STRATEGIES = ['CALL', 'EMAIL_DRAFT', 'DEMO_FIRST', 'CALL_AND_DEMO', 'FOLLOW_UP', 'MANUAL_RESEARCH', 'NO_CONTACT'] as const;
+export type ContactStrategy = (typeof CONTACT_STRATEGIES)[number];
+export const CONTACT_STRATEGY_LABEL: Record<ContactStrategy, string> = { CALL: 'Anrufen', EMAIL_DRAFT: 'E-Mail-Entwurf', DEMO_FIRST: 'Erst Demo', CALL_AND_DEMO: 'Anruf + Demo', FOLLOW_UP: 'Nachfassen', MANUAL_RESEARCH: 'Manuell recherchieren', NO_CONTACT: 'Kein Kontakt' };
+export const CONTACT_STRATEGY_HELP: Record<ContactStrategy, string> = { CALL: 'Der Lead kommt in „Heute anrufen“.', EMAIL_DRAFT: 'Es wird ein E-Mail-Entwurf vorbereitet – nichts wird gesendet.', DEMO_FIRST: 'Erst eine Demo erstellen (nach deiner Bestätigung), dann zulässig Kontakt aufnehmen.', CALL_AND_DEMO: 'Demo vorbereiten, danach anrufen.', FOLLOW_UP: 'Nachfassen nach bisherigem Kontakt.', MANUAL_RESEARCH: 'Erst Daten beschaffen bzw. Voraussetzungen klären.', NO_CONTACT: 'Keine Kontaktaufnahme.' };
+
 export type CheckInput = { code: string; status: string; severity: string; summary: string; evidence: string };
 export type CallInput = { result: string; note?: string | null; callbackAt?: string | null; at?: string };
 export type CopilotInput = {
@@ -24,6 +32,7 @@ export type CopilotInput = {
   reviewCount?: number | null; rating?: number | null; employeeBucket?: string | null; isChain?: boolean; closed?: boolean; address?: string | null; source?: string | null;
   demo: { exists: boolean; modules: { key: string; label: string; demoLabel?: string }[]; familyLabel?: string | null }; demoRecommended: boolean;
   recommendedModules: { key: string; label: string }[];
+  partnerStatus?: string | null; contactStrategyManual?: string | null;
   manualChecks: string[]; interestTopics: string[]; callCount: number; lastCall?: CallInput | null; note?: string | null; callerName: string;
 };
 
@@ -45,6 +54,11 @@ export type Copilot = {
   nextAction: { code: NextAction; label: string; reason: string };
   uncertain: string[];
   facts: string[];
+  /** BESTE GESPRÄCHSSTRATEGIE: immer genau eine Hauptstrategie, danach mögliche Nebenthemen (Website / Bedarfsanalyse / Partnerschaft bleiben getrennt). */
+  strategy: { main: Strategy; label: string; reason: string; secondary: { topic: 'WEBSITE' | 'BEDARFSANALYSE' | 'PARTNERSCHAFT'; text: string }[] };
+  /** Empfehlung des Systems; Kai entscheidet (Lead-Spalte contact_strategy). */
+  contactStrategy: { code: ContactStrategy; label: string; reason: string };
+  partnerTalk: { intro: string; questions: string[]; note: string; status: string } | null;
 };
 
 const FORBIDDEN = /(?:^|\W)(?:rabatt|prämie|police|haftpflicht|berufsunf|rechtsschutz|hausrat|abschluss(?:geschenk)?)(?:\W|$)/i;
@@ -228,6 +242,40 @@ export function buildCopilot(i: CopilotInput, cfg: any): Copilot {
   const mainTopic = goalCode.startsWith('NEEDS') ? 'Bedarfsanalyse' : goalCode.startsWith('PARTNER') ? 'Kooperation' : 'Website';
   const flow = (C.flow as string[]).map((s) => s.replace('{reason}', reasonShort).replace('{question}', questions.online[0] ?? questions.company[0]).replace('{topic}', mainTopic).replace('{goal}', C.goals[goalCode]));
 
+  // ---------- Gesprächsstrategie (eine Hauptstrategie) + Kontaktstrategie-Empfehlung ----------
+  const followUpResult = !!last && ['CALL_BACK', 'NO_ANSWER'].includes(last.result);
+  let main: Strategy; let sReason: string;
+  if (blocked || last?.result === 'NO_INTEREST') { main = 'NO_ACTION'; sReason = blocked ? 'Lead ist gesperrt.' : 'Im Gespräch wurde kein Interesse geäußert.'; }
+  else if (followUpResult) { main = 'FOLLOW_UP'; sReason = last!.result === 'CALL_BACK' ? 'Rückruf vereinbart – dort anknüpfen.' : 'Nicht erreicht – erneut versuchen und anknüpfen.'; }
+  else if (last?.result === 'NEEDS_ANALYSIS' || (topics.has('needs') && !topics.has('website') && !topics.has('partner'))) { main = 'NEEDS_ANALYSIS_FIRST'; sReason = 'Im Gespräch wurde Interesse an einer Bedarfsanalyse geäußert (eigenes Thema, getrennter Termin).'; }
+  else if (last?.result === 'PARTNERSHIP' || (topics.has('partner') && !topics.has('website'))) { main = 'PARTNER_FIRST'; sReason = 'Im Gespräch wurde Interesse an einer Kooperation geäußert.'; }
+  else if ((topics.has('website') && topics.has('partner')) || (wp === 'HIGH' && pp === 'HIGH')) { main = 'WEBSITE_AND_PARTNER'; sReason = 'Website- und Partnerpotenzial sind beide hoch – zwei getrennte Themen, Website führt das Gespräch.'; }
+  else if (wp === 'HIGH' || wp === 'MEDIUM') { main = 'WEBSITE_FIRST'; sReason = `Website-Potenzial ${POTENTIAL_LABEL[wp]}: ${wReason}`; }
+  else if (pp === 'HIGH') { main = 'PARTNER_FIRST'; sReason = 'Kaum Websitebedarf, aber hohes Partnerpotenzial.'; }
+  else { main = 'GENERAL_DISCOVERY'; sReason = 'Keine klare Hauptchance in den Daten – erst kennenlernen.'; }
+  const mkSecondary = (): Copilot['strategy']['secondary'] => {
+    const out: Copilot['strategy']['secondary'] = [];
+    const websiteMain = main === 'WEBSITE_FIRST' || main === 'WEBSITE_AND_PARTNER', partnerMain = main === 'PARTNER_FIRST' || main === 'WEBSITE_AND_PARTNER', needsMain = main === 'NEEDS_ANALYSIS_FIRST';
+    if (main === 'NO_ACTION') return out;
+    if (!websiteMain && (wp === 'HIGH' || wp === 'MEDIUM')) out.push({ topic: 'WEBSITE', text: 'Nur ansprechen, wenn das Gespräch es hergibt.' });
+    if (!partnerMain && (pp === 'HIGH' || pp === 'MEDIUM')) out.push({ topic: 'PARTNERSCHAFT', text: 'Kooperationsfrage am Ende stellen, ohne Druck.' });
+    if (!needsMain && np === 'HIGH') out.push({ topic: 'BEDARFSANALYSE', text: 'Nur auf Wunsch – eigener Termin, nicht im selben Atemzug.' });
+    return out;
+  };
+  const hasEmailOnly = !i.hasPhone && i.hasEmail;
+  let csCode: ContactStrategy; let csReason: string;
+  if (blocked || last?.result === 'NO_INTEREST') { csCode = 'NO_CONTACT'; csReason = blocked ? 'Lead ist gesperrt (Do not contact).' : 'Kein Interesse laut Gespräch.'; }
+  else if (dataNeeded || phoneGate || (!i.hasPhone && !i.hasEmail)) { csCode = 'MANUAL_RESEARCH'; csReason = dataNeeded ? 'Weder Telefonnummer noch E-Mail bekannt.' : phoneGate ? 'Telefonakquise ist noch nicht aktiviert.' : 'Kein Kontaktweg bekannt.'; }
+  else if (last) { csCode = 'FOLLOW_UP'; csReason = 'Es gab bereits Kontakt – nachfassen.'; }
+  else if (hasEmailOnly && wp === 'HIGH' && i.demoRecommended && !i.demo.exists) { csCode = 'DEMO_FIRST'; csReason = 'Nur E-Mail bekannt: erst Demo vorbereiten, dann zulässig Kontakt aufnehmen.'; }
+  else if (hasEmailOnly || (hasSiteData && wp === 'MEDIUM' && ['C', 'D'].includes(i.priority ?? '') && i.hasEmail)) { csCode = 'EMAIL_DRAFT'; csReason = hasEmailOnly ? 'Nur E-Mail bekannt – Entwurf vorbereiten; Versand nur mit Einwilligung/Freigabe.' : 'Bestehende Website mit kleinen Verbesserungen, weniger dringend – E-Mail-Entwurf passt.'; }
+  else if (i.hasPhone && wp === 'HIGH' && i.demoRecommended && !i.demo.exists) { csCode = 'CALL_AND_DEMO'; csReason = 'Demo vorbereiten (nach deiner Bestätigung), danach anrufen.'; }
+  else { csCode = 'CALL'; csReason = i.demo.exists ? 'Demo liegt vor – anrufen und zeigen.' : 'Telefonnummer vorhanden.'; }
+  const pStatus = i.partnerStatus ?? 'NONE';
+  const partnerRelevant = pp === 'HIGH' || pp === 'MEDIUM' || ['PARTNER_CANDIDATE', 'PARTNER_DISCUSSION', 'PARTNER_APPROVED', 'ACTIVE_PARTNER'].includes(pStatus);
+  const partnerTalk: Copilot['partnerTalk'] = partnerRelevant && !blocked ? { status: pStatus,
+    intro: pStatus === 'ACTIVE_PARTNER' ? C.partnerTalk.introActive : C.partnerTalk.intro, questions: C.partnerTalk.questions as string[], note: C.partnerTalk.note } : null;
+
   const objections = (C.objections as any[]).map((o) => ({ key: o.key, objection: o.objection, answer: o.answer ?? (noSite ? o.answerNoSite : o.answerHasSite) }));
 
   return {
@@ -239,6 +287,8 @@ export function buildCopilot(i: CopilotInput, cfg: any): Copilot {
     partnership: { potential: pp, label: POTENTIAL_LABEL[pp], reason: pReason, customerGroups: profile.customerGroups, referral: profile.referral, question: profile.partnerQuestion, note: 'Eigenständiges Thema – nicht an Website oder Absicherung gekoppelt.' },
     questions, arguments: args, demoPitch, objections, goal, flow,
     nextAction: { code: na, label: NEXT_ACTION_LABEL[na], reason: naReason }, uncertain: [...new Set(uncertain)], facts,
+    strategy: { main, label: STRATEGY_LABEL[main], reason: sReason, secondary: mkSecondary() },
+    contactStrategy: { code: csCode, label: CONTACT_STRATEGY_LABEL[csCode], reason: csReason }, partnerTalk,
   };
 }
 
