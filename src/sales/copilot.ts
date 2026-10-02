@@ -102,11 +102,11 @@ export function buildCopilot(i: CopilotInput, cfg: any): Copilot {
   }
   if (!i.hasWhatsapp && (noSite || failing('WHATSAPP'))) addArg({ ...argFrom(C.moduleWhy.whatsapp), evidence: 'In den Daten ist kein WhatsApp-Kontakt hinterlegt.', basis: 'Datenlage' });
   if (noSite && !i.hasContactForm) {
-    const key = i.bookingIndustry ? 'booking' : 'quote';
-    if (C.moduleWhy[key] && args.length < 4) addArg({ ...argFrom(C.moduleWhy[key]), evidence: `Ohne eigene Website gibt es keinen Anfrageweg online (nur Telefon${i.hasEmail ? ' und E-Mail' : ''} bekannt).`, basis: 'Datenlage' });
+    const key = labelOf.has('reservation') ? 'reservation' : i.bookingIndustry ? 'booking' : 'quote';
+    if (C.moduleWhy[key] && args.length < 4) addArg({ ...argFrom(C.moduleWhy[key]), evidence: `Ohne eigene Website ist online kein Anfrageweg bekannt (nur Telefon${i.hasEmail ? ' und E-Mail' : ''} in den Daten).`, basis: 'Datenlage' });
   }
   if ((i.reviewCount ?? 0) >= 10) addArg({ claim: 'Der Betrieb scheint bei Kunden bekannt zu sein – eine gute Website könnte das sichtbar machen.', evidence: `${i.reviewCount} Bewertungen laut Quelle${i.rating ? ` (Ø ${String(i.rating).replace('.', ',')})` : ''}.`, benefit: 'Interessenten, die sich vorab informieren, sehen den Betrieb in gutem Licht.', basis: 'Datenlage' });
-  if (noSite && (labelOf.has('gallery') || labelOf.has('services'))) { const k = labelOf.has('gallery') ? 'gallery' : 'services'; addArg({ ...argFrom(C.moduleWhy[k]), evidence: `Für ${branch} üblich – ohne eigene Website gibt es keinen Ort dafür (Branchenwissen, kein Befund zum Betrieb).`, basis: 'Branche' }); }
+  if (noSite && (labelOf.has('gallery') || labelOf.has('services'))) { const k = labelOf.has('gallery') ? 'gallery' : 'services'; addArg({ ...argFrom(C.moduleWhy[k]), evidence: `Für ${branch} üblich – ohne eigene Website ist online kein Ort dafür bekannt (Branchenwissen, kein Befund zum Betrieb).`, basis: 'Branche' }); }
   const modules = i.recommendedModules.slice(0, 6).map((m) => ({ key: m.key, label: m.label, claim: C.moduleWhy[m.key]?.claim ?? '', basis: noSite || failing(({ contact_form: 'CONTACT_FORM', whatsapp: 'WHATSAPP', booking: 'RESERVATION', gallery: 'GALLERY', menu: 'MENU', map: 'MAPS', quote: 'QUOTE_REQUEST' } as Record<string, string>)[m.key] ?? '') ? 'Datenlage/Prüfbefund' : 'Branchenüblich' }));
 
   const improvements = [...new Set(problems.slice(0, 4).map((p) => C.checkArguments[p.code]?.claim ?? p.summary))];

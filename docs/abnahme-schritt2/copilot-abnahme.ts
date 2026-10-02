@@ -11,11 +11,16 @@ const p = await ctx.newPage(); const go = (u: string) => p.goto(B + u); const tx
 const q = async (sql: string, a: unknown[] = []) => (await pool.query(sql, a)).rows;
 try {
   // 1. echter Suchlauf in zwei neuen Branchen (Handwerk, Gastro) – der Verkaufsassistent entsteht automatisch
-  await go('/'); await p.locator('#neue-suche input[name=location]').fill('Saarbrücken'); await p.locator('#neue-suche input[name=radiusKm]').fill('3');
-  await p.locator('#neue-suche select[name=sub]').selectOption(['elektriker', 'restaurant']); await p.getByRole('button', { name: 'Leads suchen' }).click(); await p.waitForLoadState();
-  let t = ''; for (let i = 0; i < 100; i++) { t = await txt(); if (/abgeschlossen/.test(t) && /Leads analysiert/.test(t)) break; if (/fehlgeschlagen/.test(t)) break; await p.waitForTimeout(3000); await p.reload(); }
-  const runUrl = p.url(); ok('Suchlauf Elektriker + Restaurant (Saarbrücken, 3 km) abgeschlossen', /abgeschlossen/.test(t) && /Leads analysiert/.test(t), (t.match(/\d+ Leads analysiert/) ?? [''])[0]);
-  const runId = runUrl.split('/').pop()!;
+  // Wiederaufnahme möglich: RUN_ID=<id> überspringt die Suche (z. B. nach einem Abbruch der Abnahme)
+  let runId = process.env.RUN_ID ?? '';
+  if (!runId) {
+    await go('/'); await p.locator('#neue-suche input[name=location]').fill('Saarbrücken'); await p.locator('#neue-suche input[name=radiusKm]').fill('3');
+    await p.locator('#neue-suche select[name=sub]').selectOption(['elektriker', 'restaurant']); await p.getByRole('button', { name: 'Leads suchen' }).click(); await p.waitForLoadState();
+    runId = p.url().split('/').pop()!;
+  }
+  let t = ''; let st = ''; for (let i = 0; i < 150; i++) { st = (await q('select status from lead_runs where id=$1', [runId]))[0]?.status ?? ''; if (st !== 'RUNNING' && st !== 'QUEUED') break; await new Promise((r) => setTimeout(r, 4000)); }
+  await go(`/search/run/${runId}`); t = await txt();
+  ok('Suchlauf Elektriker + Restaurant (Saarbrücken, 3 km) abgeschlossen', st === 'DONE' && /Leads analysiert/.test(t), `${st}: ${(t.match(/\d+ Leads analysiert/) ?? [''])[0]}`);
   const auto = await q("select count(*)::int n from leads l join sales_copilot s on s.lead_id=l.id and s.tier='MASS' where l.run_id=$1", [runId]);
   const all = await q('select count(*)::int n from leads where run_id=$1', [runId]);
   ok('Verkaufsassistent entsteht automatisch für interessante Leads des Laufs', auto[0].n > 0, `${auto[0].n} von ${all[0].n} Leads (A/B, Verkaufschance ≥ 60 oder Demo empfohlen)`);

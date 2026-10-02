@@ -28,7 +28,7 @@ export const routes: Route[] = [{
             <dl class="facts"><dt>Website</dt><dd>${it.website_url ? html`<code>${it.website_url}</code>` : NA}</dd><dt>Adresse</dt><dd>${orNA(it.address)}</dd><dt>Quelle</dt><dd>${sourceLabel(it.source)}</dd><dt>Datenqualität</dt><dd>${it.dq !== null && it.dq !== undefined ? `${Math.round(it.dq)}/100` : NA}</dd>
               <dt>Empfohlene Leistung</dt><dd>${b?.service?.name ?? NA}</dd><dt>Opportunity Score</dt><dd>${it.score ?? NA}</dd></dl>
             ${it.contact_reason ? html`<p><small class="mute">${it.contact_reason}</small></p>` : ''}
-            ${potentialBadges(it)}${it.call_goal ? html`<p><b>Gesprächsziel:</b> ${it.call_goal}${it.recommended_next_action ? html` · <span class="badge b-info">${NEXT_ACTION_LABEL[it.recommended_next_action as NextAction] ?? it.recommended_next_action}</span>` : ''} <a href="/leads/${it.id}#verkaufsassistent">Verkaufsassistent öffnen</a></p>` : ''}
+            ${potentialBadges(it)}<p>${it.call_goal ? html`<b>Gesprächsziel:</b> ${it.call_goal}${it.recommended_next_action ? html` · <span class="badge b-info">${NEXT_ACTION_LABEL[it.recommended_next_action as NextAction] ?? it.recommended_next_action}</span>` : ''} ` : ''}<a href="/leads/${it.id}#verkaufsassistent">Verkaufsassistent öffnen</a></p>
             <div><b>Die wichtigsten Verkaufsgründe</b><ol>${(b?.reasons ?? []).slice(0, 3).map((x: any) => html`<li>${x.text}</li>`)}</ol></div>
             ${b ? html`<div class="note"><b>Gesprächseinstieg</b><br>${it.opener ?? b.opener}</div>
               <p><small>Schätzung möglicher Auftragswert: ${eur(b.valueRange.lowCents)} – ${eur(b.valueRange.highCents)} (unverbindlich)</small></p>

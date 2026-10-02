@@ -108,4 +108,10 @@ test('Fragen: 5–10, je Branche unterschiedlich; Einwände vollständig; Ablauf
   assert.notEqual(f.introduction, h.introduction);
 });
 
+test('Restaurant: Reservierung statt Terminanfrage; Formulierungen bleiben bei „nicht bekannt“ statt „gibt es nicht“', () => {
+  const c = buildCopilot(base({ subKey: 'restaurant', subLabel: 'Restaurant', industryKey: 'gastro', industryLabel: 'Gastronomie', recommendedModules: [{ key: 'reservation', label: 'Reservierung' }, { key: 'menu', label: 'Speisekarte' }] }), cfg);
+  assert.ok(c.arguments.some((a) => /Reservierung/.test(a.claim))); assert.ok(!c.arguments.some((a) => /Terminanfrage/.test(a.claim)));
+  assert.doesNotMatch(JSON.stringify(c.arguments), /gibt es keinen/);
+});
+
 test('Gleiche Eingabe → gleiche Ausgabe (deterministisch, Grundlage für den Cache)', () => { assert.deepEqual(buildCopilot(base(), cfg), buildCopilot(base(), cfg)); });
