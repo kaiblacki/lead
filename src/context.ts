@@ -24,6 +24,7 @@ import { TaskStore } from './db/tasks.ts';
 import { Automation } from './workflow/automation.ts';
 import { PipelineStore } from './db/pipeline.ts';
 import { EnrichmentService } from './enrich/service.ts';
+import { DemoStageService } from './demo/stage.ts';
 import { TaskEngine } from './tasks/engine.ts';
 import { PartnerService } from './partners/service.ts';
 import { CopilotService } from './sales/copilot-service.ts';
@@ -33,7 +34,7 @@ import { loadConfig, type AppConfig } from './core/config.ts';
 import { createProviders, type Registry } from './providers/registry.ts';
 
 export type Context = {
-  copilot: CopilotService; partners: PartnerService; taskEngine: TaskEngine;
+  copilot: CopilotService; partners: PartnerService; taskEngine: TaskEngine; demoStages: DemoStageService;
   repo: Repo; cfg: AppConfig; registry: Registry; baseUrl: string; now: () => Date;
   leads: LeadStore; runs: RunStore; sales: SalesStore; social: SocialStore; analytics: AnalyticsStore; learning: LearningStore;
   pipeline: PipelineStore; sources: Sources; enrichment: EnrichmentService; runner: SearchRunner; orders: OrderService; delivery: DeliveryService; maintenance: MaintenanceService; docs: SalesDocs; calls: CallService; contact: ContactService; retention: Retention; notifier: Notifier; invoices: InvoiceService; gdpr: Gdpr; aiUsage: AiUsageStore; analysis: AnalysisService; tasks: TaskStore; automation: Automation;
@@ -79,10 +80,11 @@ export function buildContext(repo: Repo, o: ContextOptions): Context {
   };
   const analysis = new AnalysisService({ repo, leads, usage: aiUsage, cfg, complete: aiComplete as never, now, aiIsMock: () => P.ai.isMock });
   const partners = new PartnerService({ repo, now });
+  const demoStages = new DemoStageService({ repo, pipeline });
   const copilot = new CopilotService({ repo, leads, cfg, now, complete: aiComplete as never, aiIsMock: () => P.ai.isMock });
   const automation = new Automation({ repo, docs, cfg, analysis, pipeline, copilot });
   runner.afterSave = (leadId, info) => automation.afterAnalysis(leadId, info);
   runner.afterRun = (runId, ids) => automation.afterRun(runId, ids);
-  const ctx: Context = { copilot, partners, taskEngine, repo, cfg, registry, pipeline, sources, enrichment, notifier, invoices, gdpr, aiUsage, aiComplete, analysis, tasks, automation, baseUrl: o.baseUrl, now, leads, runs, sales, social, analytics, learning, runner, orders, delivery, maintenance, docs, calls, contact, retention };
+  const ctx: Context = { copilot, partners, taskEngine, demoStages, repo, cfg, registry, pipeline, sources, enrichment, notifier, invoices, gdpr, aiUsage, aiComplete, analysis, tasks, automation, baseUrl: o.baseUrl, now, leads, runs, sales, social, analytics, learning, runner, orders, delivery, maintenance, docs, calls, contact, retention };
   return ctx;
 }

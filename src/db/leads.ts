@@ -156,7 +156,7 @@ export class LeadStore {
          (o.dimensions->'dataQuality'->>'value')::float as dq, (o.dimensions->'contactability'->>'value')::float as contactability,
          case when l.website_state = 'none' then null else au.overall_quality end as website_score, au.audit_status,
          ${hasDemo} as has_demo, ${openCall} as demo_ready_call, ${hasEmail} as has_email,
-         coalesce(l.effective_priority, sp.brief->>'priority') as priority, l.effective_priority, l.auto_priority, l.manual_priority, l.priority_reason, l.review_flag, l.work_status, l.website_potential, l.needs_analysis_potential, l.partnership_potential, l.recommended_next_action, l.call_goal, l.interest_topics, l.contactability, l.preferred_contact_channel, l.demo_recommendation, l.demo_recommendation_reason, l.enrichment_status, l.last_enrichment_at, l.official_website_candidate, l.official_website_confidence, l.official_website_verified, sp.approved_at ${base} order by ${order} limit $${p.length - 1} offset $${p.length}`, p)).rows;
+         coalesce(l.effective_priority, sp.brief->>'priority') as priority, l.effective_priority, l.auto_priority, l.manual_priority, l.priority_reason, l.review_flag, l.work_status, l.demo_stage, l.website_potential, l.needs_analysis_potential, l.partnership_potential, l.recommended_next_action, l.call_goal, l.interest_topics, l.contactability, l.preferred_contact_channel, l.demo_recommendation, l.demo_recommendation_reason, l.enrichment_status, l.last_enrichment_at, l.official_website_candidate, l.official_website_confidence, l.official_website_verified, sp.approved_at ${base} order by ${order} limit $${p.length - 1} offset $${p.length}`, p)).rows;
     return { total, rows };
   }
 

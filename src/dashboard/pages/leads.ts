@@ -4,7 +4,8 @@ import { html, raw, categoryBadge, mockBadge, prioBadge, readinessBadge, statusB
 import { render, redirect, okFlash, uuid } from './_page.ts';
 import { enrichment, orNA, NA, sourceLabel } from '../../core/enrichment.ts';
 import * as P from './lead-parts.ts';
-import { copilotCard, partnerLeadCard, potentialBadges, strategyCard } from './copilot.ts';
+import { copilotCard, demoStageCard, partnerLeadCard, potentialBadges, strategyCard } from './copilot.ts';
+import { effectiveDemoStage } from '../../demo/stage.ts';
 import { buildEmailDraft } from '../../sales/email-draft.ts';
 import { taskList } from './tasks.ts';
 import { STATUSES, type Status } from '../../core/status.ts';
@@ -17,6 +18,7 @@ import { esc } from '../html.ts';
 import { FAMILIES, effectiveModules, familyFor, moduleDefs, moduleKeys, recommendModules, type Family } from '../../site/modules.ts';
 
 const id = uuid.source;
+const FAMILY_HINT: Record<string, string> = { SERVICE: 'Dienstleister, Handwerk, Praxis: Leistungen und Anfrage', APPOINTMENT: 'Termingeschäft (Friseur, Kosmetik, Studio): Terminanfrage im Mittelpunkt', GASTRO_RETAIL: 'Gastronomie, Laden: Speisekarte/Angebot, Reservierung, Öffnungszeiten' };
 const back = (leadId: string, text: string, anchor = '') => redirect(`/leads/${leadId}${anchor}`, okFlash(text));
 
 export const routes: Route[] = [
@@ -81,7 +83,7 @@ export const routes: Route[] = [
       ...((analysis?.manual_checks ?? []) as string[]).slice(0, 4).map((m) => `Manuell prüfen: ${m}`), ...d.factsT.filter((f: any) => f.key === 'websiteCandidate').map((f: any) => `Mögliche Website (ungeprüft): ${f.value} – ${f.note ?? ''}`),
       dupes.length ? `${dupes.length} mögliche Dublette(n) – bitte prüfen.` : ''].filter(Boolean) as string[];
     return render(r, { title: d.lead.company_name, nav: 'leads', body: html`
-      ${P.header(d, r.app.csrf)}${strategyCard(d, cop.mass, { csrf: r.app.csrf, leadId, draft: emailDraft, hasEmail, emailStatus: ctx.contact.effective(d.lead) })}${html`<div class="card" id="aufgaben"><div class="row"><h2 class="grow" style="margin:0">Aufgaben</h2><a class="btn" href="/tasks?lead=${leadId}">Aufgabe anlegen</a></div>${taskList(leadTasks, r.app.csrf, { empty: 'Keine offenen Aufgaben zu diesem Lead.', back: `/leads/${leadId}#aufgaben` })}</div>`}${partnerLeadCard(d, { csrf: r.app.csrf, leadId, partner: partnerRow, matches: partnerMatches, referrals: leadRefs, talk: cop.mass?.partnerTalk ?? null })}${copilotCard(d, cop, { csrf: r.app.csrf, leadId, eligible: ctx.copilot.isEligible({ ...d.lead, opportunity: d.opportunity?.score ?? null }), aiAvailable: !ctx.registry.providers.ai.isMock })}${P.duplicatesCard(dupes, { csrf: r.app.csrf, leadId })}${P.profile(d)}${P.priorityCard(d, { csrf: r.app.csrf, leadId })}${P.enrichmentCard(d, { csrf: r.app.csrf, leadId, facts: d.factsT, budgetLeftCents: Math.min(bstat.monthLeftCents, bstat.todayLeftCents), available: ctx.enrichment.available, log: elog })}${P.analysisCard(d, analysis, { csrf: r.app.csrf, leadId, costs, demoLive: !!liveDemo })}${P.demoDecision(d, { csrf: r.app.csrf, leadId, hasDemo: !!liveDemo, approval })}${P.modulesCard(d, { csrf: r.app.csrf, leadId, v: modView })}${P.phoneView(d, analysis, { sender, demoUrl, contactPerson, csrf: r.app.csrf, leadId })}
+      ${P.header(d, r.app.csrf)}${strategyCard(d, cop.mass, { csrf: r.app.csrf, leadId, draft: emailDraft, hasEmail, emailStatus: ctx.contact.effective(d.lead) })}${html`<div class="card" id="aufgaben"><div class="row"><h2 class="grow" style="margin:0">Aufgaben</h2><a class="btn" href="/tasks?lead=${leadId}">Aufgabe anlegen</a></div>${taskList(leadTasks, r.app.csrf, { empty: 'Keine offenen Aufgaben zu diesem Lead.', back: `/leads/${leadId}#aufgaben` })}</div>`}${demoStageCard({ csrf: r.app.csrf, leadId, stage: effectiveDemoStage(d.lead, !!liveDemo), manual: d.lead.demo_stage ?? null, hasDemo: !!liveDemo, autoFamily: autoFam, demoUrl, families: FAMILIES.map((k) => ({ key: k, label: ctx.cfg.pipeline.demo.families[k].label as string, hint: FAMILY_HINT[k] })) })}${partnerLeadCard(d, { csrf: r.app.csrf, leadId, partner: partnerRow, matches: partnerMatches, referrals: leadRefs, talk: cop.mass?.partnerTalk ?? null })}${copilotCard(d, cop, { csrf: r.app.csrf, leadId, eligible: ctx.copilot.isEligible({ ...d.lead, opportunity: d.opportunity?.score ?? null }), aiAvailable: !ctx.registry.providers.ai.isMock })}${P.duplicatesCard(dupes, { csrf: r.app.csrf, leadId })}${P.profile(d)}${P.priorityCard(d, { csrf: r.app.csrf, leadId })}${P.enrichmentCard(d, { csrf: r.app.csrf, leadId, facts: d.factsT, budgetLeftCents: Math.min(bstat.monthLeftCents, bstat.todayLeftCents), available: ctx.enrichment.available, log: elog })}${P.analysisCard(d, analysis, { csrf: r.app.csrf, leadId, costs, demoLive: !!liveDemo })}${P.demoDecision(d, { csrf: r.app.csrf, leadId, hasDemo: !!liveDemo, approval })}${P.modulesCard(d, { csrf: r.app.csrf, leadId, v: modView })}${P.phoneView(d, analysis, { sender, demoUrl, contactPerson, csrf: r.app.csrf, leadId })}
       ${P.contact(d, r.app.csrf, leadId, settings, r.app.mock)}${P.templatesCard(d, { sender: settings.callerName || ctx.cfg.agency.callerName || undefined, demoUrl, csrf: r.app.csrf, leadId, emailStatus: ctx.contact.effective(d.lead), hasEmail })}${P.notesCard(d, note, { csrf: r.app.csrf, leadId, hints })}${P.costsCard(costs)}
       ${P.why(d)}${P.sales(d, r.app.csrf, leadId)}${P.statusCard(d, r.app.csrf, leadId)}${P.docs(d, r.app.csrf, leadId, { demos, offer, order, templates: allTemplates().map((t) => ({ key: t.key, label: t.label })), recommended: rec, baseUrl: r.app.baseUrl })}
       ${P.dimensions(d)}${P.audit(d)}
@@ -137,6 +139,19 @@ export const routes: Route[] = [
     await r.ctx.pipeline.setManualPriority(r.params[0], (v || null) as never);
     await r.ctx.copilot.ensure(r.params[0], { onlyIfEligible: true });
     return back(r.params[0], v ? `Priorität manuell auf ${v} gesetzt.` : 'Automatische Priorität gilt wieder.', '#prioritaet');
+  } },
+  { method: 'POST', path: new RegExp(`^/leads/${id}/demo/stage$`), h: async (r) => {
+    const v = r.form.get('stage') ?? ''; let eff; try { eff = await r.ctx.demoStages.set(r.params[0], v === '' ? null : (v as never)); } catch (e) { throw new UserError(e instanceof Error ? e.message : String(e)); }
+    return back(r.params[0], `Demo-Stufe: ${eff}. Es wurde keine Demo erstellt.`, '#demo-stufe');
+  } },
+  { method: 'POST', path: new RegExp(`^/leads/${id}/demo/quick$`), h: async (r) => {
+    // Schnelle Standard-Demo: nur nach ausdrücklicher Bestätigung, ohne Veröffentlichung/Versand
+    const leadId = r.params[0]; if (r.form.get('confirm') !== '1') throw new UserError('Bitte die Erstellung der Standard-Demo bestätigen.');
+    const fam = r.form.get('family') ?? ''; if (!(FAMILIES as string[]).includes(fam)) throw new UserError('Bitte ein Grundtemplate wählen.');
+    const l = await r.ctx.leads.rowToEntry(leadId); if (!l) throw new UserError('Lead nicht gefunden.'); if (l.contact_blocked) throw new UserError('Gesperrter Lead (Do not contact).');
+    await r.ctx.pipeline.setModuleState(leadId, { family: fam, recommended: recommendModules(r.ctx.cfg, { family: fam as Family, subIndustry: l.sub_industry }) });
+    const ap = r.ctx.pipeline.approvals; await ap.request(leadId, 'DEMO_CREATE'); await ap.approve(leadId, 'DEMO_CREATE', 'user');
+    const dm = await r.ctx.docs.demoFor(leadId, 'auto'); return back(leadId, `Standard-Demo erstellt (${r.ctx.cfg.pipeline.demo.families[fam].label}). Link: ${dm.url}`, '#demo-stufe');
   } },
   { method: 'POST', path: new RegExp(`^/leads/${id}/strategy$`), h: async (r) => {
     const v = r.form.get('strategy') ?? ''; try { await r.ctx.copilot.setContactStrategy(r.params[0], v === '' ? null : v); } catch (e) { throw new UserError(e instanceof Error ? e.message : String(e)); }

@@ -56,7 +56,23 @@ footer{padding:28px 0 ${sticky ? 96 : 40}px;font-size:14px;background:#111;color
 ${sticky ? '.stick{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--soft);padding:8px 16px;display:flex;gap:8px;justify-content:center;z-index:15}.stick a{flex:1;max-width:420px;margin:0}@media (min-width:900px){.stick{display:none}footer{padding-bottom:40px}}' : ''}
 a:focus-visible,button:focus-visible,input:focus-visible{outline:3px solid #000;outline-offset:2px}
 @media (max-width:640px){.hero{padding:40px 0 44px}.top .wrap{justify-content:center}.btn,.btn2{width:100%;margin-right:0}section{padding:34px 0}}
-@media (min-width:641px) and (max-width:960px){.grid{grid-template-columns:repeat(2,1fr)}}`;
+@media (min-width:641px) and (max-width:960px){.grid{grid-template-columns:repeat(2,1fr)}}
+/* Qualitätsebene: großzügige Typografie, klare Hierarchie, starke Hero, hochwertige Karten, saubere Abstände */
+body{font-size:clamp(16px,.35vw + 15px,18px);line-height:1.65;letter-spacing:.003em}
+h1,h2,h3{letter-spacing:-.015em;text-wrap:balance}h1{font-weight:800;line-height:1.05}h2{font-weight:750}
+.eyebrow{display:inline-block;text-transform:uppercase;letter-spacing:.14em;font-size:12.5px;font-weight:700;opacity:.9;margin:0 0 18px;padding:6px 14px;border:1px solid currentColor;border-radius:99px}
+.hero{padding:clamp(56px,10vw,118px) 0 clamp(68px,10vw,112px)}.hero:before{content:"";position:absolute;left:-140px;bottom:-160px;width:400px;height:400px;border-radius:50%;background:rgba(255,255,255,.06)}
+.hero .lead{font-size:clamp(18px,2.2vw,23px);line-height:1.5;margin-bottom:32px}
+.btn,.btn2{box-shadow:0 2px 0 rgba(0,0,0,.08);transition:transform .15s ease,box-shadow .15s ease}.btn:hover,.btn2:hover{transform:translateY(-2px);box-shadow:0 10px 22px rgba(0,0,0,.18)}
+section{padding:clamp(52px,8vw,96px) 0;scroll-margin-top:24px}
+section h2{position:relative;padding-bottom:16px;margin-bottom:30px}section h2:after{content:"";position:absolute;left:0;bottom:0;width:56px;height:4px;border-radius:4px;background:var(--p)}
+.card{padding:26px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 14px 34px -18px rgba(0,0,0,.22);transition:transform .2s ease,box-shadow .2s ease;position:relative}.card:hover{transform:translateY(-3px);box-shadow:0 1px 2px rgba(0,0,0,.04),0 20px 42px -18px rgba(0,0,0,.3)}
+#leistungen .grid{counter-reset:svc}#leistungen .card{counter-increment:svc;padding-top:58px}#leistungen .card:before{content:counter(svc,decimal-leading-zero);position:absolute;top:20px;left:26px;font-weight:800;font-size:14px;letter-spacing:.12em;color:var(--p)}
+.card h3{font-size:clamp(19px,1.6vw + 14px,22px);margin-bottom:8px}.card p{color:inherit;opacity:.86}
+.cta{padding:clamp(56px,8vw,96px) 0}.cta h2{font-size:clamp(28px,4.5vw,42px)}.cta h2:after{display:none}.cta p{font-size:19px;opacity:.92;margin:0 0 24px}
+.fact{padding:20px 22px}.notes{padding:18px 20px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
+@media (max-width:640px){.facts{margin-top:-20px}.card:hover,.btn:hover,.btn2:hover{transform:none}.eyebrow{margin-bottom:14px}}`;
 };
 
 export function renderDemoV2(c: SiteContent, t: Template, agency: AgencyInfo, h: DemoHints, plan: DemoPlan, x: DemoExtras = {}): string {
@@ -99,7 +115,7 @@ export function renderDemoV2(c: SiteContent, t: Template, agency: AgencyInfo, h:
   const sticky = !!(t.cta.sticky && c.phone);
   const body = `<div class="demo" role="note"><b>Unverbindliche Demo / Beispiel</b> – Entwurf von ${esc(agency.name)} für ${name}. Dies ist nicht die offizielle Website des Unternehmens.</div>
 <div class="top"><div class="wrap"><a class="brand" href="#top">${name}</a><nav aria-label="Navigation">${nav.map(([a, l]) => `<a href="#${a}">${esc(l)}</a>`).join('')}</nav></div></div>
-<header class="hero" id="top"><div class="wrap"><h1>${esc(tagline)}</h1><p class="lead">${esc(sub)}</p><a class="btn" href="#${primaryAction.to}">${esc(primaryAction.label)}</a>${c.phone ? `<a class="btn ghost" href="${esc(telHref(c.phone))}">${esc(t.cta.secondary)}</a>` : ''}</div></header>
+<header class="hero" id="top"><div class="wrap"><span class="eyebrow">${esc(c.industryLabel ?? t.label)}${city ? ` · ${esc(city)}` : ''}</span><h1>${esc(tagline)}</h1><p class="lead">${esc(sub)}</p><a class="btn" href="#${primaryAction.to}">${esc(primaryAction.label)}</a>${c.phone ? `<a class="btn ghost" href="${esc(telHref(c.phone))}">${esc(t.cta.secondary)}</a>` : ''}</div></header>
 ${strip ? `<div class="wrap"><div class="facts">${strip}</div></div>` : ''}
 <main>${sel.slice(0, Math.ceil(sel.length / 2)).map((m) => parts[m]()).join('\n')}
 ${about}

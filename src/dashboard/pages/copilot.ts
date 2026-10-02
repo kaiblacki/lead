@@ -1,5 +1,6 @@
 import { html, raw, fmt, postForm, type Safe } from '../ui.ts';
 import { CONTACT_STRATEGIES, CONTACT_STRATEGY_HELP, CONTACT_STRATEGY_LABEL, STRATEGY_LABEL, type ContactStrategy } from '../../sales/copilot.ts';
+import { DEMO_STAGES, DEMO_STAGE_HELP, DEMO_STAGE_LABEL, type DemoStage } from '../../demo/stage.ts';
 import type { EmailDraft } from '../../sales/email-draft.ts';
 import { PARTNER_LABEL, REFERRAL_STATUS_LABEL, type PartnerStatus } from '../../partners/model.ts';
 import { NEXT_ACTION_LABEL, POTENTIAL_LABEL, NEEDS_LABEL, type Copilot, type Potential } from '../../sales/copilot.ts';
@@ -98,5 +99,18 @@ export function partnerLeadCard(d: any, o: { csrf: string; leadId: string; partn
     ${o.matches.length ? html`<div class="note"><b>Passender Partner vorhanden.</b> ${o.matches.map((m) => html`${m.company_name}`).join(', ')} (aktiver Partner, passende Branche/Region).<br>${o.matches.map((m) => postForm(o.csrf, `/leads/${o.leadId}/referral`, html`<input type="hidden" name="partner" value="${m.id}"><button class="primary">Lead an ${m.company_name} weiterleiten …</button>`))}<br><small class="mute">Es wird nichts automatisch weitergeleitet: Du prüfst Empfänger, Daten und Rechtsgrundlage und bestätigst.</small></div>` : html`<p class="mute">Kein passender aktiver Partner gefunden.</p>`}
     ${o.referrals.length ? html`<b>Referrals zu diesem Lead</b><ul>${o.referrals.map((r) => html`<li><a href="/referrals/${r.id}">${r.destination_name ?? r.source_name ?? 'Partner'}</a> – ${REFERRAL_STATUS_LABEL[r.status] ?? r.status}</li>`)}</ul>` : ''}
     ${o.talk ? html`<details open><summary>Partnergespräch (Vorschlag)</summary><p>${o.talk.intro}</p><b>Fragen</b><ul>${o.talk.questions.map((q) => html`<li>${q}</li>`)}</ul><small class="mute">${o.talk.note}</small></details>` : ''}
+  </div>`;
+}
+
+/** Demo-Kategorie (Kai entscheidet) + schnelle Standard-Demo (nur nach deiner Bestätigung). */
+export function demoStageCard(o: { csrf: string; leadId: string; stage: DemoStage; manual: string | null; hasDemo: boolean; families: { key: string; label: string; hint: string }[]; autoFamily: string; demoUrl?: string }): Safe {
+  return html`<div class="card" id="demo-stufe"><div class="row"><h2 class="grow" style="margin:0">Demo</h2><span class="badge ${o.stage === 'NO_DEMO' ? '' : 'b-ok'}">${DEMO_STAGE_LABEL[o.stage]}</span>${o.demoUrl ? html`<a class="btn" href="${o.demoUrl}" target="_blank" rel="noopener noreferrer">Demo ansehen</a>` : ''}</div>
+    <p class="mute">${DEMO_STAGE_HELP[o.stage]} Das System empfiehlt – du entscheidest.</p>
+    ${postForm(o.csrf, `/leads/${o.leadId}/demo/stage`, html`<div class="resgrid">${DEMO_STAGES.filter((s) => s !== 'DEMO_CREATED').map((s) => html`<button name="stage" value="${s}" class="${o.manual === s ? 'primary' : ''}" ${s === 'DEMO_SHOWN' && !o.hasDemo ? raw('disabled title="Erst eine Demo erstellen"') : ''}>${DEMO_STAGE_LABEL[s]}</button>`)}</div>
+      <p><button name="stage" value="">Empfehlung des Systems übernehmen</button></p>`, { style: 'display:block' })}
+    ${o.hasDemo ? '' : html`<details><summary>Schnelle Standard-Demo</summary>
+      <p class="mute">Hochwertiges Grundtemplate mit den Daten dieses Leads (Name, Branche, Telefon, Adresse, Öffnungszeiten, Leistungen soweit vorhanden) und passenden Bausteinen – in wenigen Sekunden: „So könnte Ihr Unternehmen online aussehen.“ Es wird nichts veröffentlicht oder gesendet.</p>
+      ${postForm(o.csrf, `/leads/${o.leadId}/demo/quick`, html`<div class="stack">${o.families.map((f) => html`<label class="inline"><input type="radio" name="family" value="${f.key}" ${f.key === o.autoFamily ? raw('checked') : ''}> <b>${f.label}</b>${f.key === o.autoFamily ? ' (passt zur Branche)' : ''} <small class="mute">${f.hint}</small></label>`)}</div>
+        <label class="inline"><input type="checkbox" name="confirm" value="1"> Ich bestätige: Standard-Demo für diesen Lead erstellen.</label><p><button class="primary">Standard-Demo erstellen</button></p>`, { style: 'display:block' })}</details>`}
   </div>`;
 }
