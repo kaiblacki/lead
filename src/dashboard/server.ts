@@ -14,6 +14,7 @@ import { routes as callRoutes } from './pages/calls.ts';
 import { routes as pipelineRoutes } from './pages/pipeline.ts';
 import { routes as orderRoutes } from './pages/orders.ts';
 import { routes as maintenanceRoutes } from './pages/maintenance.ts';
+import { routes as customerRoutes } from './pages/customers.ts';
 import { routes as analyticsRoutes } from './pages/analytics.ts';
 import { routes as settingsRoutes } from './pages/settings.ts';
 import { routes as partnerRoutes } from './pages/partners.ts';
@@ -40,7 +41,7 @@ export function createApp(ctx: Context, opts: AppOptions): http.Server {
   const flashes = new FlashStore();
   const publicLimit = new RateLimiter(120, 60_000), postLimit = new RateLimiter(240, 60_000), authFails = new RateLimiter(10, 15 * 60_000);
   const hsts: Record<string, string> = app.baseUrl.startsWith('https://') ? { 'strict-transport-security': 'max-age=31536000' } : {};
-  const all: Route[] = [...publicRoutes, ...homeRoutes, ...todayRoutes, ...enrichmentRoutes, ...searchRoutes, ...leadRoutes, ...callRoutes, ...pipelineRoutes, ...orderRoutes, ...maintenanceRoutes, ...partnerRoutes, ...taskRoutes, ...offerRoutes, ...analyticsRoutes, ...settingsRoutes, ...socialRoutes];
+  const all: Route[] = [...publicRoutes, ...homeRoutes, ...todayRoutes, ...enrichmentRoutes, ...searchRoutes, ...leadRoutes, ...callRoutes, ...pipelineRoutes, ...orderRoutes, ...maintenanceRoutes, ...partnerRoutes, ...taskRoutes, ...offerRoutes, ...customerRoutes, ...analyticsRoutes, ...settingsRoutes, ...socialRoutes];
 
   const clientIp = (req: http.IncomingMessage) => (opts.trustProxy ? String(req.headers['x-forwarded-for'] ?? '').split(',').pop()?.trim() : '') || req.socket.remoteAddress || 'unknown';
   const authOk = (req: http.IncomingMessage) => {

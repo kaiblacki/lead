@@ -5,6 +5,7 @@ import { eur } from '../ui.ts';
 import { uuid } from './_page.ts';
 
 const SITE_CSP = "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'";
+import { REQUEST_LABEL, type RequestStatus } from '../../customers/service.ts';
 const PUB_CSP = "default-src 'none'; style-src 'unsafe-inline'; frame-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'";
 const MIME: Record<string, string> = { html: 'text/html; charset=utf-8', txt: 'text/plain; charset=utf-8', xml: 'application/xml', css: 'text/css' };
 const NOINDEX = { 'x-robots-tag': 'noindex, nofollow, noarchive' };
@@ -74,6 +75,23 @@ export const routes: Route[] = [
     return { redirect: `/r/${r.params[0]}?msg=${applied ? 'changed' : 'received'}` };
   } },
 
+  { method: 'GET', public: true, path: /^\/c\/([0-9a-f]{64})$/, h: async (r) => {
+    const c = await r.ctx.customers.byToken(r.params[0]); if (!c) return pub(shell('Nicht gefunden', html`<p>Dieser Link ist nicht gültig.</p>`), 404);
+    const [m, reqs] = await Promise.all([r.ctx.customers.maintenance(c.id), r.ctx.customers.requests(c.id)]);
+    const msg = r.url.searchParams.get('msg');
+    return pub(shell('Ihr Kundenbereich', html`<h1>${c.company_name}</h1>
+      ${msg === 'sent' ? html`<div class="card" style="background:#d3f9d8">Danke, Ihr Änderungswunsch ist eingegangen. Wir melden uns bei Ihnen.</div>` : ''}
+      <div class="card"><p>Website: ${c.website_url ? html`<a href="${c.website_url}" rel="noopener noreferrer">${c.website_url}</a>` : 'noch nicht verfügbar'}</p><p>Wartungspaket: <b>${m?.careLabel ?? 'keines'}</b></p></div>
+      <div class="card"><h2>Änderung anfragen</h2><form method="post" action="/c/${r.params[0]}/request"><label>Was soll geändert werden?<br><input name="title" required maxlength="200" style="width:100%;box-sizing:border-box;padding:10px"></label><label>Details (optional)<br><textarea name="detail" maxlength="2000"></textarea></label><button class="ok">Änderungswunsch senden</button></form><p><small>Ob die Änderung im Wartungspaket enthalten ist oder extra kostet, sagen wir Ihnen vorab. Es entstehen keine automatischen Kosten.</small></p></div>
+      <div class="card"><h2>Ihre Änderungswünsche</h2>${reqs.length ? html`<ul>${reqs.map((q: any) => html`<li>${q.title} – <b>${REQUEST_LABEL[q.status as RequestStatus]}</b></li>`)}</ul>` : html`<p>Noch keine.</p>`}</div>`));
+  } },
+  { method: 'POST', public: true, maxBody: 20_000, path: /^\/c\/([0-9a-f]{64})\/request$/, h: async (r) => {
+    const c = await r.ctx.customers.byToken(r.params[0]); if (!c) return pub(shell('Nicht gefunden', html`<p>Dieser Link ist nicht gültig.</p>`), 404);
+    if (c.status === 'ENDED') return pub(shell('Beendet', html`<p>Dieser Kundenbereich ist nicht mehr aktiv.</p>`), 403);
+    try { await r.ctx.customers.addRequest(c.id, r.form.get('title'), r.form.get('detail'), 'portal', c.owner_id); } catch (e) { return pub(shell('Fehler', html`<p>${e instanceof Error ? e.message : 'Fehler'}</p><p><a href="/c/${r.params[0]}">Zurück</a></p>`), 400); }
+    await r.ctx.taskEngine.create({ type: 'CUSTOMER_REQUEST', title: `Neuer Änderungswunsch von ${c.company_name}`, dueAt: r.ctx.now(), priority: 'NORMAL', customerId: c.id, source: 'system' }).catch(() => null);
+    return { redirect: `/c/${r.params[0]}?msg=sent` };
+  } },
   { method: 'GET', public: true, path: /^\/danke$/, h: async () => pub(shell('Danke', html`<h1>Vielen Dank!</h1><p>Ihre Zahlung wird verarbeitet. Sie erhalten eine Bestätigung von uns.</p>`)) },
   { method: 'GET', public: true, path: /^\/abgebrochen$/, h: async () => pub(shell('Abgebrochen', html`<h1>Zahlung abgebrochen</h1><p>Es wurde nichts abgebucht. Sie können den Zahlungslink erneut öffnen.</p>`)) },
 
