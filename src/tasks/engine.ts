@@ -44,7 +44,7 @@ export class TaskEngine {
   async reopen(id: string) { await this.pool.query("update tasks set status='OPEN', snoozed_until=null, done_at=null where id=$1 and owner_id=$2", [id, this.owner]); }
 
   /** Abgelaufene Zurückstellungen werden wieder OFFEN (fällig zum Ende der Zurückstellung). */
-  async wake() { await this.pool.query("update tasks set status='OPEN', due_at = snoozed_until, snoozed_until = null where owner_id=$1 and status='SNOOZED' and snoozed_until <= now()", [this.owner]); }
+  async wake() { await this.pool.query("update tasks set status='OPEN', due_at = snoozed_until, snoozed_until = null where owner_id=$1 and status='SNOOZED' and snoozed_until <= $2", [this.owner, this.now()]); }
 
   async forLead(leadId: string) { return (await this.pool.query("select * from tasks where lead_id=$1 and owner_id=$2 and status in ('OPEN','SNOOZED') order by due_at", [leadId, this.owner])).rows as TaskRow[]; }
 

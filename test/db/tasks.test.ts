@@ -23,7 +23,8 @@ test('Anruf-Ergebnis → Folgeaufgaben: nicht erreicht, Rückruf, interessiert, 
   await app.ctx.calls.applyResult(f.id, 'MULTIPLE', { note: 'alles', topics: ['website', 'needs', 'partner'] } as never); assert.deepEqual((await tasksOf(app, f.id)).map((t: any) => t.type).sort(), ['NEEDS_ANALYSIS_APPOINTMENT', 'PARTNER_CONVERSATION', 'PREPARE_DEMO']);
   await call(g.id, 'NO_ANSWER'); await call(g.id, 'NO_INTEREST'); assert.ok((await tasksOf(app, g.id)).every((t: any) => t.status === 'CANCELLED'), 'kein Interesse → offene Aufgaben abgebrochen');
   assert.equal((await app.pool.query('select count(*)::int n from outbox')).rows[0].n, 0, 'nichts gesendet');
-  assert.equal((await app.pool.query('select count(*)::int n from demos where owner_id=$1', ['00000000-0000-0000-0000-000000000481'])).rows[0].n, 0, 'keine Demo automatisch erstellt');
+  // „Demo gewünscht“ ist eine ausdrückliche Aktion von Kai (bestehende Logik) – darüber hinaus entsteht durch die Follow-up-Regeln keine Demo
+  assert.equal((await app.pool.query('select count(*)::int n from demos where owner_id=$1', ['00000000-0000-0000-0000-000000000481'])).rows[0].n, 1, 'nur die Demo aus „Demo gewünscht“');
 });
 
 test('Aufgaben-Dashboard: überfällig / heute / diese Woche / später, erledigen, verschieben, abbrechen, manuell anlegen, zurückgestellte kommen wieder; Seiten', { skip, timeout: 300_000 }, async () => {
@@ -38,7 +39,7 @@ test('Aufgaben-Dashboard: überfällig / heute / diese Woche / später, erledige
   assert.equal((await app.post(`/tasks/${overdue}/done`, {})).status, 303); assert.equal((await app.pool.query('select status from tasks where id=$1', [overdue])).rows[0].status, 'DONE');
   assert.equal((await app.post(`/tasks/${today}/snooze`, { days: '7' })).status, 303); const sn = (await app.pool.query('select status, snoozed_until from tasks where id=$1', [today])).rows[0]; assert.equal(sn.status, 'SNOOZED'); assert.ok(new Date(sn.snoozed_until) > NOW);
   assert.equal((await E.groups()).SNOOZED.length, 1); await assert.rejects(E.snooze(today, new Date(NOW.getTime() - 1000)), /Zukunft/);
-  await app.pool.query("update tasks set snoozed_until = now() - interval '1 minute' where id=$1", [today]); const w = await E.groups(); assert.equal(w.SNOOZED.length, 0); assert.ok([...w.OVERDUE, ...w.TODAY, ...w.WEEK, ...w.LATER].some((t) => t.id === today), 'Zurückstellung abgelaufen → wieder offen');
+  await app.pool.query("update tasks set snoozed_until = $2 where id=$1", [today, new Date(NOW.getTime() - 60_000)]); const w = await E.groups(); assert.equal(w.SNOOZED.length, 0); assert.ok([...w.OVERDUE, ...w.TODAY, ...w.WEEK, ...w.LATER].some((t) => t.id === today), 'Zurückstellung abgelaufen → wieder offen');
   assert.equal((await app.post('/tasks', { title: 'Hausaufgabe', type: 'CUSTOM', due: '2030-01-10T10:00', priority: 'HIGH', lead: a.id })).status, 303); assert.ok((await app.pool.query("select 1 from tasks where title='Hausaufgabe' and lead_id=$1 and source='manual'", [a.id])).rowCount);
   await assert.rejects(E.create({ type: 'NOPE' as never, title: 'x', dueAt: NOW, priority: 'NORMAL' }), /Unbekannter/); await assert.rejects(E.create({ type: 'CUSTOM', title: '', dueAt: NOW, priority: 'NORMAL' }), /Titel/);
   await E.cancel(high); await assert.rejects(E.done(high), /bereits abgeschlossen/);
