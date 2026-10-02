@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "note": "Gewichte der Handlungspriorität (0–100). Alles regelbasiert und nachvollziehbar – keine KI, nichts wird automatisch ausgeführt.",
+  "weights": {
+    "salesOpportunity": 0.30,
+    "digitalNeed": 0.15,
+    "contactability": 0.15,
+    "dataConfidence": 0.10,
+    "partnerPotential": 0.10,
+    "engagement": 0.20
+  },
+  "bonus": { "dueTask": 12, "callbackDue": 15, "demoReady": 8, "offerOpen": 10, "hotInterest": 10 },
+  "penalty": { "dataNeeded": 25, "noContact": 30, "closed": 100 },
+  "bands": { "high": 70, "medium": 45 }
+}

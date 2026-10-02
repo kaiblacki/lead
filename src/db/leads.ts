@@ -141,7 +141,7 @@ export class LeadStore {
     // Standard: vertriebsorientiert – kontaktierbare Leads zuerst (DATA_NEEDED getrennt am Ende), dann Priorität, höchste Verkaufschance; bei Gleichstand Firmen ohne Website, dann schlechteste Website, dann mit Telefonnummer
     const sort = f.sort || (f.quick === 'worst_websites' ? 'website_asc' : '');
     const prioRank = "case l.effective_priority when 'A' then 0 when 'B' then 1 when 'C' then 2 when 'D' then 3 else 4 end";
-    const order = sort === 'score' ? 'o.score desc nulls last, (l.website_state = \'none\') desc, au.overall_quality asc nulls last, l.created_at desc' : sort === 'website_asc' ? 'au.overall_quality asc nulls last, o.score desc nulls last' : sort === 'distance' ? 'l.distance_km asc nulls last' : sort === 'digital_need' ? 'o.digital_need desc nulls last' : sort === 'recent' ? 'l.created_at desc'
+    const order = sort === 'score' ? 'o.score desc nulls last, (l.website_state = \'none\') desc, au.overall_quality asc nulls last, l.created_at desc' : sort === 'website_asc' ? 'au.overall_quality asc nulls last, o.score desc nulls last' : sort === 'distance' ? 'l.distance_km asc nulls last' : sort === 'digital_need' ? 'o.digital_need desc nulls last' : sort === 'recent' ? 'l.created_at desc' : sort === 'action' ? 'l.action_priority desc nulls last, o.score desc nulls last, l.created_at desc'
       : `(l.work_status = 'DATA_NEEDED') asc, (l.phone is not null) desc, ${prioRank}, o.score desc nulls last, (l.website_state = 'none') desc, au.overall_quality asc nulls last, (l.phone is not null) desc, l.created_at desc`;
     const limit = Math.min(f.limit ?? 100, 500), offset = Math.max(f.offset ?? 0, 0);
     const base = `from leads l ${join}
@@ -156,7 +156,7 @@ export class LeadStore {
          (o.dimensions->'dataQuality'->>'value')::float as dq, (o.dimensions->'contactability'->>'value')::float as contactability,
          case when l.website_state = 'none' then null else au.overall_quality end as website_score, au.audit_status,
          ${hasDemo} as has_demo, ${openCall} as demo_ready_call, ${hasEmail} as has_email,
-         coalesce(l.effective_priority, sp.brief->>'priority') as priority, l.effective_priority, l.auto_priority, l.manual_priority, l.priority_reason, l.review_flag, l.work_status, l.demo_stage, l.website_potential, l.needs_analysis_potential, l.partnership_potential, l.recommended_next_action, l.call_goal, l.interest_topics, l.contactability, l.preferred_contact_channel, l.demo_recommendation, l.demo_recommendation_reason, l.enrichment_status, l.last_enrichment_at, l.official_website_candidate, l.official_website_confidence, l.official_website_verified, sp.approved_at ${base} order by ${order} limit $${p.length - 1} offset $${p.length}`, p)).rows;
+         coalesce(l.effective_priority, sp.brief->>'priority') as priority, l.effective_priority, l.auto_priority, l.manual_priority, l.priority_reason, l.review_flag, l.work_status, l.demo_stage, l.action_priority, l.growth_scores, l.website_potential, l.needs_analysis_potential, l.partnership_potential, l.recommended_next_action, l.call_goal, l.interest_topics, l.contactability, l.preferred_contact_channel, l.demo_recommendation, l.demo_recommendation_reason, l.enrichment_status, l.last_enrichment_at, l.official_website_candidate, l.official_website_confidence, l.official_website_verified, sp.approved_at ${base} order by ${order} limit $${p.length - 1} offset $${p.length}`, p)).rows;
     return { total, rows };
   }
 

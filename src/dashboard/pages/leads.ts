@@ -26,6 +26,7 @@ export const routes: Route[] = [
   { method: 'GET', path: /^\/leads$/, h: async (r) => {
     const q = r.url.searchParams; const g = (k: string) => q.get(k) || undefined;
     const limit = 100, offset = Math.max(0, Number(q.get('offset') ?? 0) || 0);
+    if (g('sort') === 'action') await r.ctx.growth.refresh();
     const res = await r.ctx.leads.list({ quick: g('quick'), tier: g('tier'), q: g('q'), status: g('status'), category: g('category'), readiness: g('readiness'), websiteState: g('website'), priority: g('priority'), runId: g('run'), minScore: Number(q.get('minScore')) || undefined, sort: g('sort'), limit, offset });
     const sel = (name: string, opts: [string, string][]) => html`<label>${name}<select name="${name === 'Status' ? 'status' : name === 'Kategorie' ? 'category' : name === 'Kontakt' ? 'readiness' : name === 'Website' ? 'website' : name === 'Priorität' ? 'priority' : 'sort'}">${opts.map(([v, l]) => html`<option value="${v}" ${(q.get(name === 'Status' ? 'status' : name === 'Kategorie' ? 'category' : name === 'Kontakt' ? 'readiness' : name === 'Website' ? 'website' : name === 'Priorität' ? 'priority' : 'sort') ?? '') === v ? raw('selected') : ''}>${l}</option>`)}</select></label>`;
     const nextQs = (o: number) => { const u = new URLSearchParams(q); u.set('offset', String(o)); return u.toString(); };
@@ -37,7 +38,7 @@ export const routes: Route[] = [
         <div class="row">${sel('Status', [['', 'alle'], ...STATUSES.map((s) => [s, s] as [string, string])])}${sel('Kategorie', [['', 'alle'], ['HOT', 'HOT'], ['HIGH POTENTIAL', 'HIGH POTENTIAL'], ['MEDIUM', 'MEDIUM'], ['LOW', 'LOW'], ['IGNORE', 'IGNORE'], ['UNRATED', 'nicht bewertet']])}
           ${sel('Kontakt', [['', 'alle'], ['READY_FOR_MANUAL_CALL', 'Bereit für Anruf'], ['EMAIL_PERMISSION_REQUIRED', 'E-Mail: Einwilligung'], ['WHATSAPP_OPT_IN_REQUIRED', 'WhatsApp: Opt-in'], ['MANUAL_REVIEW', 'Manuell prüfen'], ['DO_NOT_CONTACT', 'Gesperrt']])}
           ${sel('Website', [['', 'alle'], ['none', 'fehlt'], ['needs_improvement', 'verbesserungswürdig'], ['fine', 'in Ordnung'], ['unknown', 'nicht prüfbar']])}${sel('Priorität', [['', 'alle'], ['A', 'A'], ['B', 'B'], ['C', 'C'], ['D', 'D']])}
-          ${sel('Sortierung', [['', 'Vertrieb (Priorität, Verkaufschance)'], ['score', 'Nur Verkaufschance'], ['website_asc', 'Schlechteste Website zuerst'], ['digital_need', 'Digital Need'], ['distance', 'Entfernung'], ['recent', 'Neueste']])}
+          ${sel('Sortierung', [['', 'Vertrieb (Priorität, Verkaufschance)'], ['action', 'Handlungspriorität'], ['score', 'Nur Verkaufschance'], ['website_asc', 'Schlechteste Website zuerst'], ['digital_need', 'Digital Need'], ['distance', 'Entfernung'], ['recent', 'Neueste']])}
           <label>Min. Score<input name="minScore" type="number" min="0" max="100" value="${q.get('minScore') ?? ''}" style="width:110px"></label>
           ${g('run') ? html`<input type="hidden" name="run" value="${g('run')}">` : ''}${g('quick') ? html`<input type="hidden" name="quick" value="${g('quick')}">` : ''}${g('tier') ? html`<input type="hidden" name="tier" value="${g('tier')}">` : ''}<button class="primary">Filtern</button></div></form>
       <p class="mute">${res.total} Leads${offset ? ` · ab ${offset + 1}` : ''}</p>

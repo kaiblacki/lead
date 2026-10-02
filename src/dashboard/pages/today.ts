@@ -20,14 +20,15 @@ const VIEWS: { key: string; title: string; hint: string }[] = [
 
 export const routes: Route[] = [{
   method: 'GET', path: /^\/today$/, h: async (r) => {
+    await r.ctx.growth.refresh();
     const tg = await r.ctx.taskEngine.groups();
-    const data = await Promise.all(VIEWS.map(async (v) => ({ v, res: await r.ctx.leads.list({ quick: v.key, limit: 8 }) })));
+    const data = await Promise.all(VIEWS.map(async (v) => ({ v, res: await r.ctx.leads.list({ quick: v.key, limit: 8, sort: 'action' }) })));
     return render(r, { title: 'Heute', nav: 'today', body: html`
       <div class="card" id="aufgaben"><div class="row"><h2 class="grow">Aufgaben</h2><a class="btn" href="/tasks">Alle Aufgaben</a></div><b>Überfällig (${tg.OVERDUE.length})</b>${taskList(tg.OVERDUE, r.app.csrf, { empty: 'Nichts überfällig.', back: '/today' })}<b>Heute (${tg.TODAY.length})</b>${taskList(tg.TODAY, r.app.csrf, { empty: 'Heute nichts fällig.', back: '/today' })}</div>
       <div class="grid">${data.map(({ v, res }) => html`<a class="kpi" href="#${v.key}" style="text-decoration:none;color:inherit"><b>${res.total}</b><span>${v.title}</span></a>`)}</div>
       ${data.map(({ v, res }) => html`<div class="card" id="${v.key}"><div class="row"><h2 class="grow">${v.title} <small class="mute">(${res.total})</small></h2><a class="btn" href="/leads?quick=${v.key}">Alle anzeigen</a></div><p class="mute">${v.hint}</p>
         ${res.rows.length ? html`<ul class="items">${res.rows.map((l) => html`<li><div class="row">${prioBadge(l.priority)}<a class="grow" href="/leads/${l.id}"><b>${l.company_name}</b><br><small>${l.city ?? NA} · ${l.sub_industry ?? l.industry ?? NA}</small></a>
-          <div style="text-align:right"><b>${l.score ?? NA}</b> ${categoryBadge(l.category)}</div></div>
+          <div style="text-align:right"><b>${l.score ?? NA}</b> ${categoryBadge(l.category)}<br><small title="Handlungspriorität">Handlung ${l.action_priority ?? NA}</small></div></div>
           <small>${l.phone ? html`<a class="tel" href="tel:${String(l.phone).replace(/[^\d+]/g, '')}">${l.phone}</a>` : 'keine Telefonnummer'} · Nächste Aktion: <b>${l.recommended_next_action ? NEXT_ACTION_LABEL[l.recommended_next_action as NextAction] : nextActionText(l)}</b></small>
           <dl class="facts"><dt>Website-Potenzial</dt><dd>${l.website_potential ? POTENTIAL_LABEL[l.website_potential as Potential] : NA}</dd><dt>Demo</dt><dd>${DEMO_STAGE_LABEL[effectiveDemoStage({ ...l, demo_recommendation: l.demo_decision === 'recommended' ? 'DEMO_RECOMMENDED' : l.demo_recommendation, demo_decision: l.demo_decision === 'skipped' ? 'skipped' : null }, !!l.has_demo)]}</dd><dt>Gesprächsziel</dt><dd>${l.call_goal ?? NA}</dd></dl>
           <a class="btn" href="/leads/${l.id}#verkaufsassistent">Verkaufsassistent öffnen</a></li>`)}</ul>` : html`<p class="mute">Nichts offen.</p>`}</div>`)}` });
