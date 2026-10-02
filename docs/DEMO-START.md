@@ -10,10 +10,10 @@ npm install
 bash scripts/setup-local-db.sh agency_demo          # einmalig (bei Fehler: PGUSER/PGPASSWORD setzen, siehe SETUP.md)
 psql -d agency_demo -c "insert into auth.users(id) values ('00000000-0000-0000-0000-00000000b002') on conflict do nothing"
 APP_MODE=live DATABASE_URL=postgres://postgres:postgres@localhost:5432/agency_demo \
-  OWNER_ID=00000000-0000-0000-0000-00000000b002 DASHBOARD_PASSWORD=mein-demo-passwort-123 PORT=3000 node src/serve.ts
+  OWNER_ID=00000000-0000-0000-0000-00000000b002 DASHBOARD_PASSWORD=mein-demo-passwort-123 PORT=3055 node src/serve.ts
 ```
 `DATABASE_URL` anpassen, falls dein PostgreSQL andere Zugangsdaten hat (Homebrew: `postgres://DEIN_MAC_BENUTZER@localhost:5432/agency_demo`).
-Browser: **http://127.0.0.1:3000** (Benutzername beliebig, Passwort = `DASHBOARD_PASSWORD`).
+Browser: **http://127.0.0.1:3055** (Benutzername beliebig, Passwort = `DASHBOARD_PASSWORD`).
 
 ## Ausprobieren
 1. **Suche starten:** auf der Startseite Ort, Radius, Branche(n) und SMALL/MEDIUM/LARGE wählen → „Leads suchen“. (Ist der Ortsname mehrdeutig, z. B. „Neunkirchen“, kommt eine Meldung: Bundesland ergänzen.)
