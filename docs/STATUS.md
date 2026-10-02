@@ -151,3 +151,8 @@ Begründung der Prozentzahlen: Der lokale Umfang ist vollständig; die restliche
 - **Ansichten/Filter (`/leads`):** Jetzt bearbeiten (kontaktierbar, A/B), Bereit zum Kontakt, Heute anrufen, Daten beschaffen, Demo empfohlen/fertig/offen, Manuell prüfen, Telefon/E-Mail vorhanden, Angerufen, Interessiert, Später, Kein Interesse, A/B/C/D, MASS/DEEP/PREMIUM.
 - **Browser-Abnahme:** `docs/abnahme-schritt2/browser-abnahme.ts` (Chromium gegen eine Kopie der Live-Datenbank; Demo nur über Anfordern → Bestätigung).
 
+## V1-Stand (Schritt 3): offen bis zum echten Brave-Test
+- **Fertig und geprüft:** Suchformular → OSM-Suche (SMALL/MEDIUM/LARGE) → Dedupe → Analyse → Priorität → Ranking → Dashboard → Lead-Seite/Telefonansicht → Notiz/Status → Demo-Empfehlung → Freigabe → Module → Demo. Echter SMALL-Lauf im Browser: Saarbrücken · 4 km · Friseur/Nagelstudio → 150 roh, 149 nach Dedupe, 50 analysiert, 118 s, 0 € Kosten.
+- **Offen:** echte Web-Anreicherung. Ohne `BRAVE_SEARCH_API_KEY` in der ausführenden Umgebung bleibt sie `provider_unavailable`. Der Echttest (`npm run enrich:check -- --ensure-run`, siehe CLAUDE.md) ist vorbereitet. V1 ist erst fertig, wenn er gelaufen ist oder Brave ausdrücklich nicht für V1 verwendet wird – daher noch kein V1-Tag.
+- **Hinweis:** „Manuell prüfen“ zählt die noch nicht freigegebene Telefonakquise nicht mehr als Unsicherheit; „Heute anrufen“ bleibt leer, bis die Telefonakquise in den Einstellungen freigegeben ist.
+

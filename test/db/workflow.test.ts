@@ -44,3 +44,15 @@ test('Ranking: kontaktierbare Leads zuerst (Priorität, dann Verkaufschance), DA
   assert.match(await page(app, `/leads/${a.id}`), /Rückruf Frau Muster Mittwoch/);
   assert.match(await page(app, '/leads'), /Jetzt bearbeiten/); assert.match(await page(app, '/leads'), /Interessiert/);
 });
+
+test('„Manuell prüfen“ enthält nicht jeden Lead, nur weil die Telefonakquise noch nicht freigegeben ist', { skip, timeout: 300_000 }, async () => {
+  const app = await appSetup('00000000-0000-0000-0000-000000000452', { autoDemo: false }); apps.push(app);   // Telefonakquise bewusst NICHT freigegeben
+  const { limits } = await app.repo.getLimits(); await app.repo.saveLimits({ ...limits, maxLeadsPerRun: 1000, maxAuditsPerRun: 1000, maxCrawlPagesPerRun: 20000 });
+  const live = createProviders({ APP_MODE: 'live' }, { baseUrl: app.base });
+  Object.assign(app.ctx.registry.providers, { places: new SyntheticPlaces({ n: 8, noSiteEvery: 1 }), crawler: new StubCrawler(), directory: live.providers.directory, social: live.providers.social });
+  await app.ctx.runner.start(normalizeCriteria({ location: 'Völklingen', radiusKm: '30', subIndustries: ['nagelstudio'], maxLeads: '50' }, app.ctx.cfg.taxonomy, app.ctx.cfg.pipeline.sizes)); await app.ctx.runner.idle();
+  const all = await app.ctx.leads.list({ limit: 100 }); assert.equal(all.total, 8);
+  assert.ok((await app.pool.query("select 1 from leads where contact_readiness = 'MANUAL_REVIEW'")).rowCount! >= 6, 'Voraussetzung: viele Leads sind nur wegen der gesperrten Telefonakquise MANUAL_REVIEW');
+  assert.equal((await app.ctx.leads.list({ quick: 'manual_check', limit: 100 })).total, 0);
+  await app.pool.query("update leads set review_flag = 'possible_duplicate' where id = $1", [all.rows[0].id]); assert.equal((await app.ctx.leads.list({ quick: 'manual_check', limit: 100 })).total, 1);
+});

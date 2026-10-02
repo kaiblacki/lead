@@ -126,7 +126,8 @@ export class LeadStore {
       has_email: hasEmail, has_phone: 'l.phone is not null',
       has_website: 'l.website_url is not null',
       demo_recommended: `l.demo_decision = 'recommended' and not ${hasDemo}`,
-      manual_check: "(l.review_flag is not null or l.contact_readiness = 'MANUAL_REVIEW' or l.official_website_verified = 'UNCERTAIN')",
+      // „Manuell prüfen“: Dublette, unsichere Website oder unklare Kontaktlage – nicht die bloß noch nicht freigegebene Telefonakquise (sonst stünde jeder Lead hier)
+      manual_check: "(l.review_flag is not null or l.official_website_verified = 'UNCERTAIN' or (l.contact_readiness = 'MANUAL_REVIEW' and coalesce(l.contact_reason, '') not like 'Telefonakquise ist in den Einstellungen%'))",
       data_needed: "l.work_status = 'DATA_NEEDED' and l.contact_readiness <> 'DO_NOT_CONTACT' and l.status <> 'IGNORED'",
       ready_contact: "l.work_status = 'CONTACTABLE' and l.effective_priority in ('A','B') and not l.paused and l.contact_readiness <> 'DO_NOT_CONTACT' and l.status in ('QUALIFIED','DEMO_CREATED')",
       new_a: "l.effective_priority = 'A' and l.call_count = 0 and l.created_at > now() - interval '14 days' and l.status in ('QUALIFIED','DEMO_CREATED')",
