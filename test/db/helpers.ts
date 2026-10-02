@@ -116,9 +116,9 @@ export async function makeCustomer(app: App, leadId: string, o: { maintenance?: 
 }
 
 /** Test-App mit 12 synthetischen Leads (Nagelstudios, ohne/mit Website, teils ohne Telefon). `phone: false` lässt die Telefonakquise gesperrt. */
-export async function seededApp(owner: string, o: { phone?: boolean; n?: number } = {}) {
+export async function seededApp(owner: string, o: { phone?: boolean; n?: number; cfgDir?: string } = {}) {
   const { SyntheticPlaces, StubCrawler } = await import('../synthetic.ts');
-  const app = await appSetup(owner, { autoDemo: false });
+  const app = await appSetup(owner, { autoDemo: false, cfgDir: o.cfgDir });
   const { limits } = await app.repo.getLimits(); await app.repo.saveLimits({ ...limits, maxLeadsPerRun: 1000, maxAuditsPerRun: 1000, maxCrawlPagesPerRun: 20000 });
   if (o.phone !== false) await enablePhone(app);
   const live = createProviders({ APP_MODE: 'live' }, { baseUrl: app.base });

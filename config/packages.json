@@ -1,0 +1,56 @@
+{
+  "currency": "EUR",
+  "status": "INTERNAL_DRAFT_PRICE",
+  "statusNote": "Interne Preisbasis (INTERNAL_DRAFT_PRICE) – bis Kai die Preise final bestätigt. Alle Beträge in Cent, netto; konfigurierbar, nirgends in Templates fest verdrahtet.",
+  "packages": {
+    "STARTER": {
+      "label": "Starter", "priceCents": 79000, "revisionRounds": 1, "pages": "Onepager",
+      "suitableFor": "Onepager, kleine lokale Firma",
+      "includes": ["Responsive Website", "Hero", "Leistungen", "Kontakt", "Karte", "Öffnungszeiten", "Basis-SEO", "SSL", "Impressum/Datenschutz-Platzhalter", "1 Korrekturrunde"]
+    },
+    "BUSINESS": {
+      "label": "Business", "priceCents": 149000, "revisionRounds": 2, "pages": "bis etwa 5 Seiten",
+      "suitableFor": "Betriebe mit mehreren Leistungen und eigener Struktur",
+      "includes": ["Bis etwa 5 Seiten", "Individuelle Struktur", "Kontaktformular", "Galerie", "Social", "Leistungsseiten", "Local-SEO-Basis", "2 Korrekturrunden"]
+    },
+    "PRO": {
+      "label": "Pro", "priceCents": 249000, "revisionRounds": 3, "pages": "bis ca. 10 Seiten",
+      "suitableFor": "Betriebe mit erweitertem Bedarf und Conversion-Fokus",
+      "includes": ["Bis ca. 10 Seiten", "Erweiterte Funktionen", "Bessere Conversion-Struktur", "Individuelle Module", "Analytics-Grundsetup", "3 Korrekturrunden"]
+    }
+  },
+  "addons": {
+    "extra_page": { "label": "Extra Seite", "priceCents": 9900, "unit": "je Seite" },
+    "whatsapp_cta": { "label": "WhatsApp-CTA", "priceCents": 3900, "module": "whatsapp" },
+    "location_map": { "label": "Standortkarte", "priceCents": 3900, "module": "map", "includedIn": ["STARTER", "BUSINESS", "PRO"] },
+    "gallery": { "label": "Galerie", "priceCents": 7900, "module": "gallery", "includedIn": ["BUSINESS", "PRO"] },
+    "social_links": { "label": "Social Links", "priceCents": 3900, "module": "social", "includedIn": ["BUSINESS", "PRO"] },
+    "menu": { "label": "Speisekarte", "priceCents": 9900, "module": "menu" },
+    "online_booking": { "label": "Online-Termin-Integration", "priceCents": 14900, "module": "booking", "thirdParty": true },
+    "reservation": { "label": "Reservierungsintegration", "priceCents": 14900, "module": "reservation", "thirdParty": true },
+    "quote_request": { "label": "Angebotsanfrage", "priceCents": 14900, "module": "quote" },
+    "callback": { "label": "Rückrufmodul", "priceCents": 7900, "module": "callback" },
+    "newsletter": { "label": "Newsletter-Anmeldung", "priceCents": 12900, "module": "newsletter", "thirdParty": true },
+    "jobs": { "label": "Bewerbungsbereich", "priceCents": 19900, "module": "jobs" },
+    "extra_language": { "label": "Zusätzliche Sprache", "priceCents": 19900, "unit": "je Sprache" },
+    "local_seo": { "label": "Local-SEO-Setup", "priceCents": 24900 },
+    "analytics_setup": { "label": "Analytics-Grundsetup", "priceCents": 7900, "includedIn": ["PRO"] }
+  },
+  "care": {
+    "CARE": { "label": "Care", "monthlyCents": 3900, "includes": ["Hosting", "SSL", "Monitoring", "Backups", "Technische Pflege"] },
+    "CARE_PLUS": { "label": "Care Plus", "monthlyCents": 6900, "includes": ["Alles aus Care", "Kleine Änderungen", "Priorisierter Support"] },
+    "GROWTH": { "label": "Growth", "monthlyCents": 11900, "includes": ["Alles aus Care Plus", "Mehr Änderungszeit", "Analytics-Bericht", "Laufende Optimierung"] }
+  },
+  "thirdPartyNote": "Drittanbieter- und Lizenzkosten (z. B. Domain, Buchungs- oder Newsletter-Tools) sind nicht im Preis enthalten und werden separat ausgewiesen.",
+  "partnerDiscount": { "percent": 50, "appliesTo": "PACKAGE_BASE", "reason": "ACTIVE_PARTNER", "requiresStatus": "ACTIVE_PARTNER", "requiresManualApproval": true,
+    "note": "Nur auf den Basis-Webseitenpreis. Extras, Fremdkosten, laufende Wartung und Drittanbietergebühren bleiben regulär, sofern Kai nichts anderes manuell festlegt. Nicht an Versicherungsverträge gekoppelt." },
+  "community": { "monthlyCents": 2900, "yearlyCents": 29000, "freeFor": ["ACTIVE_PARTNER"] },
+  "paymentPlan": { "depositPercent": 30 },
+  "process": ["Beauftragung und Anzahlung", "Eingang der Inhalte (Texte, Fotos, Logos)", "Produktion der Website", "Interne Qualitätskontrolle", "Kundenfreigabe mit Korrekturrunden", "Restzahlung", "Veröffentlichung nach separater Freigabe"],
+  "prerequisites": ["Inhalte (Texte, Fotos, Logo) werden vom Kunden geliefert bzw. freigegeben", "Zugang zu Domain/Hosting, falls vorhanden", "Impressums- und Datenschutzangaben liefert der Kunde bzw. werden rechtlich geprüft"],
+  "marketReference": {
+    "internalOnly": true, "label": "Marktrichtwert 2026 (nur intern)", "pages": "4–6 Seiten", "medianCents": 280000, "sample": "aktuelle Agentur-Stichprobe",
+    "rangeLowCents": 150000, "rangeHighCents": 700000, "rangeNote": "Eine kleine Firmenwebsite kostet häufig ca. 1.500–7.000 €.",
+    "note": "Nur interne Verkaufsorientierung. Wird NICHT im Kundenangebot genannt oder behauptet."
+  }
+}

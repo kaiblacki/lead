@@ -84,7 +84,7 @@ test('5 OFFER_ACCEPTED → DEPOSIT_PENDING: Bestellung entsteht, vor der Anzahlu
   assert.equal(await leadStatus(), 'DEPOSIT_PENDING'); assert.equal(await orderStatus(), 'PAYMENT_PENDING');
   // Keine Produktion ohne Anzahlung
   assert.match(await flash(await app.post(`/orders/${S.orderId}/build`)), /nur im Status IN_PRODUCTION|Fehler|nicht/i);
-  assert.match(await flash(await app.post(`/orders/${S.orderId}/deploy`)), /vollständiger Zahlung/);
+  assert.match(await flash(await app.post(`/orders/${S.orderId}/deploy`, { deploy_approval: '1' })), /vollständiger Zahlung/);
   assert.match(await flash(await app.post(`/orders/${S.orderId}/checkout/final`)), /nicht möglich/);
   assert.match(await flash(await app.post(`/orders/${S.orderId}/checkout/maintenance`)), /nicht möglich/);
   assert.equal(await orderStatus(), 'PAYMENT_PENDING');
@@ -185,7 +185,7 @@ test('10 Freigabe → APPROVED → FINAL_PAYMENT: Kunde wird zur Restzahlung wei
   assert.equal(ap.status, 303);
   assert.match(ap.headers.get('location') ?? '', /\/mock-pay\/mock_cs_[0-9a-f]{24}$/, 'Kunde landet direkt im Restzahlungs-Checkout');
   assert.equal(await orderStatus(), 'FINAL_PAYMENT_PENDING'); assert.equal(await leadStatus(), 'FINAL_PAYMENT');
-  assert.match(await flash(await app.post(`/orders/${S.orderId}/deploy`)), /vollständiger Zahlung/);
+  assert.match(await flash(await app.post(`/orders/${S.orderId}/deploy`, { deploy_approval: '1' })), /vollständiger Zahlung/);
   // doppelte Freigabe nicht möglich
   assert.equal((await fetch(`${app.base}/r/${S.token}/approve`, { method: 'POST', redirect: 'manual' })).status, 400);
   const fin = (await app.pool.query("select id, amount_cents from payments where order_id=$1 and kind='final'", [S.orderId])).rows;
@@ -200,7 +200,7 @@ test('11 FULLY_PAID → DEPLOYED: Mock-Restzahlung im Dashboard simuliert, erst 
   assert.equal(await orderStatus(), 'FULLY_PAID');
   const dash = app.text(await (await app.get(`/orders/${S.orderId}`)).text());
   assert.match(dash, /Veröffentlichen/);
-  const dep = await flash(await app.post(`/orders/${S.orderId}/deploy`));
+  const dep = await flash(await app.post(`/orders/${S.orderId}/deploy`, { deploy_approval: '1' }));
   assert.match(dep, /Veröffentlicht: /);
   assert.equal(await orderStatus(), 'DEPLOYED'); assert.equal(await leadStatus(), 'DEPLOYED');
   const url = (await app.pool.query('select url, adapter from deployments where order_id=$1', [S.orderId])).rows[0];
@@ -209,7 +209,7 @@ test('11 FULLY_PAID → DEPLOYED: Mock-Restzahlung im Dashboard simuliert, erst 
   const live = await app.get(`/hosted/${S.slug}/`, false);
   assert.equal(live.status, 200); const html = await live.text(); assert.match(html, /<html/i); assert.ok(html.includes('0681 112233'));
   // doppeltes Veröffentlichen nicht möglich
-  assert.match(await flash(await app.post(`/orders/${S.orderId}/deploy`)), /vollständiger Zahlung/);
+  assert.match(await flash(await app.post(`/orders/${S.orderId}/deploy`, { deploy_approval: '1' })), /vollständiger Zahlung/);
 });
 
 test('12 MAINTENANCE: Wartungs-Abo (Mock) → Plan aktiv, Prüfung ohne Fehler, Fehler-Simulation erzeugt Aufgabe, Aufgabe erledigt', { skip }, async () => {

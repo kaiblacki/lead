@@ -176,7 +176,7 @@ export class DeliveryService {
   }
 
   /** Veröffentlicht erst nach vollständiger Zahlung und nur den vom Kunden freigegebenen Stand. */
-  async deploy(orderId: string, hosting: HostingProvider) {
+  async deploy(orderId: string, hosting: HostingProvider, o: { approvedAt?: Date } = {}) {
     const order = await this.orders.getOrder(orderId);
     if (!order) throw new Error('Bestellung nicht gefunden');
     if (order.status !== 'FULLY_PAID') throw new Error(`Veröffentlichung erst nach vollständiger Zahlung (Status ${order.status})`);
@@ -185,6 +185,7 @@ export class DeliveryService {
     if (!r) throw new Error('Kein freigegebener Stand mit bestandener QA vorhanden');
     const { url } = await hosting.deploy(r.company_name, r.files as SiteFiles);
     await this.repo.tx(async (c) => {
+      await c.query('update orders set deploy_approved_at = coalesce(deploy_approved_at, $3) where id=$1 and owner_id=$2', [orderId, this.repo.ownerId, o.approvedAt ?? new Date()]);
       await c.query('insert into deployments(owner_id, order_id, build_id, adapter, url) values ($1,$2,$3,$4,$5)', [this.repo.ownerId, orderId, r.build_id, hosting.name, url]);
       await this.orders.setOrderStatus(c, orderId, 'FULLY_PAID', 'DEPLOYED', `Veröffentlicht via ${hosting.name}`);
       await this.orders.setLeadStatus(c, order.lead_id, 'DEPLOYED', 'Veröffentlicht');

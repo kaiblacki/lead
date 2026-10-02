@@ -89,5 +89,7 @@
   "estimate": {
     "maintenanceMonths": 12,
     "label": "Schätzung auf Basis der Preisliste – unverbindlich, kein Angebot"
-  }
+  },
+  "deliveryNote": "Lieferzeit: ca. 14 Werktage nach Anzahlung und Eingang aller Inhalte (Mock-Wert)",
+  "maintenanceTerm": "Wartung monatlich kündbar zum Monatsende (Mock-Wert)"
 }

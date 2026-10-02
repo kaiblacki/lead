@@ -122,25 +122,49 @@ export class OrderService {
         await this.repo.event(c, p.lead_id, 'payment_mismatch', { payment_id: p.id, expected: p.amount_cents, got: ev.amountCents, actor: 'system' });
         return { handled: 'mismatch' };
       }
-      await c.query("update payments set status='paid', paid_at=now() where id=$1", [p.id]);
-      await this.repo.event(c, p.lead_id, 'payment_paid', { payment_id: p.id, kind: p.kind, amount_cents: p.amount_cents, provider: p.provider, actor: 'system' });
-      const os = p.order_status as OrderStatus;
-      if (p.kind === 'deposit' && os === 'PAYMENT_PENDING') {
-        await this.setOrderStatus(c, p.order_id, os, 'DEPOSIT_PAID', 'Anzahlung eingegangen');
-        await this.setOrderStatus(c, p.order_id, 'DEPOSIT_PAID', 'IN_PRODUCTION', 'Produktion gestartet');
-        await this.setLeadStatus(c, p.lead_id, 'DEPOSIT_PAID', 'Anzahlung eingegangen');
-        await this.setLeadStatus(c, p.lead_id, 'PRODUCTION', 'Produktion gestartet');
-        await recordOutcome(this.repo, c, p.lead_id, 'final', 'WON', { order_id: p.order_id, deposit_cents: p.amount_cents });
-        await this.createProject(c, p.order_id, p.lead_id);
-      } else if (p.kind === 'final' && os === 'FINAL_PAYMENT_PENDING') {
-        await this.setOrderStatus(c, p.order_id, os, 'FULLY_PAID', 'Restzahlung eingegangen');
-      } else if (p.kind === 'maintenance' && os === 'DEPLOYED') {
-        await this.setOrderStatus(c, p.order_id, os, 'MAINTENANCE_ACTIVE', 'Wartung aktiviert');
-        await this.setLeadStatus(c, p.lead_id, 'MAINTENANCE', 'Wartung aktiviert');
-        const next = new Date(this.now().getTime() + 7 * 86400000);
-        await c.query(`insert into maintenance_plans(owner_id, order_id, monthly_cents, next_check_at) values ($1,$2,$3,$4) on conflict (order_id) do update set status='ACTIVE', monthly_cents=$3`, [this.repo.ownerId, p.order_id, p.amount_cents, next]);
-      }
+      await this.markPaid(c, p);
       return { handled: 'paid', orderId: p.order_id, kind: p.kind };
+    });
+  }
+
+  /** Gemeinsamer Weg für „bezahlt“ (Webhook und manuelle Bestätigung): Zahlung markieren und den Bestellstatus in erlaubten Schritten vorantreiben. */
+  private async markPaid(c: pg.PoolClient, p: { id: string; lead_id: string; order_id: string; order_status: string; kind: Kind; amount_cents: number; provider: string; maintenance_cents?: number }) {
+    await c.query("update payments set status='paid', paid_at=now() where id=$1", [p.id]);
+    await this.repo.event(c, p.lead_id, 'payment_paid', { payment_id: p.id, kind: p.kind, amount_cents: p.amount_cents, provider: p.provider, actor: 'system' });
+    const os = p.order_status as OrderStatus;
+    if (p.kind === 'deposit' && os === 'PAYMENT_PENDING') {
+      await this.setOrderStatus(c, p.order_id, os, 'DEPOSIT_PAID', 'Anzahlung eingegangen');
+      await this.setOrderStatus(c, p.order_id, 'DEPOSIT_PAID', 'IN_PRODUCTION', 'Produktion gestartet');
+      await this.setLeadStatus(c, p.lead_id, 'DEPOSIT_PAID', 'Anzahlung eingegangen');
+      await this.setLeadStatus(c, p.lead_id, 'PRODUCTION', 'Produktion gestartet');
+      await recordOutcome(this.repo, c, p.lead_id, 'final', 'WON', { order_id: p.order_id, deposit_cents: p.amount_cents });
+      await this.createProject(c, p.order_id, p.lead_id);
+    } else if (p.kind === 'final' && os === 'FINAL_PAYMENT_PENDING') {
+      await this.setOrderStatus(c, p.order_id, os, 'FULLY_PAID', 'Restzahlung eingegangen');
+    } else if (p.kind === 'maintenance' && os === 'DEPLOYED') {
+      await this.setOrderStatus(c, p.order_id, os, 'MAINTENANCE_ACTIVE', 'Wartung aktiviert');
+      await this.setLeadStatus(c, p.lead_id, 'MAINTENANCE', 'Wartung aktiviert');
+      const next = new Date(this.now().getTime() + 7 * 86400000);
+      await c.query(`insert into maintenance_plans(owner_id, order_id, monthly_cents, next_check_at) values ($1,$2,$3,$4) on conflict (order_id) do update set status='ACTIVE', monthly_cents=$3`, [this.repo.ownerId, p.order_id, p.amount_cents, next]);
+    }
+  }
+
+  /**
+   * Manuelle Zahlungsbestätigung (Phase F): Kai bestätigt einen Zahlungseingang selbst (z. B. Überweisung). Gespeichert werden Betrag, Status, Zeitpunkt und Referenz.
+   * Läuft durch dieselbe Statuslogik wie ein Webhook; die Reihenfolge Anzahlung → Restzahlung → Wartung wird erzwungen. Keine echte Zahlungsintegration.
+   */
+  async confirmManualPayment(orderId: string, kind: Kind, o: { reference: string; actor?: string }) {
+    const ref = (o.reference ?? '').trim(); if (ref.length < 3 || ref.length > 200) throw new Error('Bitte eine Zahlungsreferenz angeben (3 bis 200 Zeichen, z. B. Überweisungsdatum und Betreff).');
+    const order = await this.getOrder(orderId); if (!order) throw new Error('Bestellung nicht gefunden');
+    const allowed: Record<Kind, OrderStatus> = { deposit: 'PAYMENT_PENDING', final: 'FINAL_PAYMENT_PENDING', maintenance: 'DEPLOYED' };
+    if (order.status !== allowed[kind]) throw new Error(`Zahlung "${kind}" ist im Status ${order.status} nicht möglich`);
+    const amount = kind === 'deposit' ? order.deposit_cents : kind === 'final' ? order.final_cents : order.maintenance_cents; if (amount <= 0) throw new Error(`Betrag für "${kind}" ist 0 – keine Bestätigung nötig`);
+    return this.repo.tx(async (c) => {
+      await c.query("update payments set status='expired' where order_id=$1 and kind=$2 and owner_id=$3 and status='pending'", [orderId, kind, this.repo.ownerId]);
+      const pay = (await c.query("insert into payments(owner_id, order_id, kind, amount_cents, currency, provider, status, paid_at, reference, confirmed_by) values ($1,$2,$3,$4,$5,'manual','paid',now(),$6,$7) returning id", [this.repo.ownerId, orderId, kind, amount, order.currency, ref, o.actor ?? 'user'])).rows[0];
+      await this.markPaid(c, { id: pay.id, lead_id: order.lead_id, order_id: orderId, order_status: order.status, kind, amount_cents: amount, provider: 'manual' });
+      await this.repo.event(c, order.lead_id, 'payment_confirmed_manually', { payment_id: pay.id, kind, reference: ref, actor: o.actor ?? 'user' });
+      return { paymentId: pay.id as string, orderId };
     });
   }
 

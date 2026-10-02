@@ -8,6 +8,7 @@ import type { Kind } from '../../orders/service.ts';
 import type { ProjectContent } from '../../orders/service.ts';
 import { loadConfig } from '../../core/config.ts';
 import { esc } from '../html.ts';
+import { PIPELINE_LABEL, pipelineStep, stepStates } from '../../orders/pipeline.ts';
 
 const id = uuid.source;
 const FLOW: Status[] = ['OFFER_ACCEPTED', 'DEPOSIT_PENDING', 'DEPOSIT_PAID', 'PRODUCTION', 'QA', 'CUSTOMER_REVIEW', 'APPROVED', 'FINAL_PAYMENT', 'DEPLOYED', 'MAINTENANCE'];
@@ -41,13 +42,18 @@ export const routes: Route[] = [
     const payBtn = (kind: Kind, label: string, when: string) => (st === when ? postBtn(r.app.csrf, `/orders/${orderId}/checkout/${kind}`, label) : '');
     return render(r, { title: `Auftrag: ${lead.company_name}`, nav: 'orders', body: html`
       <div class="card"><div class="row"><a href="/leads/${lead.id}" class="grow"><b>${lead.company_name}</b></a>${statusBadge(leadSt)}<span class="badge">Auftrag: ${ORDER_LABEL[st] ?? st}</span></div>
-        <div class="stepper">${FLOW.map((s, i) => html`<span class="step ${s === leadSt ? 'now' : i < idx ? 'done' : ''}">${STAGE_LABEL[s]}</span>`)}</div>
+        <div class="stepper" aria-label="Auftragspipeline">${stepStates(pipelineStep({ orderStatus: st, hasBuild: !!build, openChanges: changes.length, deployApproved: !!order.deploy_approved_at })).map((x) => html`<span class="step ${x.state === 'now' ? 'now' : x.state === 'done' ? 'done' : ''}">${PIPELINE_LABEL[x.step]}</span>`)}</div>
         <p>${eur(order.deposit_cents)} Anzahlung + ${eur(order.final_cents)} Restzahlung · Wartung ${eur(order.maintenance_cents)}/Monat</p></div>
 
       <div class="card"><h2>Zahlungen</h2>
         ${pays.length ? html`<table>${pays.map((p: any) => html`<tr><td>${PAY_LABEL[p.kind]}</td><td>${eur(p.amount_cents)}</td><td><span class="badge ${p.status === 'paid' ? 'b-ok' : p.status === 'pending' ? 'b-warn' : 'b-bad'}">${PAY_STATE_LABEL[p.status] ?? p.status}</span></td>
           <td>${p.status === 'paid' ? html`<a href="/payments/${p.id}/invoice" target="_blank" rel="noopener noreferrer">Rechnung</a>` : ''}${p.status === 'pending' && p.checkout_url ? html`<a href="${p.checkout_url}" target="_blank" rel="noopener noreferrer">Zahlungslink</a>` : ''}${p.status === 'pending' && isMockPay ? postBtn(r.app.csrf, `/payments/${p.id}/simulate`, `${PAY_LABEL[p.kind]} bezahlt (Simulation)`, { cls: 'warn' }) : ''}</td></tr>`)}</table>` : html`<p class="mute">Noch keine Zahlungslinks.</p>`}
         <div class="row">${payBtn('deposit', 'Anzahlungs-Link erstellen', 'PAYMENT_PENDING')}${payBtn('final', 'Restzahlungs-Link erstellen', 'FINAL_PAYMENT_PENDING')}${payBtn('maintenance', 'Wartungs-Abo-Link erstellen', 'DEPLOYED')}</div>
+        ${st === 'PAYMENT_PENDING' || st === 'FINAL_PAYMENT_PENDING' || st === 'DEPLOYED' ? html`<details><summary>Zahlung manuell bestätigen (z. B. Überweisung eingegangen)</summary>
+          ${postForm(r.app.csrf, `/orders/${orderId}/payment/manual`, html`<input type="hidden" name="kind" value="${st === 'PAYMENT_PENDING' ? 'deposit' : st === 'FINAL_PAYMENT_PENDING' ? 'final' : 'maintenance'}">
+            <p>Betrag: <b>${eur(st === 'PAYMENT_PENDING' ? order.deposit_cents : st === 'FINAL_PAYMENT_PENDING' ? order.final_cents : order.maintenance_cents)}</b> (${PAY_LABEL[st === 'PAYMENT_PENDING' ? 'deposit' : st === 'FINAL_PAYMENT_PENDING' ? 'final' : 'maintenance']})</p>
+            <label>Referenz (Pflicht, z. B. „Überweisung 14.10., Betreff RE-2026-001“)<input name="reference" required minlength="3" maxlength="200"></label>
+            <label class="inline"><input type="checkbox" name="checked" value="1"> Ich habe den Zahlungseingang selbst geprüft.</label><p><button class="ok">Zahlung bestätigen</button></p>`, { style: 'display:block' })}</details>` : ''}
         <small class="mute">${isMockPay ? 'Mock-Zahlung: Der Link führt auf eine lokale Testseite. „Bezahlt (Simulation)“ löst denselben Ablauf aus wie ein echter Stripe-Webhook.' : 'Zahlungen laufen über Stripe; Bestätigung per Webhook.'} Reihenfolge ist erzwungen: keine Produktion ohne Anzahlung, keine Veröffentlichung ohne Restzahlung.</small></div>
 
       ${project ? html`<div class="card"><h2>Projektdaten</h2>
@@ -80,7 +86,7 @@ export const routes: Route[] = [
         <small class="mute">Wird nur gesendet, wenn du auf den Knopf drückst. Adressen auf der Sperrliste werden abgelehnt.</small></div>
 
       <div class="card"><h2>Veröffentlichung und Wartung</h2>
-        ${st === 'FULLY_PAID' ? postBtn(r.app.csrf, `/orders/${orderId}/deploy`, 'Veröffentlichen', { cls: 'ok' }) : html`<p class="mute">Veröffentlichung erst nach bestätigter Restzahlung.${r.app.autoDeploy ? ' (Auto-Deploy aktiv)' : ''}</p>`}
+        ${st === 'FULLY_PAID' ? postForm(r.app.csrf, `/orders/${orderId}/deploy`, html`<label class="inline"><input type="checkbox" name="deploy_approval" value="1"> Ich gebe die Veröffentlichung ausdrücklich frei (DEPLOY_APPROVAL). Es wird keine Domain automatisch verbunden.</label> <button class="ok">Veröffentlichen</button>`) : html`<p class="mute">Veröffentlichung erst nach bestätigter Restzahlung.${r.app.autoDeploy ? ' (Auto-Deploy aktiv)' : ''}</p>`}
         ${deps.map((d: any) => html`<p>Veröffentlicht (${d.adapter}): ${/^https?:/.test(d.url) ? html`<a href="${d.url}" target="_blank" rel="noopener noreferrer">${d.url}</a>` : d.url} <small>${fmt(d.created_at)}</small></p>`)}
         ${plan ? html`<p><a class="btn" href="/maintenance/${orderId}">Wartung öffnen</a> <span class="badge ${plan.status === 'ACTIVE' ? 'b-ok' : 'b-warn'}">${PLAN_LABEL[plan.status] ?? plan.status}</span></p>` : ''}</div>` });
   } },
@@ -140,8 +146,15 @@ ${d.smallBusiness ? '<p class="s">Gemäß § 19 UStG wird keine Umsatzsteuer ber
     const out = await r.ctx.delivery.processChange(r.params[0], gateway);
     return redirect(`/orders/${rv.order_id}`, out.status === 'APPLIED' ? okFlash(`Änderung umgesetzt. ${out.build?.passed ? 'Neue Vorschau ist bereit.' : 'QA nicht bestanden – bitte Fehler prüfen.'}`) : { kind: 'err', text: `Nicht automatisch umsetzbar: ${out.unclear.join(' | ')}` });
   } },
+  { method: 'POST', path: new RegExp(`^/orders/${id}/payment/manual$`), h: async (r) => {
+    const kind = r.form.get('kind') as Kind; if (!['deposit', 'final', 'maintenance'].includes(kind)) throw new UserError('Unbekannte Zahlungsart.');
+    if (r.form.get('checked') !== '1') throw new UserError('Bitte bestätigen, dass du den Zahlungseingang selbst geprüft hast.');
+    try { await r.ctx.orders.confirmManualPayment(r.params[0], kind, { reference: r.form.get('reference') ?? '' }); } catch (e) { throw new UserError(e instanceof Error ? e.message : String(e)); }
+    return redirect(`/orders/${r.params[0]}`, okFlash('Zahlung manuell bestätigt und gespeichert.'));
+  } },
   { method: 'POST', path: new RegExp(`^/orders/${id}/deploy$`), h: async (r) => {
-    const out = await r.ctx.delivery.deploy(r.params[0], r.ctx.registry.providers.hosting);
+    if (r.form.get('deploy_approval') !== '1') throw new UserError('Bitte die Veröffentlichung ausdrücklich freigeben (DEPLOY_APPROVAL).');
+    const out = await r.ctx.delivery.deploy(r.params[0], r.ctx.registry.providers.hosting, { approvedAt: r.ctx.now() });
     return redirect(`/orders/${r.params[0]}`, okFlash(`Veröffentlicht: ${out.url}`));
   } },
   { method: 'GET', path: new RegExp(`^/orders/${id}/preview/([\\w.\\-]+)$`), h: async (r) => {
