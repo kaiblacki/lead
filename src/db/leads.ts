@@ -118,6 +118,11 @@ export class LeadStore {
       demo_open: `l.website_url is not null and not ${hasDemo} and l.demo_decision is null`,
       not_contacted: "l.call_count = 0 and l.last_contact_at is null and l.status in ('QUALIFIED','DEMO_CREATED')",
       call_today: `(${openCall} or (l.callback_at is not null and l.callback_at < now() + interval '1 day')) and l.contact_readiness = 'READY_FOR_MANUAL_CALL' and not l.paused`,
+      // Arbeitsstatus-Filter: angerufen / interessiert / später (Rückruf) / kein Interesse
+      called: 'l.call_count > 0', interested: "l.status in ('INTERESTED','OFFER_SENT','OFFER_ACCEPTED')", later: 'l.callback_at is not null',
+      no_interest: "exists (select 1 from contact_history ch where ch.lead_id = l.id and ch.result = 'NO_INTEREST')",
+      // „Jetzt bearbeiten“: kontaktierbare A/B-Leads, die noch nicht abgeschlossen sind
+      now_work: "l.work_status = 'CONTACTABLE' and l.effective_priority in ('A','B') and not l.paused and l.contact_readiness <> 'DO_NOT_CONTACT' and l.status in ('QUALIFIED','DEMO_CREATED','CONTACTED','REPLIED')",
       has_email: hasEmail, has_phone: 'l.phone is not null',
       has_website: 'l.website_url is not null',
       demo_recommended: `l.demo_decision = 'recommended' and not ${hasDemo}`,
@@ -131,11 +136,11 @@ export class LeadStore {
     if (f.quick && QUICK[f.quick]) where += ` and ${QUICK[f.quick]}`;
     let join = '';
     if (f.runId) { p.push(f.runId); join = `join run_results rr on rr.lead_id = l.id and rr.run_id = $${p.length}`; if (f.matchedOnly) where += ' and rr.matched'; }
-    // Standard: vertriebsorientiert – höchste Verkaufschance zuerst; bei Gleichstand Firmen ohne Website, dann schlechteste Website, dann mit Telefonnummer
+    // Standard: vertriebsorientiert – kontaktierbare Leads zuerst (DATA_NEEDED getrennt am Ende), dann Priorität, höchste Verkaufschance; bei Gleichstand Firmen ohne Website, dann schlechteste Website, dann mit Telefonnummer
     const sort = f.sort || (f.quick === 'worst_websites' ? 'website_asc' : '');
     const prioRank = "case l.effective_priority when 'A' then 0 when 'B' then 1 when 'C' then 2 when 'D' then 3 else 4 end";
     const order = sort === 'score' ? 'o.score desc nulls last, (l.website_state = \'none\') desc, au.overall_quality asc nulls last, l.created_at desc' : sort === 'website_asc' ? 'au.overall_quality asc nulls last, o.score desc nulls last' : sort === 'distance' ? 'l.distance_km asc nulls last' : sort === 'digital_need' ? 'o.digital_need desc nulls last' : sort === 'recent' ? 'l.created_at desc'
-      : `${prioRank}, o.score desc nulls last, (l.website_state = 'none') desc, au.overall_quality asc nulls last, (l.phone is not null) desc, l.created_at desc`;
+      : `(l.work_status = 'DATA_NEEDED') asc, (l.phone is not null) desc, ${prioRank}, o.score desc nulls last, (l.website_state = 'none') desc, au.overall_quality asc nulls last, (l.phone is not null) desc, l.created_at desc`;
     const limit = Math.min(f.limit ?? 100, 500), offset = Math.max(f.offset ?? 0, 0);
     const base = `from leads l ${join}
       left join lateral (select score, category, digital_need, data_quality_factor, dimensions from opportunities where lead_id = l.id order by created_at desc, id desc limit 1) o on true

@@ -183,7 +183,7 @@ export function statusCard(d: any, csrf: string, id: string): Safe {
   const order: Status[] = ['QUALIFIED', 'DEMO_CREATED', 'CONTACTED', 'INTERESTED', 'OFFER_SENT', 'OFFER_ACCEPTED', 'DEPOSIT_PENDING', 'DEPOSIT_PAID', 'PRODUCTION', 'QA', 'CUSTOMER_REVIEW', 'APPROVED', 'FINAL_PAYMENT', 'DEPLOYED', 'MAINTENANCE'];
   const steps = nextStatuses(from);
   return fold('Pipeline-Status', html`<div class="stepper">${order.map((s) => html`<span class="step ${s === from ? 'now' : done.has(s) ? 'done' : ''}">${s.replace(/_/g, ' ')}</span>`)}</div>
-    ${postForm(csrf, `/leads/${id}/status`, html`<div class="row"><select name="to">${steps.map((s) => html`<option>${s}</option>`)}${steps.length ? '' : html`<option disabled>keine weiteren Schritte</option>`}</select><input name="reason" placeholder="Grund / Notiz" required class="grow" maxlength="300"><button ${steps.length ? '' : raw('disabled')}>Status setzen</button></div>`, { style: 'display:block' })}<small class="mute">Nur erlaubte Übergänge. ${STATUSES.length} Stufen.</small>`, false);
+    ${postForm(csrf, `/leads/${id}/status`, html`<div class="row"><select name="to">${steps.map((s) => html`<option>${s}</option>`)}${steps.length ? '' : html`<option disabled>keine weiteren Schritte</option>`}</select><input name="reason" placeholder="Grund / Notiz" required class="grow" maxlength="300"><button ${steps.length ? '' : raw('disabled')}>Status setzen</button></div>`, { style: 'display:block' })}<small class="mute">Nur erlaubte Übergänge. ${STATUSES.length} Stufen.</small>`, true);
 }
 
 export function history(d: any): Safe {
