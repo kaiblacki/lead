@@ -9,8 +9,8 @@ const raw = async (app: App, path: string) => (await app.get(path)).text();
 test('Navigation in Gruppen START/LEADS/SALES/PARTNER/KUNDEN/ANALYTICS/SYSTEM; alle Ziele erreichbar (200)', { skip, timeout: 300_000 }, async () => {
   const app = await seededApp('00000000-0000-0000-0000-000000000901', { cfgDir: 'config.mock' }); apps.push(app);
   const h = await raw(app, '/today'); const nav = h.slice(h.indexOf('aria-label="Hauptnavigation"'), h.indexOf('</nav>', h.indexOf('aria-label="Hauptnavigation"')));
-  for (const g of ['START', 'LEADS', 'SALES', 'PARTNER', 'KUNDEN', 'ANALYTICS', 'SYSTEM']) assert.ok(nav.includes(`aria-label="${g}"`), g);
-  const hrefs = [...nav.matchAll(/href="([^"]+)"/g)].map((m) => m[1]); assert.ok(hrefs.length >= 15, String(hrefs.length));
+  for (const g of ['START', 'LEADS', 'SALES', 'TEAM', 'PARTNER', 'KUNDEN', 'ANALYTICS', 'SYSTEM']) assert.ok(nav.includes(`aria-label="${g}"`), g);
+  const menu = await (await app.get('/menu')).text(); const hrefs = [...new Set([...menu.matchAll(/href="(\/[^"#]*)/g)].map((m) => m[1].replace(/&amp;/g, '&')))]; assert.ok(hrefs.length >= 35, String(hrefs.length));
   for (const href of hrefs) { const res = await app.get(href); assert.equal(res.status, 200, href); }
 });
 

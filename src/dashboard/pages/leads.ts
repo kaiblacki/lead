@@ -9,7 +9,7 @@ import { effectiveDemoStage } from '../../demo/stage.ts';
 import { buildEmailDraft } from '../../sales/email-draft.ts';
 import { taskList } from './tasks.ts';
 import { quoteCard } from './offers.ts';
-import { needsCard, pane, quickActions, tabBar, tabKey } from './lead-tabs.ts';
+import { teamCard, needsCard, pane, quickActions, tabBar, tabKey } from './lead-tabs.ts';
 import { STATUSES, type Status } from '../../core/status.ts';
 import { CALL_RESULTS, type CallResult } from '../../calls/service.ts';
 import { reanalyzeLead } from '../../search/reanalyze.ts';
@@ -88,9 +88,11 @@ export const routes: Route[] = [
     const hints = [d.lead.priority_reason, en.needed ? `${en.label}: ${en.missing.join(', ')}` : '', analysis?.recommended_contact_angle ? `Empfohlener Ansatz: ${analysis.recommended_contact_angle}` : '',
       ...((analysis?.manual_checks ?? []) as string[]).slice(0, 4).map((m) => `Manuell prüfen: ${m}`), ...d.factsT.filter((f: any) => f.key === 'websiteCandidate').map((f: any) => `Mögliche Website (ungeprüft): ${f.value} – ${f.note ?? ''}`),
       dupes.length ? `${dupes.length} mögliche Dublette(n) – bitte prüfen.` : ''].filter(Boolean) as string[];
+    const [teamUsers, teamAssign, teamAttempts] = await Promise.all([ctx.team.users(), ctx.team.leadAssignmentOf(leadId), ctx.team.attemptsForLead(leadId)]);
     const tab = tabKey(r.url.searchParams.get('tab')); const na = cop.mass?.needsAnalysis ?? null;
     const hasNeedsTask = leadTasks.some((t: any) => t.type === 'NEEDS_ANALYSIS_APPOINTMENT');
-    return render(r, { title: d.lead.company_name, nav: 'leads', body: html`
+    const branch = ctx.cfg.taxonomy.sub(d.lead.sub_industry)?.label ?? d.lead.industry ?? null;
+    return render(r, { title: d.lead.company_name, nav: 'leads', crumbs: [['Startseite', '/'], ['Leads', '/leads'], ...(branch ? [[branch, `/leads?q=${encodeURIComponent(branch)}`] as [string, string]] : []), [d.lead.company_name]], back: ['← Zur Leadliste', '/leads'], body: html`
       ${P.header(d, r.app.csrf)}${quickActions({ leadId, phone: d.lead.phone ?? null, hasEmail })}${tabBar(leadId, tab)}
       ${pane('uebersicht', tab, html`${strategyCard(d, cop.mass, { csrf: r.app.csrf, leadId, draft: emailDraft, hasEmail, emailStatus: ctx.contact.effective(d.lead) })}${html`<div class="card" id="aufgaben"><div class="row"><h2 class="grow" style="margin:0">Aufgaben</h2><a class="btn" href="/tasks?lead=${leadId}">Aufgabe anlegen</a></div>${taskList(leadTasks, r.app.csrf, { empty: 'Keine offenen Aufgaben zu diesem Lead.', back: `/leads/${leadId}#aufgaben` })}</div>`}${P.contact(d, r.app.csrf, leadId, settings, r.app.mock)}${P.why(d)}`)}
       ${pane('verkauf', tab, html`${copilotCard(d, cop, { csrf: r.app.csrf, leadId, eligible: ctx.copilot.isEligible({ ...d.lead, opportunity: d.opportunity?.score ?? null }), aiAvailable: !ctx.registry.providers.ai.isMock })}${P.sales(d, r.app.csrf, leadId)}${P.statusCard(d, r.app.csrf, leadId)}${P.phoneView(d, analysis, { sender, demoUrl, contactPerson, csrf: r.app.csrf, leadId })}${P.priorityCard(d, { csrf: r.app.csrf, leadId })}${P.templatesCard(d, { sender: settings.callerName || ctx.cfg.agency.callerName || undefined, demoUrl, csrf: r.app.csrf, leadId, emailStatus: ctx.contact.effective(d.lead), hasEmail })}${P.notesCard(d, note, { csrf: r.app.csrf, leadId, hints })}${P.duplicatesCard(dupes, { csrf: r.app.csrf, leadId })}`)}
@@ -99,7 +101,7 @@ export const routes: Route[] = [
       ${pane('partner', tab, html`${partnerLeadCard(d, { csrf: r.app.csrf, leadId, partner: partnerRow, matches: partnerMatches, referrals: leadRefs, talk: cop.mass?.partnerTalk ?? null })}`)}
       ${pane('bedarf', tab, needsCard({ csrf: r.app.csrf, leadId, na, hasOpenTask: hasNeedsTask }))}
       ${pane('angebot', tab, html`${quoteCard({ csrf: r.app.csrf, leadId, cfg: ctx.cfg, quote: quoteRow, partnerStatus: pStatus, modules: effectiveModules(ctx.cfg, { recommended: recMods, selected: d.lead.modules_selected as string[] | null }), offers: leadOffers, offerRequested })}${P.docs(d, r.app.csrf, leadId, { demos, offer, order, templates: allTemplates().map((t) => ({ key: t.key, label: t.label })), recommended: rec, baseUrl: r.app.baseUrl })}`)}
-      ${pane('verlauf', tab, html`${P.history(d)}
+      ${pane('verlauf', tab, html`${teamCard({ csrf: r.app.csrf, leadId, assign: teamAssign, users: teamUsers, attempts: teamAttempts, canManage: r.user.role !== 'SALES' })}${P.history(d)}
       <details class="card"><summary>Datenschutz (DSGVO)</summary><p class="mute">Auskunft: alle zu diesem Unternehmen gespeicherten Daten. Löschung: entfernt den Lead und setzt ihn auf die Sperrliste. Kunden mit Auftrag können nicht gelöscht werden (Aufbewahrungspflichten).</p>
         <p><a class="btn" href="/leads/${leadId}/export.json">Auskunft herunterladen (JSON)</a></p>${postForm(r.app.csrf, `/leads/${leadId}/erase`, html`<label class="inline"><input type="checkbox" name="confirm" value="1"> Endgültig löschen</label> <button class="danger">Lead löschen</button>`, { style: 'display:block' })}</details>
       <div class="card row"><b class="grow">Social Media</b><a class="btn" href="/social/${leadId}">Content-Kalender öffnen</a></div>`)}` });

@@ -4,7 +4,7 @@ import { render } from './_page.ts';
 import type { Slice } from '../../db/growth-analytics.ts';
 import type { Range } from '../../db/analytics.ts';
 
-const VIEW_TABS: [string, string][] = [['funnel', 'Funnel & Umsatz'], ['industries', 'Branchen'], ['regions', 'Regionen'], ['strategies', 'Strategien'], ['partners', 'Partner'], ['costs', 'Kosten']];
+const VIEW_TABS: [string, string][] = [['funnel', 'Funnel & Umsatz'], ['industries', 'Branchen'], ['regions', 'Regionen'], ['strategies', 'Strategien'], ['team', 'Mitarbeiter'], ['partners', 'Partner'], ['revenue', 'Umsatz'], ['costs', 'Kosten']];
 const viewTabs = (cur: string) => html`<div class="row" role="tablist" aria-label="Analytics-Ansichten">${VIEW_TABS.map(([k, l]) => html`<a class="btn ${cur === k ? 'primary' : ''}" href="/analytics?view=${k}">${l}</a>`)}</div>`;
 const sliceTable = (rows: Slice[], label: string) => html`<div class="scroll"><table class="nowrap"><tr><th>${label}</th><th>Leads</th><th>Analysiert</th><th>Angerufen</th><th>Interessiert</th><th>Demos</th><th>Angebote</th><th>Gewonnen</th><th>Ø Handlungspriorität</th></tr>
   ${rows.map((x) => html`<tr><td><b>${x.key}</b></td><td>${x.leads}</td><td>${x.analyzed}</td><td>${x.called}</td><td>${x.interested}</td><td>${x.demos}</td><td>${x.offers}</td><td>${x.won}</td><td>${x.avgAction ?? 'nicht verfügbar'}</td></tr>`)}</table></div>`;
@@ -14,6 +14,11 @@ async function growthView(r: import('../types.ts').Req, view: string) {
   const ga = r.ctx.growthAnalytics; await r.ctx.growth.refresh();
   let body;
   if (view === 'industries') body = html`<div class="card"><h2>Nach Branche</h2><p class="mute">Erfahrungswerte aus den gespeicherten Daten – keine Prognose.</p>${sliceTable(await ga.slices('industry'), 'Branche')}</div>`;
+  else if (view === 'team') {
+    const { teamTable, periodOf } = await import('./team.ts'); const p = periodOf(r.url, r.ctx.now());
+    const qs = (e: Record<string, string> = {}) => new URLSearchParams({ range: p.range, ...e }).toString();
+    body = html`<div class="card"><h2>Mitarbeiter</h2><div class="row">${[['today', 'Heute'], ['week', 'Woche'], ['month', 'Monat']].map(([k, l]) => html`<a class="btn ${p.range === k ? 'primary' : ''}" href="/analytics?view=team&range=${k}">${l}</a>`)}</div>${await teamTable(r, { from: p.from, to: p.to }, qs, '/team/activity')}<small class="mute">Nur Admin/Teamleitung. Keine Rangliste – Details und fairer Vergleich unter <a href="/team/activity">Team-Aktivität</a>.</small></div>`;
+  }
   else if (view === 'regions') body = html`<div class="card"><h2>Nach Region / Ort</h2>${sliceTable(await ga.slices('region'), 'Ort')}</div>`;
   else if (view === 'strategies') {
     const [a, b] = await Promise.all([ga.slices('strategy'), ga.slices('contact')]);
@@ -24,6 +29,9 @@ async function growthView(r: import('../types.ts').Req, view: string) {
       <div class="row">${p.byStatus.map((s: any) => html`<span class="badge">${s.status}: ${s.n}</span>`)}</div>
       ${p.partners.length ? html`<div class="scroll"><table class="nowrap"><tr><th>Partner</th><th>Status</th><th>Ausgehend</th><th>Eingehend</th><th>Angenommen</th><th>Umgewandelt</th><th>Geschätzter Wert</th></tr>
         ${p.partners.map((x: any) => html`<tr><td><a href="/partners/${x.id}">${x.company_name}</a></td><td>${x.status}</td><td>${x.outgoing}</td><td>${x.incoming}</td><td>${x.accepted}</td><td>${x.converted}</td><td>${eur(x.value_cents)}</td></tr>`)}</table></div>` : html`<p class="mute">Noch keine Partner.</p>`}</div>`;
+  } else if (view === 'revenue') {
+    const rev = await ga.revenueByMonth(); const o = await r.ctx.analytics.overview('all', r.ctx.now());
+    body = html`<div class="card"><h2>Umsatz</h2><div class="grid"><div class="kpi"><b>${eur(o.revenueCents)}</b><span>bezahlt (Anzahlung + Rest)</span></div><div class="kpi"><b>${eur(o.mrrCents)}</b><span>wiederkehrend / Monat</span></div><div class="kpi"><b>${eur(o.avgOrderCents)}</b><span>Ø Auftragswert</span></div></div>${rev.length ? html`<table><tr><th>Monat</th><th>Zahlungen</th><th>Betrag</th></tr>${rev.map((m) => html`<tr><td>${m.month}</td><td>${m.n}</td><td>${eur(m.cents)}</td></tr>`)}</table>` : html`<p class="mute">Noch keine bezahlten Zahlungen.</p>`}</div>`;
   } else {
     const [c, rev] = await Promise.all([ga.costs(), ga.revenueByMonth()]);
     const e = (v: number | null) => (v === null ? 'nicht verfügbar' : `${(v / 100).toFixed(2).replace('.', ',')} €`);

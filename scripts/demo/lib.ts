@@ -150,6 +150,7 @@ const PROBES: Record<string, string> = {
   '0019_manual_payments.sql': "exists (select 1 from information_schema.columns where table_schema='public' and table_name='payments' and column_name='reference')",
   '0020_growth_scores.sql': "exists (select 1 from information_schema.columns where table_schema='public' and table_name='leads' and column_name='growth_scores')",
   '0021_customers.sql': "to_regclass('public.customers') is not null",
+  '0023_team.sql': "to_regclass('public.staff_users') is not null",
   '0022_community.sql': "to_regclass('public.community_members') is not null",
 };
 export const migrationFiles = (root: string) => readdirSync(join(root, 'supabase', 'migrations')).filter((f) => /^\d+.*\.sql$/.test(f)).sort();

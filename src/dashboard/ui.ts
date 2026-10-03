@@ -1,3 +1,6 @@
+import type { SessionUser } from '../team/rules.ts';
+import { homeFor, ROLE_LABEL } from '../team/rules.ts';
+import { activeGroup, activeHref, autoCrumbs, navFor, type Crumb } from './nav.ts';
 import { html, raw, Safe, esc } from './html.ts';
 import { STAGE_LABEL, type Status } from '../core/status.ts';
 
@@ -18,8 +21,11 @@ main{max-width:1000px;margin:0 auto;padding:12px 12px 90px;overflow-wrap:anywher
 a{color:var(--brand)}small,.mute{color:var(--mute)}code{background:#eef0f3;padding:1px 5px;border-radius:5px;overflow-wrap:anywhere}
 header.top{position:sticky;top:0;z-index:20;background:#101826;color:#fff}.top .bar{max-width:1000px;margin:0 auto;display:flex;align-items:center;gap:6px;padding:0 8px}
 .top nav{display:flex;gap:2px;overflow-x:auto;flex:1;min-width:0;scrollbar-width:none}.top nav::-webkit-scrollbar{display:none}
+.top .mainnav,.top .subnav{max-width:1000px;margin:0 auto;padding:0 8px}.top .subnav{background:#18253a}.top .ng{display:flex;flex:none}.top .bar{flex-wrap:wrap}.top a.home{color:#fff;text-decoration:none;padding:0 10px;min-height:44px;display:inline-flex;align-items:center;border:1px solid #3a4b68;border-radius:8px;white-space:nowrap}.top .who{color:#b8c6de;font-size:13px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}.top a.brand{color:#fff;text-decoration:none;display:inline-flex;align-items:center;min-height:44px}
+.big{font-size:18px}.btn.big,button.big{min-height:56px;font-size:18px;padding:0 22px}.telbtn{min-height:56px;font-size:20px}.startbtn{display:flex;justify-content:center;min-height:64px;font-size:20px;font-weight:700;margin-top:10px}.daylist{list-style:none;padding:0;margin:0 0 8px;font-size:18px}.daylist li{padding:4px 0}.callhead{border-left:5px solid #2f6fdb}
+.crumbs{margin:6px 0 0}.crumbs ol{list-style:none;display:flex;flex-wrap:wrap;gap:2px;margin:0;padding:0;font-size:14px}.crumbs li+li::before{content:'›';margin:0 6px;color:var(--mute)}.crumbs a,.crumbs span{display:inline-flex;align-items:center;min-height:44px}.crumbs span{color:var(--mute)}
+a.back{display:inline-flex;align-items:center;min-height:44px;padding:0 4px;font-weight:600;text-decoration:none}
 .top nav a{color:#dbe3f0;text-decoration:none;padding:0 12px;min-height:48px;display:inline-flex;align-items:center;white-space:nowrap;border-bottom:3px solid transparent}
-.top .ng{display:flex;align-items:center;gap:2px;border-left:1px solid #2c3a52;padding-left:4px;margin-left:4px;flex:none}.top .ng:first-child{border-left:0;margin-left:0;padding-left:0}.top .gl{font-size:10px;letter-spacing:.06em;color:#8fa3c4;padding:0 4px;writing-mode:horizontal-tb}
 .top nav a.on{color:#fff;border-bottom-color:#5aa9ff;font-weight:600}.brand{font-weight:700;padding:0 6px;white-space:nowrap}
 .top form{margin:0}.top button{min-height:44px;padding:0 12px}
 .banner{padding:8px 12px;font-size:14px;text-align:center}.banner.mock{background:#fff3cd;color:#664d03}.banner.kill{background:#c92a2a;color:#fff;font-weight:700}
@@ -49,31 +55,29 @@ details>summary{cursor:pointer;min-height:44px;display:flex;align-items:center;f
 .sticky-actions{position:sticky;bottom:0;background:var(--card);padding:8px 0;border-top:1px solid var(--line);margin-top:8px}
 .resgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}.resgrid button{min-height:52px}
 .tel{font-size:20px;font-weight:700;display:inline-flex;align-items:center;min-height:48px}
+@media(max-width:719px){header.top{position:static}}
 @media(min-width:720px){.resgrid{grid-template-columns:repeat(4,1fr)}main{padding-top:20px}}
 `;
 
-export type NavKey = 'home' | 'today' | 'tasks' | 'enrichment' | 'search' | 'leads' | 'calls' | 'pipeline' | 'orders' | 'maintenance' | 'customers' | 'community' | 'analytics' | 'partners' | 'settings' | '';
-/** Navigation in Gruppen (START / LEADS / SALES / PARTNER / KUNDEN / ANALYTICS / SYSTEM). */
-const NAV_GROUPS: { group: string; items: [NavKey, string, string][] }[] = [
-  { group: 'START', items: [['home', '/', 'Start'], ['today', '/today', 'Heute'], ['tasks', '/tasks', 'Aufgaben']] },
-  { group: 'LEADS', items: [['search', '/search', 'Suche'], ['leads', '/leads', 'Leads'], ['enrichment', '/enrichment', 'Daten'], ['calls', '/calls', 'Calls']] },
-  { group: 'SALES', items: [['pipeline', '/pipeline', 'Pipeline'], ['orders', '/orders', 'Aufträge']] },
-  { group: 'PARTNER', items: [['partners', '/partners', 'Partner']] },
-  { group: 'KUNDEN', items: [['customers', '/customers', 'Kunden'], ['maintenance', '/maintenance', 'Wartung'], ['community', '/community', 'Community']] },
-  { group: 'ANALYTICS', items: [['analytics', '/analytics', 'Analytics']] },
-  { group: 'SYSTEM', items: [['settings', '/settings', 'Einstellungen']] },
-];
+export type NavKey = string;
 
 export type Flash = { kind: 'ok' | 'err'; text: string } | null;
 
-export function layout(o: { title: string; nav: NavKey; body: Safe; csrf: string; killSwitch: boolean; mock: boolean; flash?: Flash; hostingMock?: boolean; attribution?: string; liveData?: boolean }): Safe {
+export function layout(o: { title: string; nav: NavKey; body: Safe; csrf: string; killSwitch: boolean; mock: boolean; flash?: Flash; hostingMock?: boolean; attribution?: string; liveData?: boolean; user?: SessionUser; path?: string; search?: string; crumbs?: Crumb[]; back?: [string, string] | null }): Safe {
+  const user: SessionUser = o.user ?? { id: null, name: 'Administrator', role: 'ADMIN' }; const path = o.path ?? '/'; const search = o.search ?? '';
+  const home = homeFor(user.role); const homeLabel = user.role === 'SALES' ? '🏠 Mein Tag' : '🏠 Startseite'; const nv = navFor(user.role); const ag = nv.groups.length ? activeGroup(user.role, path, search) : null;
+  const auto = autoCrumbs(path, o.title, search); const crumbs = o.crumbs ?? (user.role === 'SALES' ? null : auto.crumbs); const back = o.back === undefined ? (user.role === 'SALES' ? null : auto.back) : o.back;
+  const flatAct = nv.flat ? activeHref(nv.flat, path, search) : null; const sub = nv.groups.find((g) => g.group === ag); const subAct = sub ? activeHref(sub.items, path, search) : null;
   return html`<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>${o.title} – Agency OS</title><style>${raw(CSS)}</style></head><body>
-<header class="top"><div class="bar"><span class="brand">Agency OS</span>
-<nav aria-label="Hauptnavigation">${NAV_GROUPS.map((g) => html`<div class="ng" role="group" aria-label="${g.group}"><span class="gl">${g.group}</span>${g.items.map(([k, href, label]) => html`<a href="${href}" class="${o.nav === k ? 'on' : ''}">${label}</a>`)}</div>`)}</nav>
-<form method="post" action="/killswitch"><input type="hidden" name="csrf" value="${o.csrf}"><input type="hidden" name="on" value="${o.killSwitch ? '0' : '1'}"><button class="${o.killSwitch ? 'ok' : 'danger'}" title="${o.killSwitch ? 'Automatisierung wieder erlauben' : 'Alle automatischen Läufe stoppen'}">${o.killSwitch ? 'Fortsetzen' : 'STOP'}</button></form></div>
+<header class="top"><div class="bar"><a class="brand" href="${home}">Agency OS</a><a class="home" href="${home}">${homeLabel}</a>
+<span class="who" title="${ROLE_LABEL[user.role]}">${user.name} · ${ROLE_LABEL[user.role]}</span>${user.role === 'ADMIN' ? html`<a class="home" href="/menu">Alle Seiten</a>` : ''}
+${user.role === 'ADMIN' ? html`<form method="post" action="/killswitch"><input type="hidden" name="csrf" value="${o.csrf}"><input type="hidden" name="on" value="${o.killSwitch ? '0' : '1'}"><button class="${o.killSwitch ? 'ok' : 'danger'}" title="${o.killSwitch ? 'Automatisierung wieder erlauben' : 'Alle automatischen Läufe stoppen'}">${o.killSwitch ? 'Fortsetzen' : 'STOP'}</button></form>` : ''}</div>
+${nv.flat ? html`<nav aria-label="Hauptnavigation" class="mainnav">${nv.flat.map((i) => html`<a href="${i.href}" class="${flatAct === i.href ? 'on' : ''}">${i.label}</a>`)}</nav>`
+  : html`<nav aria-label="Hauptnavigation" class="mainnav">${nv.groups.map((g) => html`<div class="ng" role="group" aria-label="${g.group}"><a href="${g.items[0].href}" class="${ag === g.group ? 'on' : ''}">${g.group}</a></div>`)}</nav>
+${sub ? html`<nav aria-label="Bereich ${sub.group}" class="subnav">${sub.items.map((i) => html`<a href="${i.href}" class="${subAct === i.href ? 'on' : ''}">${i.label}</a>`)}</nav>` : ''}`}
 ${o.killSwitch ? html`<div class="banner kill">KILL SWITCH AKTIV – keine Suchläufe, Analysen oder Wartungsprüfungen</div>` : ''}
 ${o.mock ? (o.liveData ? html`<div class="banner mock"><b>DEMO-MODUS</b> · ECHTE FIRMENDATEN (öffentlich, OpenStreetMap) – Web-Enrichment, KI, Zahlung, E-Mail und WhatsApp können deaktiviert bzw. Mock sein: es wird nichts gesendet oder bezahlt</div>` : html`<div class="banner mock"><b>DEMO-MODUS</b> · MOCK-MODUS – Testdaten, keine echten Unternehmen, Zahlungen oder Nachrichten</div>`) : ''}</header>
-<main>${o.flash ? html`<div class="flash ${o.flash.kind}" role="status">${o.flash.text}</div>` : ''}<h1>${o.title}</h1>${o.body}</main>${o.attribution ? html`<footer class="attrib">${o.attribution} · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">openstreetmap.org/copyright</a></footer>` : ''}</body></html>`;
+<main>${crumbs ? html`<nav class="crumbs" aria-label="Brotkrumen"><ol>${crumbs.map(([label, href], i) => html`<li>${href && i < crumbs.length - 1 ? html`<a href="${href}">${label}</a>` : html`<span aria-current="page">${label}</span>`}</li>`)}</ol></nav>` : ''}${back ? html`<a class="back" href="${back[1]}">${back[0]}</a>` : ''}${o.flash ? html`<div class="flash ${o.flash.kind}" role="status">${o.flash.text}</div>` : ''}<h1>${o.title}</h1>${o.body}</main>${o.attribution ? html`<footer class="attrib">${o.attribution} · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">openstreetmap.org/copyright</a></footer>` : ''}</body></html>`;
 }
 
 export const postForm = (csrf: string, action: string, inner: Safe | string, o: { cls?: string; style?: string } = {}) =>

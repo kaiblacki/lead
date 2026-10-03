@@ -75,7 +75,7 @@ export const routes: Route[] = [
     await r.ctx.offerFlow.expireDue(); const o = await r.ctx.offerFlow.get(r.params[0]);
     if (!o) return render(r, { title: 'Nicht gefunden', nav: 'leads', status: 404, body: html`<p>Angebot nicht gefunden.</p>` });
     const c = o.content as OfferV2; const st = o.status as OfferStatus; const v2 = c.quoteBased;
-    return render(r, { title: `Angebot – ${o.company_name}`, nav: 'leads', body: html`
+    return render(r, { title: `Angebot – ${o.company_name}`, nav: 'sales', crumbs: [['Startseite', '/'], ['Sales'], ['Angebote', '/offers'], [`Angebot – ${o.company_name}`]], back: ['← Zum Lead', `/leads/${o.lead_id}?tab=angebot`], body: html`
       <div class="card"><div class="stepper">${CHAIN.map((s) => html`<span class="step ${s === st ? 'now' : CHAIN.indexOf(s) < CHAIN.indexOf(st) ? 'done' : ''}">${OFFER_LABEL[s]}</span>`)}${st === 'DECLINED' || st === 'EXPIRED' ? html`<span class="step now">${OFFER_LABEL[st]}</span>` : ''}</div>
         <p class="mute">Entwurf – nichts wurde gesendet. Gültig bis ${fmtDate(o.valid_until ?? c.validUntil)}. <a href="/leads/${o.lead_id}#angebot">← Lead</a></p>
         ${(c.warnings ?? []).map((w) => html`<div class="warnbox">${w}</div>`)}${c.internalDraft ? html`<div class="warnbox"><b>INTERNAL_DRAFT_PRICE</b> – Die Preise sind noch nicht final bestätigt; die Freigabe verlangt deine Bestätigung.</div>` : ''}

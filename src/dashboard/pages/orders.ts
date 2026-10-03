@@ -40,7 +40,7 @@ export const routes: Route[] = [
     const f = (n: string, v: unknown, label: string, extra = '') => html`<label>${label}<input name="${n}" value="${v ?? ''}" ${raw(extra)}></label>`;
     const issues: any[] = build?.qa_issues ?? [];
     const payBtn = (kind: Kind, label: string, when: string) => (st === when ? postBtn(r.app.csrf, `/orders/${orderId}/checkout/${kind}`, label) : '');
-    return render(r, { title: `Auftrag: ${lead.company_name}`, nav: 'orders', body: html`
+    return render(r, { title: `Auftrag: ${lead.company_name}`, nav: 'orders', crumbs: [['Startseite', '/'], ['Sales'], ['Aufträge', '/orders'], [`Auftrag: ${lead.company_name}`]], back: order.offer_id ? ['← Zum Angebot', `/offers/${order.offer_id}`] : ['← Zum Lead', `/leads/${order.lead_id}`], body: html`
       <div class="card"><div class="row"><a href="/leads/${lead.id}" class="grow"><b>${lead.company_name}</b></a>${statusBadge(leadSt)}<span class="badge">Auftrag: ${ORDER_LABEL[st] ?? st}</span></div>
         <div class="stepper" aria-label="Auftragspipeline">${stepStates(pipelineStep({ orderStatus: st, hasBuild: !!build, openChanges: changes.length, deployApproved: !!order.deploy_approved_at })).map((x) => html`<span class="step ${x.state === 'now' ? 'now' : x.state === 'done' ? 'done' : ''}">${PIPELINE_LABEL[x.step]}</span>`)}</div>
         <p>${eur(order.deposit_cents)} Anzahlung + ${eur(order.final_cents)} Restzahlung · Wartung ${eur(order.maintenance_cents)}/Monat</p></div>

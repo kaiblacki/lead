@@ -4,6 +4,8 @@ import type { Context } from '../context.ts';
 import { RateLimiter } from './ratelimit.ts';
 import { layout, type Flash } from './ui.ts';
 import { html, esc, Safe } from './html.ts';
+import type { SessionUser } from '../team/rules.ts';
+import { homeFor, pathAllowed } from '../team/rules.ts';
 import { UserError, type AppInfo, type Req, type Res, type Route } from './types.ts';
 import { routes as homeRoutes } from './pages/home.ts';
 import { routes as todayRoutes } from './pages/today.ts';
@@ -16,6 +18,9 @@ import { routes as orderRoutes } from './pages/orders.ts';
 import { routes as maintenanceRoutes } from './pages/maintenance.ts';
 import { routes as communityRoutes } from './pages/community.ts';
 import { routes as customerRoutes } from './pages/customers.ts';
+import { routes as overviewRoutes } from './pages/overview.ts';
+import { routes as workRoutes } from './pages/work.ts';
+import { routes as teamRoutes } from './pages/team.ts';
 import { routes as analyticsRoutes } from './pages/analytics.ts';
 import { routes as settingsRoutes } from './pages/settings.ts';
 import { routes as partnerRoutes } from './pages/partners.ts';
@@ -42,15 +47,17 @@ export function createApp(ctx: Context, opts: AppOptions): http.Server {
   const flashes = new FlashStore();
   const publicLimit = new RateLimiter(120, 60_000), postLimit = new RateLimiter(240, 60_000), authFails = new RateLimiter(10, 15 * 60_000);
   const hsts: Record<string, string> = app.baseUrl.startsWith('https://') ? { 'strict-transport-security': 'max-age=31536000' } : {};
-  const all: Route[] = [...publicRoutes, ...homeRoutes, ...todayRoutes, ...enrichmentRoutes, ...searchRoutes, ...leadRoutes, ...callRoutes, ...pipelineRoutes, ...orderRoutes, ...maintenanceRoutes, ...partnerRoutes, ...taskRoutes, ...offerRoutes, ...customerRoutes, ...communityRoutes, ...analyticsRoutes, ...settingsRoutes, ...socialRoutes];
+  const all: Route[] = [...publicRoutes, ...homeRoutes, ...todayRoutes, ...enrichmentRoutes, ...searchRoutes, ...leadRoutes, ...callRoutes, ...pipelineRoutes, ...orderRoutes, ...maintenanceRoutes, ...partnerRoutes, ...taskRoutes, ...offerRoutes, ...customerRoutes, ...overviewRoutes, ...workRoutes, ...teamRoutes, ...communityRoutes, ...analyticsRoutes, ...settingsRoutes, ...socialRoutes];
 
   const clientIp = (req: http.IncomingMessage) => (opts.trustProxy ? String(req.headers['x-forwarded-for'] ?? '').split(',').pop()?.trim() : '') || req.socket.remoteAddress || 'unknown';
-  const authOk = (req: http.IncomingMessage) => {
+  /** Anmeldung (Basic): erst Mitarbeiter-Login mit eigenem Passwort, sonst Admin-Passwort aus der Umgebung (beliebiger Benutzername → Administrator). */
+  const authenticate = async (req: http.IncomingMessage): Promise<SessionUser | null> => {
     const h = req.headers.authorization ?? '';
-    if (!h.startsWith('Basic ')) return false;
-    const given = Buffer.from(Buffer.from(h.slice(6), 'base64').toString().split(':').slice(1).join(':'));
-    const want = Buffer.from(opts.password);
-    return given.length === want.length && timingSafeEqual(given, want);
+    if (!h.startsWith('Basic ')) return null;
+    const decoded = Buffer.from(h.slice(6), 'base64').toString(); const login = decoded.split(':')[0] ?? ''; const pw = decoded.split(':').slice(1).join(':');
+    if (login) { try { const u = await ctx.team.authenticate(login, pw); if (u) return u; } catch { /* Tabelle fehlt o. Ä.: weiter mit Admin-Passwort */ } }
+    const given = Buffer.from(pw), want = Buffer.from(opts.password);
+    return given.length === want.length && timingSafeEqual(given, want) ? { id: null, name: login || 'Administrator', role: 'ADMIN' } : null;
   };
   const readBody = async (req: http.IncomingMessage, max: number) => { let b = ''; for await (const ch of req) { b += ch; if (b.length > max) throw Object.assign(new UserError('Anfrage zu groß'), { status: 413 }); } return b; };
   const csrfOk = (form: URLSearchParams) => { const g = Buffer.from(form.get('csrf') ?? ''), w = Buffer.from(csrf); return g.length === w.length && timingSafeEqual(g, w); };
@@ -98,16 +105,20 @@ export function createApp(ctx: Context, opts: AppOptions): http.Server {
       if (method !== 'GET' && method !== 'POST') { res.writeHead(405, { allow: 'GET, POST', ...SECURE_HEADERS }); return void res.end(); }
       const route = all.map((r) => ({ r, m: r.method === method ? r.path.exec(url.pathname) : null })).find((x) => x.m);
       if (!route) {
-        if (!authOk(req)) { res.writeHead(401, { 'www-authenticate': 'Basic realm="Agency OS"' }); return void res.end('Anmeldung erforderlich'); }
+        if (!(await authenticate(req))) { res.writeHead(401, { 'www-authenticate': 'Basic realm="Agency OS"' }); return void res.end('Anmeldung erforderlich'); }
         return send(res, { status: 404, body: errorPage(null, 404, 'Seite nicht gefunden.') }, false, false);
       }
-      const isPublic = !!route.r.public;
+      const isPublic = !!route.r.public; let user: SessionUser = { id: null, name: 'Öffentlich', role: 'SALES' };
       for (const [k, v] of Object.entries(hsts)) res.setHeader(k, v);
       if (isPublic) {
         if (!publicLimit.hit(ip)) { res.writeHead(429, { 'retry-after': '60' }); return void res.end('Zu viele Anfragen'); }
       } else {
         if (authFails.blocked(ip)) { res.writeHead(429, { 'retry-after': '900' }); return void res.end('Zu viele Fehlversuche. Bitte später erneut versuchen.'); }
-        if (!authOk(req)) { if (req.headers.authorization) authFails.hit(ip); res.writeHead(401, { 'www-authenticate': 'Basic realm="Agency OS"' }); return void res.end('Anmeldung erforderlich'); }
+        const au = await authenticate(req); if (au) user = au;
+        if (!au) { if (req.headers.authorization) authFails.hit(ip); res.writeHead(401, { 'www-authenticate': 'Basic realm="Agency OS"' }); return void res.end('Anmeldung erforderlich'); }
+        if (au && user.role === 'SALES' && url.pathname === '/' && method === 'GET') { res.writeHead(303, { location: homeFor(user.role), ...SECURE_HEADERS }); return void res.end(); }
+        if (!pathAllowed(user.role, method, url.pathname, url.searchParams.get('view'))) return send(res, { status: 403, body: errorPage(null, 403, 'Dafür fehlt dir die Berechtigung. Bitte öffne deinen Arbeitsbereich.' ) }, false, false);
+        void ctx.team.touch(user).catch(() => undefined);
         if (method === 'POST' && !postLimit.hit(ip)) { res.writeHead(429, { 'retry-after': '60' }); return void res.end('Zu viele Anfragen'); }
       }
       let form = new URLSearchParams(); let rawBody = '';
@@ -119,7 +130,7 @@ export function createApp(ctx: Context, opts: AppOptions): http.Server {
       }
       const killSwitch = isPublic ? false : (await ctx.repo.getLimits()).killSwitch;
       const flash = flashes.take(url.searchParams.get('f'));
-      const r: Req = { ctx, app, req, res, url, params: route.m!.slice(1), form, rawBody, killSwitch, flash, ip };
+      const r: Req = { ctx, app, req, res, url, params: route.m!.slice(1), form, rawBody, killSwitch, flash, ip, user };
       try {
         const out = await route.r.h(r);
         if (!res.writableEnded) send(res, out, isPublic, killSwitch);

@@ -62,7 +62,9 @@ export class CallService {
   }
 
   /** Ergebnis eines Anrufs erfassen und den Lead automatisch in die passende Pipeline-Stufe bewegen. */
-  async applyResult(leadId: string, result: CallResult, o: { note?: string; callbackAt?: Date | null; nextStep?: string; topics?: string[] } = {}): Promise<CallOutcome> {
+  /** Optional: Kontaktversuch-Protokoll (Team-System); wird mit jedem Anruf-Ergebnis aufgerufen, sofern nicht `skipAttempt`. */
+  attemptSink?: (a: { leadId: string; call: string; note?: string | null; callbackAt?: Date | null; actor?: any }) => Promise<void>;
+  async applyResult(leadId: string, result: CallResult, o: { note?: string; callbackAt?: Date | null; nextStep?: string; topics?: string[]; actor?: any; skipAttempt?: boolean } = {}): Promise<CallOutcome> {
     if (!CALL_RESULTS.includes(result)) throw new Error('Unbekanntes Anruf-Ergebnis');
     const lead = await this.leads.rowToEntry(leadId);
     if (!lead) throw new Error('Lead nicht gefunden');
@@ -145,6 +147,7 @@ export class CallService {
     // Folgeaufgaben (nur Aufgaben für Kai – es wird nichts gesendet oder erstellt)
     const fu = await this.engine?.applyCallResult(leadId, result, { callbackAt: o.callbackAt, topics, nextStep: o.nextStep });
     if (fu?.created.length) out.messages.push(`Folgeaufgabe angelegt: ${fu.created.length} (siehe Aufgaben).`);
+    if (!o.skipAttempt) await this.attemptSink?.({ leadId, call: result, note: o.note ?? null, callbackAt: o.callbackAt ?? null, actor: o.actor ?? null });
     return out;
   }
 }
