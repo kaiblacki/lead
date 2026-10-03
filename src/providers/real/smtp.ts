@@ -76,7 +76,8 @@ export class SmtpEmailProvider implements EmailProvider {
       await this.cmd(c, 'DATA', [354], t);
       c.sock.write(mime.replace(/^\./gm, '..') + '\r\n.\r\n'); r = await this.reply(c, t);
       if (r.code !== 250) throw new Error(`SMTP ${r.code}: ${r.lines.at(-1)?.slice(4, 120)}`);
-      try { c.sock.write('QUIT\r\n'); } catch { /* egal */ }
+      // Sauber beenden: 221 abwarten (kurz), damit der Server nicht auf einen bereits zerstörten Socket schreibt. Die Nachricht ist nach 250 angenommen – Fehler hier ändern das Ergebnis nicht.
+      try { c.sock.write('QUIT\r\n'); await this.reply(c, Math.min(t, 2000)); } catch { /* Nachricht ist bereits angenommen */ }
       return { id, status: 'sent' };
     } finally { c.sock.destroy(); }
   }

@@ -7,8 +7,10 @@ import { createProviders } from '../../src/providers/registry.ts';
 /** Minimaler Fake-SMTP-Server (ohne TLS) – nur für localhost. */
 function fakeSmtp(opts: { auth?: boolean; rejectRcpt?: boolean } = {}) {
   const log: string[] = []; let data = '';
+  const socks = new Set<net.Socket>(); const errors: string[] = [];
   const server = net.createServer((s) => {
     let inData = false, buf = '';
+    socks.add(s); s.on('close', () => socks.delete(s)); s.on('error', (e) => errors.push(e.message));
     s.write('220 fake ESMTP\r\n');
     s.on('data', (d) => {
       buf += d.toString();
@@ -25,7 +27,7 @@ function fakeSmtp(opts: { auth?: boolean; rejectRcpt?: boolean } = {}) {
       }
     });
   });
-  return new Promise<{ port: number; log: string[]; data: () => string; close: () => void }>((res) => server.listen(0, '127.0.0.1', () => res({ port: (server.address() as net.AddressInfo).port, log, data: () => data, close: () => server.close() })));
+  return new Promise<{ port: number; log: string[]; errors: string[]; data: () => string; close: () => Promise<void> }>((res) => server.listen(0, '127.0.0.1', () => res({ port: (server.address() as net.AddressInfo).port, log, errors, data: () => data, close: () => new Promise<void>((done) => { for (const k of socks) k.destroy(); server.close(() => done()); }) })));
 }
 
 test('SMTP: Nachricht wird zugestellt (Umlaute, Punkt-Zeilen), Anmeldung und Absender korrekt', async () => {
@@ -39,7 +41,8 @@ test('SMTP: Nachricht wird zugestellt (Umlaute, Punkt-Zeilen), Anmeldung und Abs
     assert.match(m, /^From: Agentur <info@agentur\.example>/m); assert.match(m, /^To: kunde@beispiel\.example/m);
     const subj = /Subject: =\?UTF-8\?B\?([^?]+)\?=/.exec(m)![1]; assert.equal(Buffer.from(subj, 'base64').toString(), 'Zahlungslink für Müller & Söhne');
     const body = m.split('\r\n\r\n')[1].replace(/\r\n/g, ''); assert.equal(Buffer.from(body, 'base64').toString(), 'Guten Tag,\n.\nPunkt-Zeile ü ß €');
-  } finally { srv.close(); }
+  } finally { await srv.close(); }
+  assert.deepEqual(srv.errors, [], 'kein Socketfehler am Server (sauberer QUIT-Abschluss)');
 });
 
 test('SMTP: falsche Zugangsdaten, abgelehnter Empfänger und Header-Einschleusung werden sauber abgelehnt', async () => {
@@ -52,7 +55,7 @@ test('SMTP: falsche Zugangsdaten, abgelehnter Empfänger und Header-Einschleusun
     await assert.rejects(ok.send({ to: 'x@y.example\r\nBcc: spy@evil.example', subject: 's', text: 't' }), /Ungültige E-Mail/);
     await assert.rejects(ok.send({ to: 'x@y.example', subject: 'a\r\nBcc: spy@evil.example', text: 't' }), /Zeilenumbr/);
     assert.ok(!srv.log.some((l) => /evil/.test(l)));
-  } finally { srv.close(); bad.close(); }
+  } finally { await srv.close(); await bad.close(); }
   // Verbindungsfehler → verständlicher Fehler statt Absturz
   await assert.rejects(new SmtpEmailProvider({ host: '127.0.0.1', port: 1, secure: false, from: 'a@b.example', timeoutMs: 500 }).send({ to: 'x@y.example', subject: 's', text: 't' }));
 });
