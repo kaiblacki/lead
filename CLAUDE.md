@@ -20,3 +20,11 @@ Ziel: beweisen, dass die Anreicherung mit echten Firmen funktioniert – mit hö
 6. **Entscheidung:** Liefert der Test bei mindestens 3 von 5 Leads brauchbare, plausibel verifizierte Daten (Entscheidungshilfe im Bericht), ausdrücklich sagen, ob die Pipeline gut genug ist, die übrigen Leads (47 − 5) kontrolliert anzureichern – als Empfehlung, gestartet wird erst nach Bestätigung. Findet Brave kaum brauchbare Kontaktdaten: nicht dieselben Suchanfragen wiederholen, sondern zusätzliche Enrichment-Quellen vorschlagen.
 
 Hinweise: Die Datenbank einer Cloud-Sitzung ist flüchtig (`--ensure-run` legt den Lauf neu an). Kosten: Brave 5 USD je 1.000 Anfragen = 0,005 USD je Anfrage, in USD protokolliert; das interne Budget rechnet in EUR (`config/ai.json → eurPerUsd`).
+
+## Codex-Gegenprüfung (dauerhaft, von Kai freigegeben)
+Nach jeder abgeschlossenen Phase (Migration → Service → Seite → Test) prüft Codex den Diff:
+`codex exec --sandbox read-only "Prüfe git diff gegen CLAUDE.md und docs/LEITFADEN-CLAUDE-CODE.md Abschnitt 2 und 7; nenne Bugs, Regelverstöße, Testlücken."`
+- Codex arbeitet read-only und schreibt keinen Code ins Projekt.
+- Nie Schlüssel, .env oder Kundendaten an Codex geben.
+- Befunde werden geprüft, nicht blind übernommen; im Bericht ehrlich benennen.
+- Lokaler Arbeitsordner: ~/Desktop/Firmen-Leads, Remote origin = https://github.com/kaiblacki/lead (öffentlich). Push nur nach Kais Bestätigung.
