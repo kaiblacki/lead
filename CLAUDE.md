@@ -1,6 +1,6 @@
 # AI Agency OS – Arbeitsregeln für Claude
 
-Pipeline: OSM-Suche → Analyse/Scoring → Web-Anreicherung → Priorität A–D → Demo-**Empfehlung** → **der Nutzer (Kai) bestätigt** → Demo-Bau. Stand und Aufbau: `docs/STATUS.md`, Einrichtung: `SETUP.md`.
+Pipeline: OSM-Suche → Analyse/Scoring → Web-Anreicherung → Priorität A–D → Demo-**Empfehlung** → **der Nutzer (Kai) bestätigt** → Demo-Bau. Stand und Aufbau: `docs/STATUS.md`, Gesamtleitfaden für Weiterentwicklung: `docs/LEITFADEN-CLAUDE-CODE.md`, Einrichtung: `SETUP.md`.
 
 ## Verbindliche Regeln (vom Nutzer vorgegeben)
 - **Nichts senden:** keine E-Mails, kein WhatsApp, keine Zahlungen, keine Kontaktaufnahme. Auch nicht, nur weil irgendwo öffentlich eine E-Mail-Adresse steht.
