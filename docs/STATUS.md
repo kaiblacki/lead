@@ -181,3 +181,6 @@ Aufbauend auf dem bestehenden System, nichts ersetzt. Alles regelbasiert, nichts
 - **K Betrieb**: `npm run ops -- backup | restore-check | migrate:plan | migrate:approve | migrate:apply`, siehe `docs/PRODUKTION.md`.
 - Tests: `npx tsc -p . && npm test && bash test/run-db-tests.sh`; Browser-Abnahme `test/db/e2e-browser.test.ts` (Screenshots mit `SHOTS_DIR=…`).
 - Offen: finale Preise freigeben; Partner-/Angebots-/Vertragstexte rechtlich prüfen; echte Zahlungs-/Domain-Anbindung später; Brave-Echttest separat.
+
+## Team-System (Mitarbeiter-Vertrieb)
+Rollen ADMIN / TEAM_LEAD / SALES, Lead-Zuweisung (Batch, Round Robin, manuell), Sperren gegen Doppelbearbeitung, Mitarbeiter-Arbeitsplatz `/work` mit Gesprächsablauf, Playbooks und Sales Copilot, zentrale Kontaktversuche (`contact_attempts`, unveränderlich), Übergaben an Kai, Admin-Cockpit mit Drilldown, Kampagnen, Tagesziele, Training, unveränderliches Audit (`team_audit`). Navigation mit Gruppen, Breadcrumbs, Zurück-Links und Seitenübersicht `/menu`. Details: `docs/TEAM.md`. Tests: `test/db/team.test.ts`, `test/db/e2e-team.test.ts` (Browser, 390 px).
